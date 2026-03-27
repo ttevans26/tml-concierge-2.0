@@ -211,7 +211,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
     if (!user) return null;
     const { data: item, error } = await supabase
       .from("itinerary_items")
-      .insert({ ...data, user_id: user.id, title: data.title || "Untitled", category: data.category || "agenda" } as any)
+      .insert({ ...data, user_id: user.id, title: data.title || "Untitled", category: data.category || "activity" } as any)
       .select()
       .single();
     if (!error && item) {

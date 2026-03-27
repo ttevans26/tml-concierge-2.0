@@ -41,6 +41,12 @@
 
     --radius: 2px;
 
+    /* Category cell tints */
+    --cell-stays: 220 30% 95%;
+    --cell-dining: 140 20% 94%;
+    --cell-logistics: 210 25% 94%;
+    --cell-activity: 38 30% 94%;
+
     --sidebar-background: 43 50% 97%;
     --sidebar-foreground: 0 0% 15%;
     --sidebar-primary: 0 0% 10%;

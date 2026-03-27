@@ -21,7 +21,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         : null;
 
   return (
-    <div className="group flex flex-col justify-between rounded-sm border-thin border-border bg-card p-6 transition-shadow hover:shadow-md">
+    <div onClick={onClick} className="group flex cursor-pointer flex-col justify-between rounded-sm border-thin border-border bg-card p-6 transition-shadow hover:shadow-md">
       <div>
         <h3 className="font-playfair text-lg font-semibold text-foreground leading-snug">
           {trip.name}

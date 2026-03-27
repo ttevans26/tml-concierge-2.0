@@ -84,14 +84,16 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 /* ------------------------------------------------------------------ */
 
 export default function Index() {
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { trips, loading, fetchTrips } = useTripStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
-    fetchTrips();
-  }, [fetchTrips]);
+    if (!authLoading && user) {
+      fetchTrips();
+    }
+  }, [authLoading, user, fetchTrips]);
 
   return (
     <div className="min-h-screen bg-background px-6 py-10 md:px-12 lg:px-20">

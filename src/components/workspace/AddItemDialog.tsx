@@ -454,8 +454,8 @@ export default function AddItemDialog({
             </>
           )}
 
-          {/* ── AGENDA (generic) ── */}
-          {category === "agenda" && (
+          {/* ── ACTIVITY (generic) ── */}
+          {category === "activity" && (
             <>
               <div className="space-y-1.5">
                 <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">

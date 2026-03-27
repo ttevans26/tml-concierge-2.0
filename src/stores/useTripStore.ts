@@ -127,7 +127,12 @@ export const useTripStore = create<TripStore>((set, get) => ({
       .from("trips")
       .select("*")
       .order("created_at", { ascending: false });
-    if (!error && data) set({ trips: data as Trip[] });
+    if (error) {
+      console.error("Supabase fetchTrips error:", error);
+    } else {
+      console.log("Fetched Trips:", data);
+      set({ trips: (data as Trip[]) || [] });
+    }
     set({ loading: false });
   },
 

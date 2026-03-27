@@ -12,7 +12,7 @@ import { format } from "date-fns";
 /*  Trip Card                                                          */
 /* ------------------------------------------------------------------ */
 
-function TripCard({ trip }: { trip: Trip }) {
+function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   const dateRange =
     trip.start_date && trip.end_date
       ? `${format(new Date(trip.start_date), "MMM d")} — ${format(new Date(trip.end_date), "MMM d, yyyy")}`

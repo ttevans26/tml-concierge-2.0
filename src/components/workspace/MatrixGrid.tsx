@@ -1,18 +1,27 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
+import ItineraryItemCard from "./ItineraryItemCard";
+import AddItemDialog from "./AddItemDialog";
+import type { ItineraryItem } from "@/stores/useTripStore";
 
 const CATEGORIES = [
-  { key: "stays", label: "Stays" },
-  { key: "logistics", label: "Logistics" },
-  { key: "dining", label: "Dining" },
-  { key: "agenda", label: "Agenda" },
-] as const;
+  { key: "stays" as const, label: "Stays" },
+  { key: "logistics" as const, label: "Logistics" },
+  { key: "dining" as const, label: "Dining" },
+  { key: "agenda" as const, label: "Agenda" },
+];
 
 export default function MatrixGrid() {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
+
+  const [dialogState, setDialogState] = useState<{
+    open: boolean;
+    date: string;
+    category: ItineraryItem["category"];
+  }>({ open: false, date: "", category: "agenda" });
 
   const days = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) return [];
@@ -39,6 +48,9 @@ export default function MatrixGrid() {
     );
   }
 
+  const openAdd = (date: string, category: ItineraryItem["category"]) =>
+    setDialogState({ open: true, date, category });
+
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Grid header */}
@@ -56,12 +68,11 @@ export default function MatrixGrid() {
         <div className="flex min-w-max">
           {/* Category labels column */}
           <div className="sticky left-0 z-10 w-24 shrink-0 border-r border-border bg-card">
-            {/* Spacer for day header row */}
             <div className="h-10 border-b border-border" />
             {CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
-                className="flex h-24 items-center border-b border-border px-3"
+                className="flex h-28 items-center border-b border-border px-3"
               >
                 <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
                   {cat.label}
@@ -74,7 +85,7 @@ export default function MatrixGrid() {
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
             return (
-              <div key={dateStr} className="w-40 shrink-0 border-r border-border last:border-r-0">
+              <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
                 {/* Day header */}
                 <div className="flex h-10 items-center justify-center border-b border-border bg-secondary/40">
                   <span className="font-inter text-[11px] font-medium text-foreground">
@@ -90,24 +101,20 @@ export default function MatrixGrid() {
                   return (
                     <div
                       key={cat.key}
-                      className="flex h-24 flex-col gap-1 border-b border-border p-1.5"
+                      className="flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto"
                     >
-                      {cellItems.length === 0 ? (
-                        <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/60">
-                          <span className="font-inter text-[10px] text-muted-foreground/50">+</span>
-                        </div>
-                      ) : (
-                        cellItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className="rounded-sm border-thin border-border bg-card px-2 py-1"
-                          >
-                            <p className="truncate font-inter text-[10px] font-medium text-foreground">
-                              {item.title}
-                            </p>
-                          </div>
-                        ))
-                      )}
+                      {cellItems.map((item) => (
+                        <ItineraryItemCard key={item.id} item={item} />
+                      ))}
+                      {/* Add button */}
+                      <button
+                        onClick={() => openAdd(dateStr, cat.key)}
+                        className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 transition-colors hover:border-accent/50 hover:bg-accent/5"
+                      >
+                        <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
+                          + Add
+                        </span>
+                      </button>
                     </div>
                   );
                 })}
@@ -117,6 +124,16 @@ export default function MatrixGrid() {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+
+      {activeTrip && (
+        <AddItemDialog
+          open={dialogState.open}
+          onOpenChange={(open) => setDialogState((s) => ({ ...s, open }))}
+          tripId={activeTrip.id}
+          date={dialogState.date}
+          category={dialogState.category}
+        />
+      )}
     </div>
   );
 }

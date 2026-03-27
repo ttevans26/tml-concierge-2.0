@@ -31,7 +31,7 @@ export default function TripWorkspace() {
 
   if (loading && !activeTrip) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex flex-1 items-center justify-center">
         <Skeleton className="h-8 w-48 rounded-sm" />
       </div>
     );

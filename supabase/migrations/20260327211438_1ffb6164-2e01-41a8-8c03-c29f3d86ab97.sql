@@ -1,0 +1,1 @@
+ALTER TYPE itinerary_category ADD VALUE IF NOT EXISTS 'activity';

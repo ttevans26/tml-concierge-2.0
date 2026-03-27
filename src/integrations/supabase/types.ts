@@ -432,7 +432,12 @@ export type Database = {
       access_request_status: "pending" | "approved" | "denied"
       app_role: "admin" | "user"
       approval_status: "draft" | "confirmed" | "cancelled"
-      itinerary_category: "stays" | "logistics" | "dining" | "agenda"
+      itinerary_category:
+        | "stays"
+        | "logistics"
+        | "dining"
+        | "agenda"
+        | "activity"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -563,7 +568,13 @@ export const Constants = {
       access_request_status: ["pending", "approved", "denied"],
       app_role: ["admin", "user"],
       approval_status: ["draft", "confirmed", "cancelled"],
-      itinerary_category: ["stays", "logistics", "dining", "agenda"],
+      itinerary_category: [
+        "stays",
+        "logistics",
+        "dining",
+        "agenda",
+        "activity",
+      ],
     },
   },
 } as const

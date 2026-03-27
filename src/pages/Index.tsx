@@ -85,6 +85,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 
 export default function Index() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const { trips, loading, fetchTrips } = useTripStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 

@@ -14,16 +14,425 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      flight_tracking: {
+        Row: {
+          airline: string | null
+          arrival_airport: string | null
+          arrival_time: string | null
+          created_at: string
+          delay_minutes: number | null
+          departure_airport: string | null
+          departure_time: string | null
+          flight_number: string
+          gate: string | null
+          id: string
+          raw_data: Json | null
+          status: string | null
+          terminal: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          airline?: string | null
+          arrival_airport?: string | null
+          arrival_time?: string | null
+          created_at?: string
+          delay_minutes?: number | null
+          departure_airport?: string | null
+          departure_time?: string | null
+          flight_number: string
+          gate?: string | null
+          id?: string
+          raw_data?: Json | null
+          status?: string | null
+          terminal?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          airline?: string | null
+          arrival_airport?: string | null
+          arrival_time?: string | null
+          created_at?: string
+          delay_minutes?: number | null
+          departure_airport?: string | null
+          departure_time?: string | null
+          flight_number?: string
+          gate?: string | null
+          id?: string
+          raw_data?: Json | null
+          status?: string | null
+          terminal?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itinerary_items: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["approval_status"]
+          cancellation_deadline: string | null
+          category: Database["public"]["Enums"]["itinerary_category"]
+          confirmation_code: string | null
+          cost: number | null
+          created_at: string
+          currency: string
+          date: string | null
+          description: string | null
+          end_time: string | null
+          id: string
+          location_lat: number | null
+          location_lng: number | null
+          location_name: string | null
+          metadata: Json | null
+          points_used: number | null
+          sort_order: number
+          source_reference: string | null
+          start_time: string | null
+          title: string
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approval_status?: Database["public"]["Enums"]["approval_status"]
+          cancellation_deadline?: string | null
+          category: Database["public"]["Enums"]["itinerary_category"]
+          confirmation_code?: string | null
+          cost?: number | null
+          created_at?: string
+          currency?: string
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number
+          source_reference?: string | null
+          start_time?: string | null
+          title: string
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approval_status?: Database["public"]["Enums"]["approval_status"]
+          cancellation_deadline?: string | null
+          category?: Database["public"]["Enums"]["itinerary_category"]
+          confirmation_code?: string | null
+          cost?: number | null
+          created_at?: string
+          currency?: string
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number
+          source_reference?: string | null
+          start_time?: string | null
+          title?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_items_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          active_cards: Json | null
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          loyalty_memberships: Json | null
+          preferences: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_cards?: Json | null
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          loyalty_memberships?: Json | null
+          preferences?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_cards?: Json | null
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          loyalty_memberships?: Json | null
+          preferences?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tml_core_tenets: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          tenet_key: string
+          tenet_value: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          tenet_key: string
+          tenet_value: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          tenet_key?: string
+          tenet_value?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      trip_access_requests: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          owner_user_id: string
+          requester_user_id: string
+          status: Database["public"]["Enums"]["access_request_status"]
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          owner_user_id: string
+          requester_user_id: string
+          status?: Database["public"]["Enums"]["access_request_status"]
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          owner_user_id?: string
+          requester_user_id?: string
+          status?: Database["public"]["Enums"]["access_request_status"]
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_access_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trips: {
+        Row: {
+          cover_image_url: string | null
+          created_at: string
+          description: string | null
+          destination: string | null
+          end_date: string | null
+          id: string
+          is_published: boolean
+          name: string
+          start_date: string | null
+          target_nightly_budget: number | null
+          total_trip_budget: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string | null
+          destination?: string | null
+          end_date?: string | null
+          id?: string
+          is_published?: boolean
+          name: string
+          start_date?: string | null
+          target_nightly_budget?: number | null
+          total_trip_budget?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string | null
+          destination?: string | null
+          end_date?: string | null
+          id?: string
+          is_published?: boolean
+          name?: string
+          start_date?: string | null
+          target_nightly_budget?: number | null
+          total_trip_budget?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      itinerary_items_public: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["approval_status"] | null
+          category: Database["public"]["Enums"]["itinerary_category"] | null
+          created_at: string | null
+          date: string | null
+          description: string | null
+          end_time: string | null
+          id: string | null
+          location_lat: number | null
+          location_lng: number | null
+          location_name: string | null
+          metadata: Json | null
+          points_used: number | null
+          sort_order: number | null
+          source_reference: string | null
+          start_time: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          approval_status?:
+            | Database["public"]["Enums"]["approval_status"]
+            | null
+          category?: Database["public"]["Enums"]["itinerary_category"] | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number | null
+          source_reference?: string | null
+          start_time?: string | null
+          title?: string | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          approval_status?:
+            | Database["public"]["Enums"]["approval_status"]
+            | null
+          category?: Database["public"]["Enums"]["itinerary_category"] | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number | null
+          source_reference?: string | null
+          start_time?: string | null
+          title?: string | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_items_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      access_request_status: "pending" | "approved" | "denied"
+      app_role: "admin" | "user"
+      approval_status: "draft" | "confirmed" | "cancelled"
+      itinerary_category: "stays" | "logistics" | "dining" | "agenda"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +559,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      access_request_status: ["pending", "approved", "denied"],
+      app_role: ["admin", "user"],
+      approval_status: ["draft", "confirmed", "cancelled"],
+      itinerary_category: ["stays", "logistics", "dining", "agenda"],
+    },
   },
 } as const

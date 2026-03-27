@@ -31,7 +31,7 @@ export default function TripWorkspace() {
 
   if (loading && !activeTrip) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex flex-1 items-center justify-center">
         <Skeleton className="h-8 w-48 rounded-sm" />
       </div>
     );
@@ -39,7 +39,7 @@ export default function TripWorkspace() {
 
   if (!activeTrip) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-background">
+      <div className="flex flex-1 flex-col items-center justify-center">
         <p className="font-inter text-sm text-muted-foreground">Trip not found.</p>
         <Button variant="ghost" className="mt-4 font-inter text-sm" onClick={() => navigate("/")}>
           ← Back to dashboard
@@ -49,7 +49,7 @@ export default function TripWorkspace() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* Top bar */}
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <Button

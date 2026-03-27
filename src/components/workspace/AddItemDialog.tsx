@@ -192,7 +192,7 @@ export default function AddItemDialog({
     ? "e.g. Le Jules Verne"
     : category === "logistics"
     ? "e.g. AF 1234 or Eurostar 9021"
-    : "e.g. Walking tour of Montmartre";
+    : "e.g. Louvre Museum Tour";
 
   const maxDate = activeTrip?.end_date || "";
 

@@ -30,7 +30,7 @@ const CATEGORIES: { key: ItineraryItem["category"]; label: string }[] = [
   { key: "stays", label: "Stays" },
   { key: "logistics", label: "Logistics" },
   { key: "dining", label: "Dining" },
-  { key: "agenda", label: "Agenda" },
+  { key: "activity", label: "Activity" },
 ];
 
 export default function EditItemDialog({ open, onOpenChange, item }: EditItemDialogProps) {

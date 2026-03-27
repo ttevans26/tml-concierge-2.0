@@ -25,7 +25,7 @@ export interface ItineraryItem {
   id: string;
   trip_id: string;
   user_id: string;
-  category: "stays" | "logistics" | "dining" | "agenda";
+  category: "stays" | "logistics" | "dining" | "activity";
   title: string;
   description: string | null;
   date: string | null;

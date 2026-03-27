@@ -10,8 +10,15 @@ const CATEGORIES = [
   { key: "stays" as const, label: "Stays" },
   { key: "logistics" as const, label: "Logistics" },
   { key: "dining" as const, label: "Dining" },
-  { key: "agenda" as const, label: "Agenda" },
+  { key: "activity" as const, label: "Activity" },
 ];
+
+const CELL_BG: Record<string, string> = {
+  stays: "bg-[hsl(var(--cell-stays))]",
+  logistics: "bg-[hsl(var(--cell-logistics))]",
+  dining: "bg-[hsl(var(--cell-dining))]",
+  activity: "bg-[hsl(var(--cell-activity))]",
+};
 
 export default function MatrixGrid() {
   const activeTrip = useTripStore((s) => s.activeTrip);
@@ -21,7 +28,7 @@ export default function MatrixGrid() {
     open: boolean;
     date: string;
     category: ItineraryItem["category"];
-  }>({ open: false, date: "", category: "agenda" });
+  }>({ open: false, date: "", category: "activity" });
 
   const days = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) return [];
@@ -51,6 +58,18 @@ export default function MatrixGrid() {
   const openAdd = (date: string, category: ItineraryItem["category"]) =>
     setDialogState({ open: true, date, category });
 
+  // Compute daily totals
+  const dailyTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const day of days) {
+      const dateStr = format(day, "yyyy-MM-dd");
+      totals[dateStr] = itineraryItems
+        .filter((i) => i.date === dateStr && i.cost != null)
+        .reduce((sum, i) => sum + Number(i.cost), 0);
+    }
+    return totals;
+  }, [days, itineraryItems]);
+
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Grid header */}
@@ -66,9 +85,10 @@ export default function MatrixGrid() {
       {/* Scrollable matrix */}
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
-          {/* Category labels column */}
-          <div className="sticky left-0 z-10 w-24 shrink-0 border-r border-border bg-card">
-            <div className="h-10 border-b border-border" />
+          {/* Category labels column — sticky left */}
+          <div className="sticky left-0 z-20 w-24 shrink-0 border-r border-border bg-card">
+            {/* Corner cell matching date header */}
+            <div className="sticky top-0 z-30 h-10 border-b border-border bg-card" />
             {CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
@@ -79,15 +99,22 @@ export default function MatrixGrid() {
                 </span>
               </div>
             ))}
+            {/* Daily total label */}
+            <div className="flex h-8 items-center border-b border-border px-3">
+              <span className="font-inter text-[10px] font-semibold uppercase tracking-widest text-accent">
+                Daily $
+              </span>
+            </div>
           </div>
 
           {/* Day columns */}
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
+            const total = dailyTotals[dateStr] || 0;
             return (
               <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
-                {/* Day header */}
-                <div className="flex h-10 items-center justify-center border-b border-border bg-secondary/40">
+                {/* Day header — sticky top */}
+                <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
                   <span className="font-inter text-[11px] font-medium text-foreground">
                     {format(day, "EEE, MMM d")}
                   </span>
@@ -98,26 +125,38 @@ export default function MatrixGrid() {
                   const cellItems = itineraryItems.filter(
                     (item) => item.date === dateStr && item.category === cat.key
                   );
+                  const isStay = cat.key === "stays";
+                  const stayOccupied = isStay && cellItems.length > 0;
+
                   return (
                     <div
                       key={cat.key}
-                      className="flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto"
+                      className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
                     >
                       {cellItems.map((item) => (
                         <ItineraryItemCard key={item.id} item={item} />
                       ))}
-                      {/* Add button */}
-                      <button
-                        onClick={() => openAdd(dateStr, cat.key)}
-                        className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 transition-colors hover:border-accent/50 hover:bg-accent/5"
-                      >
-                        <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
-                          + Add
-                        </span>
-                      </button>
+                      {/* Add button: hidden for stays if occupied */}
+                      {!stayOccupied && (
+                        <button
+                          onClick={() => openAdd(dateStr, cat.key)}
+                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 transition-colors hover:border-accent/50 hover:bg-accent/5"
+                        >
+                          <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
+                            + Add
+                          </span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
+
+                {/* Daily total row */}
+                <div className="flex h-8 items-center justify-center border-b border-border bg-secondary/20">
+                  <span className="font-inter text-[10px] font-semibold text-foreground">
+                    {total > 0 ? `$${total.toLocaleString()}` : "—"}
+                  </span>
+                </div>
               </div>
             );
           })}

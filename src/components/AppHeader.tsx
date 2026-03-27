@@ -58,7 +58,7 @@ export default function AppHeader() {
             className="hidden gap-1.5 font-inter text-xs text-muted-foreground hover:text-foreground sm:inline-flex"
             onClick={() => setScheduleOpen(true)}
           >
-            <Sparkles className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
+            <CalendarClock className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
             Plan w/ Concierge
           </Button>
 

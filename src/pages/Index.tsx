@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, MapPin, Calendar, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,7 +12,7 @@ import { format } from "date-fns";
 /*  Trip Card                                                          */
 /* ------------------------------------------------------------------ */
 
-function TripCard({ trip }: { trip: Trip }) {
+function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   const dateRange =
     trip.start_date && trip.end_date
       ? `${format(new Date(trip.start_date), "MMM d")} — ${format(new Date(trip.end_date), "MMM d, yyyy")}`
@@ -20,7 +21,7 @@ function TripCard({ trip }: { trip: Trip }) {
         : null;
 
   return (
-    <div className="group flex flex-col justify-between rounded-sm border-thin border-border bg-card p-6 transition-shadow hover:shadow-md">
+    <div onClick={onClick} className="group flex cursor-pointer flex-col justify-between rounded-sm border-thin border-border bg-card p-6 transition-shadow hover:shadow-md">
       <div>
         <h3 className="font-playfair text-lg font-semibold text-foreground leading-snug">
           {trip.name}
@@ -84,6 +85,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 
 export default function Index() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const { trips, loading, fetchTrips } = useTripStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -134,7 +136,7 @@ export default function Index() {
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
-            <TripCard key={trip.id} trip={trip} />
+            <TripCard key={trip.id} trip={trip} onClick={() => navigate(`/trip/${trip.id}`)} />
           ))}
         </div>
       )}

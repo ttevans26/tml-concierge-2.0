@@ -49,7 +49,7 @@ export default function TripWorkspace() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* Top bar */}
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <Button

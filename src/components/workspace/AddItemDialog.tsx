@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, Loader2 } from "lucide-react";
 import { useTripStore } from "@/stores/useTripStore";
 import type { ItineraryItem } from "@/stores/useTripStore";
+import { format, parseISO, eachDayOfInterval } from "date-fns";
 
 interface AddItemDialogProps {
   open: boolean;
@@ -28,6 +37,31 @@ const CATEGORY_LABELS: Record<ItineraryItem["category"], string> = {
   agenda: "Agenda",
 };
 
+const LOGISTICS_TYPES = [
+  { value: "plane", label: "✈ Plane" },
+  { value: "train", label: "🚆 Train" },
+  { value: "bus", label: "🚌 Bus" },
+  { value: "boat", label: "⛴ Boat" },
+  { value: "car", label: "🚗 Private Car" },
+];
+
+// Simulated place search results
+const SIMULATED_HOTELS = [
+  { name: "Park Hyatt Tokyo", url: "https://www.hyatt.com/park-hyatt/tyoph-park-hyatt-tokyo" },
+  { name: "The Ritz Paris", url: "https://www.ritzparis.com" },
+  { name: "Aman Venice", url: "https://www.aman.com/hotels/aman-venice" },
+  { name: "Claridge's London", url: "https://www.claridges.co.uk" },
+  { name: "Hotel Bel-Air", url: "https://www.dorchestercollection.com/hotel-bel-air" },
+];
+
+const SIMULATED_RESTAURANTS = [
+  { name: "Le Jules Verne", url: "https://www.lejulesverne-paris.com" },
+  { name: "Noma", url: "https://noma.dk" },
+  { name: "The River Café", url: "https://www.rivercafe.co.uk" },
+  { name: "Da Vittorio", url: "https://www.davittorio.com" },
+  { name: "Core by Clare Smyth", url: "https://corebyclaresmyth.com" },
+];
+
 export default function AddItemDialog({
   open,
   onOpenChange,
@@ -39,37 +73,132 @@ export default function AddItemDialog({
   const [cost, setCost] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showResults, setShowResults] = useState(false);
+
+  // Stays-specific
+  const [checkoutDate, setCheckoutDate] = useState("");
+  const [location, setLocation] = useState("");
+
+  // Logistics-specific
+  const [logisticsType, setLogisticsType] = useState("plane");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [departure, setDeparture] = useState("");
+  const [arrival, setArrival] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
+
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
+  const activeTrip = useTripStore((s) => s.activeTrip);
 
   const reset = () => {
-    setTitle("");
-    setCost("");
-    setStartTime("");
-    setEndTime("");
+    setTitle(""); setCost(""); setStartTime(""); setEndTime("");
+    setSourceUrl(""); setSearchQuery(""); setShowResults(false);
+    setCheckoutDate(""); setLocation("");
+    setLogisticsType("plane"); setReferenceNumber("");
+    setDeparture(""); setArrival(""); setLookingUp(false);
+  };
+
+  // Simulated search results
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    const pool = category === "stays" ? SIMULATED_HOTELS
+      : category === "dining" ? SIMULATED_RESTAURANTS
+      : [];
+    return pool.filter((p) => p.name.toLowerCase().includes(q));
+  }, [searchQuery, category]);
+
+  const selectPlace = (place: { name: string; url: string }) => {
+    setTitle(place.name);
+    setSourceUrl(place.url);
+    setSearchQuery(place.name);
+    setShowResults(false);
+  };
+
+  const handleLookup = async () => {
+    if (!referenceNumber.trim()) return;
+    setLookingUp(true);
+    // Simulated lookup delay
+    await new Promise((r) => setTimeout(r, 800));
+    const isPlane = logisticsType === "plane";
+    setDeparture(isPlane ? "LAX" : "London St Pancras");
+    setArrival(isPlane ? "CDG" : "Paris Gare du Nord");
+    setStartTime(isPlane ? "10:30" : "08:01");
+    setEndTime(isPlane ? "18:45" : "10:23");
+    setTitle(`${referenceNumber.trim().toUpperCase()}`);
+    setLookingUp(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    const finalTitle = title.trim();
+    if (!finalTitle) return;
     setSubmitting(true);
-    await createItineraryItem({
-      trip_id: tripId,
-      category,
-      date,
-      title: title.trim(),
-      cost: cost ? parseFloat(cost) : null,
-      start_time: startTime || null,
-      end_time: endTime || null,
-    });
+
+    // Multi-night stay bulk insert
+    if (category === "stays" && checkoutDate && checkoutDate > date) {
+      try {
+        const nights = eachDayOfInterval({
+          start: parseISO(date),
+          end: parseISO(checkoutDate),
+        }).slice(0, -1); // exclude checkout day
+
+        for (const night of nights) {
+          await createItineraryItem({
+            trip_id: tripId,
+            category,
+            date: format(night, "yyyy-MM-dd"),
+            title: finalTitle,
+            cost: cost ? parseFloat(cost) : null,
+            start_time: startTime || null,
+            end_time: endTime || null,
+            source_reference: sourceUrl || null,
+            location_name: location || null,
+          });
+        }
+      } catch (err) {
+        console.error("Bulk insert error:", err);
+      }
+    } else {
+      // Logistics: build a descriptive title if departure/arrival exist
+      let itemTitle = finalTitle;
+      if (category === "logistics" && departure && arrival) {
+        itemTitle = `${finalTitle} · ${departure} → ${arrival}`;
+      }
+
+      await createItineraryItem({
+        trip_id: tripId,
+        category,
+        date,
+        title: itemTitle,
+        cost: cost ? parseFloat(cost) : null,
+        start_time: startTime || null,
+        end_time: endTime || null,
+        source_reference: sourceUrl || null,
+        location_name: category === "stays" ? location || null : null,
+      });
+    }
+
     setSubmitting(false);
     reset();
     onOpenChange(false);
   };
 
+  const placeholderText = category === "stays"
+    ? "e.g. Park Hyatt Tokyo"
+    : category === "dining"
+    ? "e.g. Le Jules Verne"
+    : category === "logistics"
+    ? "e.g. AF 1234 or Eurostar 9021"
+    : "e.g. Walking tour of Montmartre";
+
+  const maxDate = activeTrip?.end_date || "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-thin border-border bg-card sm:max-w-sm">
+      <DialogContent className="border-thin border-border bg-card sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-playfair text-lg text-foreground">
             Add {CATEGORY_LABELS[category]}
@@ -80,58 +209,304 @@ export default function AddItemDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
-              Title
-            </Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Park Hyatt Tokyo"
-              required
-              className="border-thin border-border bg-background font-inter text-sm"
-            />
-          </div>
+          {/* ── STAYS ── */}
+          {category === "stays" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Hotel Name
+                </Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); setTitle(e.target.value); }}
+                    onFocus={() => searchQuery && setShowResults(true)}
+                    placeholder={placeholderText}
+                    required
+                    className="border-thin border-border bg-background pl-8 font-inter text-sm"
+                  />
+                  {showResults && searchResults.length > 0 && (
+                    <div className="absolute z-20 mt-1 w-full rounded-sm border border-border bg-card shadow-md">
+                      {searchResults.map((r) => (
+                        <button
+                          key={r.name}
+                          type="button"
+                          onClick={() => selectPlace(r)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
-              Cost ($)
-            </Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-              placeholder="0.00"
-              className="border-thin border-border bg-background font-inter text-sm"
-            />
-          </div>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Location
+                </Label>
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. Shibuya, Tokyo"
+                  className="border-thin border-border bg-background font-inter text-sm"
+                />
+              </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
-                Start Time
-              </Label>
-              <Input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="border-thin border-border bg-background font-inter text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
-                End Time
-              </Label>
-              <Input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="border-thin border-border bg-background font-inter text-sm"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Nightly Rate ($)
+                  </Label>
+                  <Input
+                    type="number" min="0" step="0.01"
+                    value={cost}
+                    onChange={(e) => setCost(e.target.value)}
+                    placeholder="0.00"
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Check-out Date
+                  </Label>
+                  <Input
+                    type="date"
+                    value={checkoutDate}
+                    onChange={(e) => setCheckoutDate(e.target.value)}
+                    min={date}
+                    max={maxDate}
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── DINING ── */}
+          {category === "dining" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Restaurant Name
+                </Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); setTitle(e.target.value); }}
+                    onFocus={() => searchQuery && setShowResults(true)}
+                    placeholder={placeholderText}
+                    required
+                    className="border-thin border-border bg-background pl-8 font-inter text-sm"
+                  />
+                  {showResults && searchResults.length > 0 && (
+                    <div className="absolute z-20 mt-1 w-full rounded-sm border border-border bg-card shadow-md">
+                      {searchResults.map((r) => (
+                        <button
+                          key={r.name}
+                          type="button"
+                          onClick={() => selectPlace(r)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Reservation Time
+                  </Label>
+                  <Input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Cost ($)
+                  </Label>
+                  <Input
+                    type="number" min="0" step="0.01"
+                    value={cost}
+                    onChange={(e) => setCost(e.target.value)}
+                    placeholder="0.00"
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── LOGISTICS ── */}
+          {category === "logistics" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Transport Type
+                </Label>
+                <Select value={logisticsType} onValueChange={setLogisticsType}>
+                  <SelectTrigger className="border-thin border-border bg-background font-inter text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOGISTICS_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Flight / Train #
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={referenceNumber}
+                    onChange={(e) => { setReferenceNumber(e.target.value); setTitle(e.target.value); }}
+                    placeholder={placeholderText}
+                    required
+                    className="border-thin border-border bg-background font-inter text-sm flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLookup}
+                    disabled={lookingUp || !referenceNumber.trim()}
+                    className="shrink-0 border-thin border-border font-inter text-xs"
+                  >
+                    {lookingUp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Lookup"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Departure
+                  </Label>
+                  <Input
+                    value={departure}
+                    onChange={(e) => setDeparture(e.target.value)}
+                    placeholder="e.g. LAX"
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Arrival
+                  </Label>
+                  <Input
+                    value={arrival}
+                    onChange={(e) => setArrival(e.target.value)}
+                    placeholder="e.g. CDG"
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Depart Time
+                  </Label>
+                  <Input
+                    type="time" value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Arrive Time
+                  </Label>
+                  <Input
+                    type="time" value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Cost ($)
+                </Label>
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="0.00"
+                  className="border-thin border-border bg-background font-inter text-sm"
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── AGENDA (generic) ── */}
+          {category === "agenda" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Title
+                </Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={placeholderText}
+                  required
+                  className="border-thin border-border bg-background font-inter text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    Start Time
+                  </Label>
+                  <Input
+                    type="time" value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                    End Time
+                  </Label>
+                  <Input
+                    type="time" value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="border-thin border-border bg-background font-inter text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Cost ($)
+                </Label>
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="0.00"
+                  className="border-thin border-border bg-background font-inter text-sm"
+                />
+              </div>
+            </>
+          )}
 
           <DialogFooter className="pt-2">
             <Button
@@ -147,7 +522,9 @@ export default function AddItemDialog({
               disabled={submitting || !title.trim()}
               className="bg-accent text-accent-foreground font-inter text-xs hover:bg-accent/90"
             >
-              {submitting ? "Adding…" : "Add Item"}
+              {submitting ? "Adding…" : category === "stays" && checkoutDate && checkoutDate > date
+                ? `Add ${(() => { try { return eachDayOfInterval({ start: parseISO(date), end: parseISO(checkoutDate) }).length - 1; } catch { return 1; } })()} Night${(() => { try { const n = eachDayOfInterval({ start: parseISO(date), end: parseISO(checkoutDate) }).length - 1; return n !== 1 ? "s" : ""; } catch { return ""; } })()}`
+                : "Add Item"}
             </Button>
           </DialogFooter>
         </form>

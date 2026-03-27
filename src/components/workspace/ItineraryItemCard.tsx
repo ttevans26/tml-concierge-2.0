@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, ExternalLink } from "lucide-react";
 import { ItineraryItem } from "@/stores/useTripStore";
 import EditItemDialog from "./EditItemDialog";
 
@@ -30,9 +30,22 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
             {item.start_time.slice(0, 5)}
           </p>
         )}
-        <p className="truncate font-inter text-[10px] font-medium text-foreground leading-tight">
-          {item.title}
-        </p>
+        <div className="flex items-center gap-1">
+          <p className="truncate font-inter text-[10px] font-medium text-foreground leading-tight">
+            {item.title}
+          </p>
+          {item.source_reference && (
+            <a
+              href={item.source_reference}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0 text-accent hover:text-accent/80"
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          )}
+        </div>
         {item.cost != null && item.cost > 0 && (
           <p className="mt-0.5 font-inter text-[9px] text-muted-foreground">
             ${Number(item.cost).toLocaleString()}

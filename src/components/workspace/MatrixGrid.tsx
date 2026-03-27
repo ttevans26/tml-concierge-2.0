@@ -42,6 +42,18 @@ export default function MatrixGrid() {
     }
   }, [activeTrip?.start_date, activeTrip?.end_date]);
 
+  // Compute daily totals (must be before early return)
+  const dailyTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const day of days) {
+      const dateStr = format(day, "yyyy-MM-dd");
+      totals[dateStr] = itineraryItems
+        .filter((i) => i.date === dateStr && i.cost != null)
+        .reduce((sum, i) => sum + Number(i.cost), 0);
+    }
+    return totals;
+  }, [days, itineraryItems]);
+
   if (days.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-background px-8 text-center">
@@ -57,18 +69,6 @@ export default function MatrixGrid() {
 
   const openAdd = (date: string, category: ItineraryItem["category"]) =>
     setDialogState({ open: true, date, category });
-
-  // Compute daily totals
-  const dailyTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const day of days) {
-      const dateStr = format(day, "yyyy-MM-dd");
-      totals[dateStr] = itineraryItems
-        .filter((i) => i.date === dateStr && i.cost != null)
-        .reduce((sum, i) => sum + Number(i.cost), 0);
-    }
-    return totals;
-  }, [days, itineraryItems]);
 
   return (
     <div className="flex h-full flex-col bg-background">

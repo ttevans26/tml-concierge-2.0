@@ -84,7 +84,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 /* ------------------------------------------------------------------ */
 
 export default function Index() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { trips, loading, fetchTrips } = useTripStore();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -96,34 +96,22 @@ export default function Index() {
   }, [authLoading, user, fetchTrips]);
 
   return (
-    <div className="min-h-screen bg-background px-6 py-10 md:px-12 lg:px-20">
+    <div className="px-6 py-10 md:px-12 lg:px-20">
       {/* Header */}
       <header className="mb-12 flex items-end justify-between">
         <div>
-          <p className="mb-1 font-inter text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
-            TML Concierge
-          </p>
           <h1 className="font-playfair text-3xl font-bold tracking-tight text-foreground md:text-4xl">
             Your Trips
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={() => setDialogOpen(true)}
-            className="bg-accent text-accent-foreground font-inter text-sm hover:bg-accent/90"
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Journey
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={signOut}
-            className="font-inter text-xs text-muted-foreground"
-          >
-            Sign out
-          </Button>
-        </div>
+        <Button
+          onClick={() => setDialogOpen(true)}
+          className="bg-accent text-accent-foreground font-inter text-sm hover:bg-accent/90"
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          New Journey
+        </Button>
       </header>
 
       {/* Content */}

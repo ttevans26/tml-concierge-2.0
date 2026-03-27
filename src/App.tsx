@@ -12,6 +12,7 @@ import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import TripWorkspace from "./pages/TripWorkspace";
+import Studio from "./pages/Studio";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
               }
             >
               <Route path="/" element={<Index />} />
+              <Route path="/studio" element={<Studio />} />
               <Route path="/trip/:id" element={<TripWorkspace />} />
             </Route>
             <Route path="*" element={<NotFound />} />

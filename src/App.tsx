@@ -37,6 +37,7 @@ const App = () => (
               }
             >
               <Route path="/" element={<Index />} />
+              <Route path="/studio" element={<Studio />} />
               <Route path="/trip/:id" element={<TripWorkspace />} />
             </Route>
             <Route path="*" element={<NotFound />} />

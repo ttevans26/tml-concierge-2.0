@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, User, Sparkles } from "lucide-react";
+import { Bell, User, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ProfileDrawer from "@/components/ProfileDrawer";

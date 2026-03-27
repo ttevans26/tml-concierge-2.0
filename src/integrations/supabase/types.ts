@@ -14,6 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      flight_tracking: {
+        Row: {
+          airline: string | null
+          arrival_airport: string | null
+          arrival_time: string | null
+          created_at: string
+          delay_minutes: number | null
+          departure_airport: string | null
+          departure_time: string | null
+          flight_number: string
+          gate: string | null
+          id: string
+          raw_data: Json | null
+          status: string | null
+          terminal: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          airline?: string | null
+          arrival_airport?: string | null
+          arrival_time?: string | null
+          created_at?: string
+          delay_minutes?: number | null
+          departure_airport?: string | null
+          departure_time?: string | null
+          flight_number: string
+          gate?: string | null
+          id?: string
+          raw_data?: Json | null
+          status?: string | null
+          terminal?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          airline?: string | null
+          arrival_airport?: string | null
+          arrival_time?: string | null
+          created_at?: string
+          delay_minutes?: number | null
+          departure_airport?: string | null
+          departure_time?: string | null
+          flight_number?: string
+          gate?: string | null
+          id?: string
+          raw_data?: Json | null
+          status?: string | null
+          terminal?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flight_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itinerary_items: {
         Row: {
           approval_status: Database["public"]["Enums"]["approval_status"]
@@ -135,6 +200,77 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      tml_core_tenets: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          tenet_key: string
+          tenet_value: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          tenet_key: string
+          tenet_value: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          tenet_key?: string
+          tenet_value?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      trip_access_requests: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          owner_user_id: string
+          requester_user_id: string
+          status: Database["public"]["Enums"]["access_request_status"]
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          owner_user_id: string
+          requester_user_id: string
+          status?: Database["public"]["Enums"]["access_request_status"]
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          owner_user_id?: string
+          requester_user_id?: string
+          status?: Database["public"]["Enums"]["access_request_status"]
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_access_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trips: {
         Row: {

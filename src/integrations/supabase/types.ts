@@ -14,6 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
+      itinerary_items: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["approval_status"]
+          cancellation_deadline: string | null
+          category: Database["public"]["Enums"]["itinerary_category"]
+          confirmation_code: string | null
+          cost: number | null
+          created_at: string
+          currency: string
+          date: string | null
+          description: string | null
+          end_time: string | null
+          id: string
+          location_lat: number | null
+          location_lng: number | null
+          location_name: string | null
+          metadata: Json | null
+          points_used: number | null
+          sort_order: number
+          source_reference: string | null
+          start_time: string | null
+          title: string
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approval_status?: Database["public"]["Enums"]["approval_status"]
+          cancellation_deadline?: string | null
+          category: Database["public"]["Enums"]["itinerary_category"]
+          confirmation_code?: string | null
+          cost?: number | null
+          created_at?: string
+          currency?: string
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number
+          source_reference?: string | null
+          start_time?: string | null
+          title: string
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approval_status?: Database["public"]["Enums"]["approval_status"]
+          cancellation_deadline?: string | null
+          category?: Database["public"]["Enums"]["itinerary_category"]
+          confirmation_code?: string | null
+          cost?: number | null
+          created_at?: string
+          currency?: string
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number
+          source_reference?: string | null
+          start_time?: string | null
+          title?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_items_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           active_cards: Json | null
@@ -50,6 +136,54 @@ export type Database = {
         }
         Relationships: []
       }
+      trips: {
+        Row: {
+          cover_image_url: string | null
+          created_at: string
+          description: string | null
+          destination: string | null
+          end_date: string | null
+          id: string
+          is_published: boolean
+          name: string
+          start_date: string | null
+          target_nightly_budget: number | null
+          total_trip_budget: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string | null
+          destination?: string | null
+          end_date?: string | null
+          id?: string
+          is_published?: boolean
+          name: string
+          start_date?: string | null
+          target_nightly_budget?: number | null
+          total_trip_budget?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string | null
+          destination?: string | null
+          end_date?: string | null
+          id?: string
+          is_published?: boolean
+          name?: string
+          start_date?: string | null
+          target_nightly_budget?: number | null
+          total_trip_budget?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -70,7 +204,84 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      itinerary_items_public: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["approval_status"] | null
+          category: Database["public"]["Enums"]["itinerary_category"] | null
+          created_at: string | null
+          date: string | null
+          description: string | null
+          end_time: string | null
+          id: string | null
+          location_lat: number | null
+          location_lng: number | null
+          location_name: string | null
+          metadata: Json | null
+          points_used: number | null
+          sort_order: number | null
+          source_reference: string | null
+          start_time: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          approval_status?:
+            | Database["public"]["Enums"]["approval_status"]
+            | null
+          category?: Database["public"]["Enums"]["itinerary_category"] | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number | null
+          source_reference?: string | null
+          start_time?: string | null
+          title?: string | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          approval_status?:
+            | Database["public"]["Enums"]["approval_status"]
+            | null
+          category?: Database["public"]["Enums"]["itinerary_category"] | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          end_time?: string | null
+          id?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          metadata?: Json | null
+          points_used?: number | null
+          sort_order?: number | null
+          source_reference?: string | null
+          start_time?: string | null
+          title?: string | null
+          trip_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_items_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_role: {

@@ -34,7 +34,7 @@ const CATEGORY_LABELS: Record<ItineraryItem["category"], string> = {
   stays: "Stay",
   logistics: "Logistics",
   dining: "Dining",
-  agenda: "Agenda",
+  activity: "Activity",
 };
 
 const LOGISTICS_TYPES = [
@@ -192,7 +192,7 @@ export default function AddItemDialog({
     ? "e.g. Le Jules Verne"
     : category === "logistics"
     ? "e.g. AF 1234 or Eurostar 9021"
-    : "e.g. Walking tour of Montmartre";
+    : "e.g. Louvre Museum Tour";
 
   const maxDate = activeTrip?.end_date || "";
 
@@ -454,8 +454,8 @@ export default function AddItemDialog({
             </>
           )}
 
-          {/* ── AGENDA (generic) ── */}
-          {category === "agenda" && (
+          {/* ── ACTIVITY (generic) ── */}
+          {category === "activity" && (
             <>
               <div className="space-y-1.5">
                 <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">

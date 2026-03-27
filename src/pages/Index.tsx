@@ -136,7 +136,7 @@ export default function Index() {
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
-            <TripCard key={trip.id} trip={trip} />
+            <TripCard key={trip.id} trip={trip} onClick={() => navigate(`/trip/${trip.id}`)} />
           ))}
         </div>
       )}

@@ -35,6 +35,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/trip/:id"
+              element={
+                <ProtectedRoute>
+                  <TripWorkspace />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

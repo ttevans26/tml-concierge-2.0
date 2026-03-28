@@ -1,14 +1,22 @@
 import { useState } from "react";
-import { Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark, GripVertical } from "lucide-react";
+import {
+  Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark,
+  GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStudioStore, StudioCategory, StudioItem } from "@/stores/useStudioStore";
 
-const CATEGORIES: { key: StudioCategory; label: string; icon: React.ElementType; colorClass: string; watermark: string }[] = [
+const CATEGORIES: {
+  key: StudioCategory; label: string; icon: React.ElementType;
+  colorClass: string; watermark: string;
+}[] = [
   { key: "stays", label: "Stays", icon: Hotel, colorClass: "border-l-[hsl(var(--cell-stays))]", watermark: "e.g., Roseate Villa" },
   { key: "dining", label: "Dining", icon: UtensilsCrossed, colorClass: "border-l-[hsl(var(--cell-dining))]", watermark: "e.g., Chez l'Ami Jean" },
   { key: "activity", label: "Activities", icon: Compass, colorClass: "border-l-[hsl(var(--cell-activity))]", watermark: "e.g., Private Boat Tour" },
@@ -22,10 +30,76 @@ const CATEGORY_BG: Record<StudioCategory, string> = {
   sites: "bg-[hsl(var(--cell-sites))]",
 };
 
+/* Mock loyalty badge logic */
+const LOYALTY_BADGES: Record<string, { label: string; multiplier: string }> = {
+  stays: { label: "Amex Platinum", multiplier: "5x" },
+  dining: { label: "Chase Sapphire", multiplier: "3x" },
+  activity: { label: "Citi Prestige", multiplier: "2x" },
+  sites: { label: "Capital One", multiplier: "2x" },
+};
+
+/* Pending scraped item type */
+interface PendingItem {
+  id: string;
+  title: string;
+  address: string | null;
+  url: string | null;
+  category: StudioCategory;
+  description: string | null;
+}
+
 export default function StudioWorkbench() {
   const { activeFolder, addItem } = useStudioStore();
   const [addOpen, setAddOpen] = useState(false);
   const [addCategory, setAddCategory] = useState<StudioCategory>("stays");
+
+  /* URL Ingestor state */
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [scraping, setScraping] = useState(false);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+
+  const handleScrape = async () => {
+    if (!scrapeUrl.trim()) return;
+    setScraping(true);
+    // Simulate scraping — generates a mock pending card
+    await new Promise((r) => setTimeout(r, 1500));
+    const domain = (() => { try { return new URL(scrapeUrl).hostname; } catch { return "source"; } })();
+    setPendingItems((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        title: `Imported from ${domain}`,
+        address: null,
+        url: scrapeUrl.trim(),
+        category: "activity",
+        description: `Scraped content from ${scrapeUrl.trim()}`,
+      },
+    ]);
+    setScrapeUrl("");
+    setScraping(false);
+  };
+
+  const acceptPending = (item: PendingItem) => {
+    if (!activeFolder) return;
+    addItem(activeFolder.id, {
+      category: item.category,
+      title: item.title,
+      description: item.description,
+      address: item.address,
+      url: item.url,
+      lat: null,
+      lng: null,
+      cost: null,
+      google_place_id: null,
+      source_url: item.url,
+      api_metadata: {},
+    });
+    setPendingItems((prev) => prev.filter((p) => p.id !== item.id));
+  };
+
+  const dismissPending = (id: string) => {
+    setPendingItems((prev) => prev.filter((p) => p.id !== id));
+  };
 
   if (!activeFolder) {
     return (
@@ -71,6 +145,99 @@ export default function StudioWorkbench() {
         </Button>
       </div>
 
+      {/* URL Ingestor */}
+      <div className="border-b border-border px-5 py-3">
+        <Label className="font-inter text-[10px] uppercase tracking-wider text-muted-foreground">
+          Import via URL
+        </Label>
+        <div className="mt-1.5 flex gap-2">
+          <div className="relative flex-1">
+            <Link className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={scrapeUrl}
+              onChange={(e) => setScrapeUrl(e.target.value)}
+              placeholder="Paste a link to scrape inspiration…"
+              className="border-thin pl-8 font-inter text-xs h-8"
+              onKeyDown={(e) => e.key === "Enter" && handleScrape()}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={handleScrape}
+            disabled={scraping || !scrapeUrl.trim()}
+          >
+            {scraping ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            {scraping ? "Scraping…" : "Scrape"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Pending Review Tray */}
+      {pendingItems.length > 0 && (
+        <div className="border-b border-border bg-secondary/30 px-5 py-3">
+          <p className="mb-2 font-inter text-[10px] font-semibold uppercase tracking-wider text-accent">
+            Review Scraped Items ({pendingItems.length})
+          </p>
+          <div className="space-y-2">
+            {pendingItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 rounded-sm border-thin border-border bg-card px-3 py-2"
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-inter text-xs font-medium text-foreground">
+                    {item.title}
+                  </p>
+                  {item.url && (
+                    <p className="truncate font-inter text-[10px] text-muted-foreground">
+                      {item.url}
+                    </p>
+                  )}
+                </div>
+                <Select
+                  value={item.category}
+                  onValueChange={(v) =>
+                    setPendingItems((prev) =>
+                      prev.map((p) => (p.id === item.id ? { ...p, category: v as StudioCategory } : p))
+                    )
+                  }
+                >
+                  <SelectTrigger className="h-6 w-24 border-thin font-inter text-[10px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map((c) => (
+                      <SelectItem key={c.key} value={c.key} className="font-inter text-[10px]">
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => acceptPending(item)}
+                  className="rounded-sm p-1 text-accent hover:bg-accent/10"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => dismissPending(item.id)}
+                  className="rounded-sm p-1 text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Category lanes */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {grouped.map((cat) => (
@@ -108,6 +275,7 @@ function CategoryLane({
 }) {
   const { deleteItem } = useStudioStore();
   const Icon = category.icon;
+  const badge = LOYALTY_BADGES[category.key];
 
   return (
     <div>
@@ -148,11 +316,22 @@ function CategoryLane({
                 {item.address && (
                   <p className="mt-0.5 truncate font-inter text-[10px] text-muted-foreground">{item.address}</p>
                 )}
-                {item.cost != null && (
-                  <p className="mt-0.5 font-inter text-[10px] font-medium text-accent">
-                    ${item.cost.toLocaleString()}
-                  </p>
-                )}
+                <div className="mt-1 flex items-center gap-2">
+                  {item.cost != null && (
+                    <span className="font-inter text-[10px] font-medium text-accent">
+                      ${item.cost.toLocaleString()}
+                    </span>
+                  )}
+                  {/* Suggestive Loyalty Badge */}
+                  {badge && (
+                    <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background px-1.5 py-0.5">
+                      <CreditCard className="h-2.5 w-2.5 text-accent" />
+                      <span className="font-inter text-[8px] text-muted-foreground">
+                        💳 {badge.label} ({badge.multiplier})
+                      </span>
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => deleteItem(item.folder_id, item.id)}
@@ -204,7 +383,7 @@ function AddStudioItemDialog({
       lng: null,
       cost: cost ? parseFloat(cost) : null,
       google_place_id: null,
-      source_url: null,
+      source_url: url.trim() || null,
       api_metadata: {},
     });
     setTitle("");
@@ -245,6 +424,9 @@ function AddStudioItemDialog({
               placeholder={catMeta.watermark}
               className="mt-1 border-thin font-inter text-sm"
             />
+            <p className="mt-1 font-inter text-[9px] text-muted-foreground/60">
+              Google Places autocomplete will be available with API integration
+            </p>
           </div>
           <div>
             <Label className="font-inter text-xs">Address / Location</Label>
@@ -256,7 +438,7 @@ function AddStudioItemDialog({
             />
           </div>
           <div>
-            <Label className="font-inter text-xs">URL (optional)</Label>
+            <Label className="font-inter text-xs">Website URL</Label>
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}

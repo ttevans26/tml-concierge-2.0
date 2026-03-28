@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, ExternalLink, Anchor } from "lucide-react";
+import { Pencil, ExternalLink, Anchor, CreditCard } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import EditItemDialog from "./EditItemDialog";
 
@@ -66,6 +66,19 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
           <p className="mt-0.5 font-inter text-[9px] text-muted-foreground">
             ${Number(item.cost).toLocaleString()}
           </p>
+        )}
+        {/* Suggestive Loyalty Badge */}
+        {item.category === "stays" && (
+          <div className="mt-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+            <CreditCard className="h-2 w-2 text-accent" />
+            <span className="font-inter text-[7px] text-muted-foreground">💳 Amex Platinum (5x)</span>
+          </div>
+        )}
+        {item.category === "dining" && (
+          <div className="mt-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+            <CreditCard className="h-2 w-2 text-accent" />
+            <span className="font-inter text-[7px] text-muted-foreground">💳 Sapphire (3x)</span>
+          </div>
         )}
       </div>
 

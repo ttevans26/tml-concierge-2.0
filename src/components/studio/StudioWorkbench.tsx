@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStudioStore, StudioCategory, StudioItem } from "@/stores/useStudioStore";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -61,20 +63,30 @@ export default function StudioWorkbench() {
   const handleScrape = async () => {
     if (!scrapeUrl.trim()) return;
     setScraping(true);
-    // Simulate scraping — generates a mock pending card
-    await new Promise((r) => setTimeout(r, 1500));
-    const domain = (() => { try { return new URL(scrapeUrl).hostname; } catch { return "source"; } })();
-    setPendingItems((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        title: `Imported from ${domain}`,
-        address: null,
-        url: scrapeUrl.trim(),
-        category: "activity",
-        description: `Scraped content from ${scrapeUrl.trim()}`,
-      },
-    ]);
+    try {
+      const { data, error } = await supabase.functions.invoke("scrape-and-parse", {
+        body: { url: scrapeUrl.trim() },
+      });
+      if (error) throw error;
+      const items = data?.items || [];
+      if (items.length === 0) {
+        toast.info("No travel items found on that page.");
+      } else {
+        const mapped: PendingItem[] = items.map((item: any) => ({
+          id: crypto.randomUUID(),
+          title: item.title || "Untitled",
+          address: item.address || null,
+          url: item.url || scrapeUrl.trim(),
+          category: (["stays", "dining", "activity", "sites"].includes(item.category) ? item.category : "activity") as StudioCategory,
+          description: item.description || null,
+        }));
+        setPendingItems((prev) => [...prev, ...mapped]);
+        toast.success(`Found ${mapped.length} item${mapped.length !== 1 ? "s" : ""} to review.`);
+      }
+    } catch (err: any) {
+      console.error("Scrape error:", err);
+      toast.error(err?.message || "Failed to scrape URL. Please try again.");
+    }
     setScrapeUrl("");
     setScraping(false);
   };

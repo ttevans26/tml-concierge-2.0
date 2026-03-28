@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,10 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, MapPin } from "lucide-react";
 import { useTripStore } from "@/stores/useTripStore";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { format, parseISO, eachDayOfInterval } from "date-fns";
+import { useGooglePlaces, type PlaceResult } from "@/hooks/useGooglePlaces";
 
 interface AddItemDialogProps {
   open: boolean;
@@ -46,22 +47,13 @@ const LOGISTICS_TYPES = [
   { value: "car", label: "🚗 Private Car" },
 ];
 
-// Simulated place search results
-const SIMULATED_HOTELS = [
-  { name: "Park Hyatt Tokyo", url: "https://www.hyatt.com/park-hyatt/tyoph-park-hyatt-tokyo" },
-  { name: "The Ritz Paris", url: "https://www.ritzparis.com" },
-  { name: "Aman Venice", url: "https://www.aman.com/hotels/aman-venice" },
-  { name: "Claridge's London", url: "https://www.claridges.co.uk" },
-  { name: "Hotel Bel-Air", url: "https://www.dorchestercollection.com/hotel-bel-air" },
-];
-
-const SIMULATED_RESTAURANTS = [
-  { name: "Le Jules Verne", url: "https://www.lejulesverne-paris.com" },
-  { name: "Noma", url: "https://noma.dk" },
-  { name: "The River Café", url: "https://www.rivercafe.co.uk" },
-  { name: "Da Vittorio", url: "https://www.davittorio.com" },
-  { name: "Core by Clare Smyth", url: "https://corebyclaresmyth.com" },
-];
+const PLACES_TYPES: Record<string, string[]> = {
+  stays: ["lodging"],
+  dining: ["restaurant", "cafe", "bar"],
+  activity: ["establishment"],
+  sites_of_interest: ["tourist_attraction", "museum", "park"],
+  logistics: [],
+};
 
 export default function AddItemDialog({
   open,
@@ -89,9 +81,25 @@ export default function AddItemDialog({
   const [departure, setDeparture] = useState("");
   const [arrival, setArrival] = useState("");
   const [lookingUp, setLookingUp] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  const [googlePlaceId, setGooglePlaceId] = useState("");
+  const [apiMetadata, setApiMetadata] = useState<Record<string, unknown>>({});
 
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const activeTrip = useTripStore((s) => s.activeTrip);
+
+  const usePlaces = category !== "logistics";
+  const { predictions, search: searchPlaces, getDetails, loading: placesLoading } = useGooglePlaces({
+    types: PLACES_TYPES[category] || ["establishment"],
+    enabled: usePlaces,
+  });
+
+  // Debounced search
+  useEffect(() => {
+    if (!usePlaces || !searchQuery.trim()) return;
+    const timer = setTimeout(() => searchPlaces(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchPlaces, usePlaces]);
 
   const reset = () => {
     setTitle(""); setCost(""); setStartTime(""); setEndTime("");
@@ -99,23 +107,29 @@ export default function AddItemDialog({
     setCheckoutDate(""); setLocation("");
     setLogisticsType("plane"); setReferenceNumber("");
     setDeparture(""); setArrival(""); setLookingUp(false);
+    setSelectedPlace(null); setGooglePlaceId(""); setApiMetadata({});
   };
 
-  // Simulated search results
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    const pool = category === "stays" ? SIMULATED_HOTELS
-      : category === "dining" ? SIMULATED_RESTAURANTS
-      : [];
-    return pool.filter((p) => p.name.toLowerCase().includes(q));
-  }, [searchQuery, category]);
-
-  const selectPlace = (place: { name: string; url: string }) => {
-    setTitle(place.name);
-    setSourceUrl(place.url);
-    setSearchQuery(place.name);
+  const selectPlace = async (prediction: { place_id: string; description: string }) => {
+    setSearchQuery(prediction.description);
     setShowResults(false);
+    const details = await getDetails(prediction.place_id);
+    if (details) {
+      setTitle(details.name);
+      setLocation(details.address);
+      setSourceUrl(details.website || "");
+      setGooglePlaceId(details.placeId);
+      setSelectedPlace(details);
+      setApiMetadata({
+        phone: details.phone,
+        rating: details.rating,
+        hours: details.hours,
+        lat: details.lat,
+        lng: details.lng,
+      });
+    } else {
+      setTitle(prediction.description);
+    }
   };
 
   const handleLookup = async () => {
@@ -157,6 +171,8 @@ export default function AddItemDialog({
             end_time: endTime || null,
             source_reference: sourceUrl || null,
             location_name: location || null,
+            google_place_id: googlePlaceId || null,
+            api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
           });
         }
       } catch (err) {
@@ -179,6 +195,8 @@ export default function AddItemDialog({
         end_time: endTime || null,
         source_reference: sourceUrl || null,
         location_name: category === "stays" ? location || null : null,
+        google_place_id: googlePlaceId || null,
+        api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
       });
     }
 
@@ -227,16 +245,20 @@ export default function AddItemDialog({
                     required
                     className="border-thin border-border bg-background pl-8 font-inter text-sm"
                   />
-                  {showResults && searchResults.length > 0 && (
-                    <div className="absolute z-20 mt-1 w-full rounded-sm border border-border bg-card shadow-md">
-                      {searchResults.map((r) => (
+                  {showResults && predictions.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border bg-card shadow-md">
+                      {predictions.map((r) => (
                         <button
-                          key={r.name}
+                          key={r.place_id}
                           type="button"
                           onClick={() => selectPlace(r)}
                           className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
                         >
-                          {r.name}
+                          <MapPin className="h-3 w-3 shrink-0 text-accent" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{r.structured_formatting.main_text}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.structured_formatting.secondary_text}</p>
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -303,16 +325,20 @@ export default function AddItemDialog({
                     required
                     className="border-thin border-border bg-background pl-8 font-inter text-sm"
                   />
-                  {showResults && searchResults.length > 0 && (
-                    <div className="absolute z-20 mt-1 w-full rounded-sm border border-border bg-card shadow-md">
-                      {searchResults.map((r) => (
+                  {showResults && predictions.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border bg-card shadow-md">
+                      {predictions.map((r) => (
                         <button
-                          key={r.name}
+                          key={r.place_id}
                           type="button"
                           onClick={() => selectPlace(r)}
                           className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
                         >
-                          {r.name}
+                          <MapPin className="h-3 w-3 shrink-0 text-accent" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{r.structured_formatting.main_text}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.structured_formatting.secondary_text}</p>
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -505,6 +531,46 @@ export default function AddItemDialog({
                   placeholder="0.00"
                   className="border-thin border-border bg-background font-inter text-sm"
                 />
+              </div>
+            </>
+          )}
+
+          {/* ── SITES OF INTEREST ── */}
+          {category === "sites_of_interest" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Site Name
+                </Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); setTitle(e.target.value); }}
+                    onFocus={() => searchQuery && setShowResults(true)}
+                    placeholder="e.g. The Eiffel Tower"
+                    required
+                    className="border-thin border-border bg-background pl-8 font-inter text-sm"
+                  />
+                  {showResults && predictions.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border bg-card shadow-md">
+                      {predictions.map((r) => (
+                        <button
+                          key={r.place_id}
+                          type="button"
+                          onClick={() => selectPlace(r)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
+                        >
+                          <MapPin className="h-3 w-3 shrink-0 text-accent" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{r.structured_formatting.main_text}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.structured_formatting.secondary_text}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}

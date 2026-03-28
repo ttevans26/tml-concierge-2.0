@@ -133,7 +133,7 @@ function FolderRow({
       }`}
     >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border-thin border-border bg-background">
-        {folder.isGlobal ? (
+        {folder.is_global ? (
           <Bookmark className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
         ) : (
           <FolderOpen className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />

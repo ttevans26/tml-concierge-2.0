@@ -47,22 +47,13 @@ const LOGISTICS_TYPES = [
   { value: "car", label: "🚗 Private Car" },
 ];
 
-// Simulated place search results
-const SIMULATED_HOTELS = [
-  { name: "Park Hyatt Tokyo", url: "https://www.hyatt.com/park-hyatt/tyoph-park-hyatt-tokyo" },
-  { name: "The Ritz Paris", url: "https://www.ritzparis.com" },
-  { name: "Aman Venice", url: "https://www.aman.com/hotels/aman-venice" },
-  { name: "Claridge's London", url: "https://www.claridges.co.uk" },
-  { name: "Hotel Bel-Air", url: "https://www.dorchestercollection.com/hotel-bel-air" },
-];
-
-const SIMULATED_RESTAURANTS = [
-  { name: "Le Jules Verne", url: "https://www.lejulesverne-paris.com" },
-  { name: "Noma", url: "https://noma.dk" },
-  { name: "The River Café", url: "https://www.rivercafe.co.uk" },
-  { name: "Da Vittorio", url: "https://www.davittorio.com" },
-  { name: "Core by Clare Smyth", url: "https://corebyclaresmyth.com" },
-];
+const PLACES_TYPES: Record<string, string[]> = {
+  stays: ["lodging"],
+  dining: ["restaurant", "cafe", "bar"],
+  activity: ["establishment"],
+  sites_of_interest: ["tourist_attraction", "museum", "park"],
+  logistics: [],
+};
 
 export default function AddItemDialog({
   open,

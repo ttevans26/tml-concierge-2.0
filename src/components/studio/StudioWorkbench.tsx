@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark,
-  GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard,
+  GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard, MapPin, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useStudioStore, StudioCategory, StudioItem } from "@/stores/useStudioStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;

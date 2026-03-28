@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark,
   GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard, MapPin, Search,
+  Anchor, ArrowUpDown, Navigation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,9 +53,10 @@ interface PendingItem {
 }
 
 export default function StudioWorkbench() {
-  const { activeFolder, addItem } = useStudioStore();
+  const { activeFolder, addItem, anchorItemId, setAnchorItem } = useStudioStore();
   const [addOpen, setAddOpen] = useState(false);
   const [addCategory, setAddCategory] = useState<StudioCategory>("stays");
+  const [sortByProximity, setSortByProximity] = useState(false);
 
   /* URL Ingestor state */
   const [scrapeUrl, setScrapeUrl] = useState("");
@@ -133,6 +135,11 @@ export default function StudioWorkbench() {
     );
   }
 
+  // Find the anchor item
+  const anchorItem = anchorItemId
+    ? activeFolder.items.find((i) => i.id === anchorItemId) || null
+    : null;
+
   const grouped = CATEGORIES.map((cat) => ({
     ...cat,
     items: activeFolder.items.filter((i) => i.category === cat.key),
@@ -148,17 +155,33 @@ export default function StudioWorkbench() {
           </h2>
           <p className="font-inter text-[10px] text-muted-foreground">
             {activeFolder.location} · {activeFolder.items.length} items
+            {anchorItem && (
+              <span className="ml-1 text-accent">· ⚓ {anchorItem.title}</span>
+            )}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-thin font-inter text-xs"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="mr-1 h-3 w-3" />
-          Add Item
-        </Button>
+        <div className="flex items-center gap-2">
+          {anchorItem && (
+            <Button
+              variant={sortByProximity ? "default" : "outline"}
+              size="sm"
+              className="border-thin font-inter text-[10px] h-7 gap-1"
+              onClick={() => setSortByProximity(!sortByProximity)}
+            >
+              <ArrowUpDown className="h-3 w-3" />
+              {sortByProximity ? "Proximity ✓" : "Sort by Proximity"}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Add Item
+          </Button>
+        </div>
       </div>
 
       {/* URL Ingestor */}
@@ -260,6 +283,10 @@ export default function StudioWorkbench() {
           <CategoryLane
             key={cat.key}
             category={cat}
+            anchorItem={anchorItem}
+            sortByProximity={sortByProximity}
+            onSetAnchor={(itemId) => setAnchorItem(anchorItemId === itemId ? null : itemId)}
+            isAnchorId={anchorItemId}
             onAdd={() => {
               setAddCategory(cat.key);
               setAddOpen(true);
@@ -282,16 +309,57 @@ export default function StudioWorkbench() {
 
 /* ---- Category Lane ---- */
 
+import { haversineDistance, formatDistance } from "@/lib/distance";
+
+function getItemCoords(item: StudioItem): { lat: number; lng: number } | null {
+  if (item.lat != null && item.lng != null) return { lat: item.lat, lng: item.lng };
+  const meta = item.api_metadata as Record<string, unknown>;
+  if (meta?.lat != null && meta?.lng != null) return { lat: meta.lat as number, lng: meta.lng as number };
+  return null;
+}
+
 function CategoryLane({
   category,
+  anchorItem,
+  sortByProximity,
+  onSetAnchor,
+  isAnchorId,
   onAdd,
 }: {
   category: { key: StudioCategory; label: string; icon: React.ElementType; items: StudioItem[] };
+  anchorItem: StudioItem | null;
+  sortByProximity: boolean;
+  onSetAnchor: (itemId: string) => void;
+  isAnchorId: string | null;
   onAdd: () => void;
 }) {
   const { deleteItem } = useStudioStore();
   const Icon = category.icon;
   const badge = LOYALTY_BADGES[category.key];
+  const anchorCoords = anchorItem ? getItemCoords(anchorItem) : null;
+
+  // Calculate distances and optionally sort
+  const itemsWithDistance = useMemo(() => {
+    const mapped = category.items.map((item) => {
+      let distance: number | null = null;
+      if (anchorCoords && item.id !== anchorItem?.id) {
+        const coords = getItemCoords(item);
+        if (coords) {
+          distance = haversineDistance(anchorCoords.lat, anchorCoords.lng, coords.lat, coords.lng);
+        }
+      }
+      return { item, distance };
+    });
+    if (sortByProximity) {
+      mapped.sort((a, b) => {
+        if (a.distance == null && b.distance == null) return 0;
+        if (a.distance == null) return 1;
+        if (b.distance == null) return -1;
+        return a.distance - b.distance;
+      });
+    }
+    return mapped;
+  }, [category.items, anchorCoords, sortByProximity, anchorItem?.id]);
 
   return (
     <div>
@@ -312,51 +380,75 @@ function CategoryLane({
         </p>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {category.items.map((item) => (
-            <div
-              key={item.id}
-              className={`group relative flex items-start gap-2 rounded-sm border-thin border-border border-l-2 ${CATEGORY_BG[item.category]} p-3 transition-shadow hover:shadow-sm`}
-            >
-              <GripVertical className="mt-0.5 h-3 w-3 shrink-0 cursor-grab text-muted-foreground/40" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1">
-                  <p className="truncate font-inter text-xs font-medium text-foreground">
-                    {item.title}
-                  </p>
-                  {item.url && (
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-accent hover:text-accent/80">
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+          {itemsWithDistance.map(({ item, distance }) => {
+            const isThisAnchor = isAnchorId === item.id;
+            return (
+              <div
+                key={item.id}
+                className={`group relative flex items-start gap-2 rounded-sm border-thin border-border border-l-2 ${CATEGORY_BG[item.category]} p-3 transition-shadow hover:shadow-sm ${isThisAnchor ? "ring-1 ring-accent" : ""}`}
+              >
+                <GripVertical className="mt-0.5 h-3 w-3 shrink-0 cursor-grab text-muted-foreground/40" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1">
+                    <p className="truncate font-inter text-xs font-medium text-foreground">
+                      {item.title}
+                    </p>
+                    {item.url && (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-accent hover:text-accent/80">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  {item.address && (
+                    <p className="mt-0.5 truncate font-inter text-[10px] text-muted-foreground">{item.address}</p>
                   )}
-                </div>
-                {item.address && (
-                  <p className="mt-0.5 truncate font-inter text-[10px] text-muted-foreground">{item.address}</p>
-                )}
-                <div className="mt-1 flex items-center gap-2">
-                  {item.cost != null && (
-                    <span className="font-inter text-[10px] font-medium text-accent">
-                      ${item.cost.toLocaleString()}
-                    </span>
-                  )}
-                  {/* Suggestive Loyalty Badge */}
-                  {badge && (
-                    <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background px-1.5 py-0.5">
-                      <CreditCard className="h-2.5 w-2.5 text-accent" />
-                      <span className="font-inter text-[8px] text-muted-foreground">
-                        💳 {badge.label} ({badge.multiplier})
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {item.cost != null && (
+                      <span className="font-inter text-[10px] font-medium text-accent">
+                        ${item.cost.toLocaleString()}
                       </span>
-                    </span>
+                    )}
+                    {/* Distance Badge */}
+                    {distance != null && (
+                      <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background px-1.5 py-0.5">
+                        <Navigation className="h-2.5 w-2.5 text-accent" />
+                        <span className="font-inter text-[9px] text-muted-foreground">
+                          {formatDistance(distance)}
+                        </span>
+                      </span>
+                    )}
+                    {/* Suggestive Loyalty Badge */}
+                    {badge && (
+                      <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background px-1.5 py-0.5">
+                        <CreditCard className="h-2.5 w-2.5 text-accent" />
+                        <span className="font-inter text-[8px] text-muted-foreground">
+                          💳 {badge.label} ({badge.multiplier})
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col gap-1">
+                  {/* Anchor button for Stays */}
+                  {item.category === "stays" && (
+                    <button
+                      onClick={() => onSetAnchor(item.id)}
+                      className={`rounded-sm p-0.5 ${isThisAnchor ? "text-accent" : "hidden text-muted-foreground/50 hover:text-accent group-hover:block"}`}
+                      title={isThisAnchor ? "Remove anchor" : "Set as anchor"}
+                    >
+                      <Anchor className="h-3 w-3" />
+                    </button>
                   )}
+                  <button
+                    onClick={() => deleteItem(item.folder_id, item.id)}
+                    className="hidden shrink-0 text-muted-foreground hover:text-destructive group-hover:block rounded-sm p-0.5"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => deleteItem(item.folder_id, item.id)}
-                className="hidden shrink-0 text-muted-foreground hover:text-destructive group-hover:block"
-              >
-                <Trash2 className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

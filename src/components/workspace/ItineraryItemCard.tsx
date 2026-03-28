@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Pencil, ExternalLink, Anchor, CreditCard } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Pencil, ExternalLink, Anchor, CreditCard, Navigation } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
+import { haversineDistance, formatDistance } from "@/lib/distance";
 import EditItemDialog from "./EditItemDialog";
 
 interface ItineraryItemCardProps {
@@ -12,6 +13,16 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);
   const isAnchor = activeAnchor?.id === item.id;
+
+  const distance = useMemo(() => {
+    if (!activeAnchor || activeAnchor.id === item.id) return null;
+    const aLat = activeAnchor.location_lat;
+    const aLng = activeAnchor.location_lng;
+    const iLat = item.location_lat;
+    const iLng = item.location_lng;
+    if (aLat == null || aLng == null || iLat == null || iLng == null) return null;
+    return haversineDistance(aLat, aLng, iLat, iLng);
+  }, [activeAnchor, item]);
 
   return (
     <>
@@ -62,24 +73,35 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
             </a>
           )}
         </div>
-        {item.cost != null && item.cost > 0 && (
-          <p className="mt-0.5 font-inter text-[9px] text-muted-foreground">
-            ${Number(item.cost).toLocaleString()}
-          </p>
-        )}
-        {/* Suggestive Loyalty Badge */}
-        {item.category === "stays" && (
-          <div className="mt-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
-            <CreditCard className="h-2 w-2 text-accent" />
-            <span className="font-inter text-[7px] text-muted-foreground">💳 Amex Platinum (5x)</span>
-          </div>
-        )}
-        {item.category === "dining" && (
-          <div className="mt-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
-            <CreditCard className="h-2 w-2 text-accent" />
-            <span className="font-inter text-[7px] text-muted-foreground">💳 Sapphire (3x)</span>
-          </div>
-        )}
+        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+          {item.cost != null && item.cost > 0 && (
+            <span className="font-inter text-[9px] text-muted-foreground">
+              ${Number(item.cost).toLocaleString()}
+            </span>
+          )}
+          {/* Distance Badge */}
+          {distance != null && (
+            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+              <Navigation className="h-2 w-2 text-accent" />
+              <span className="font-inter text-[7px] text-muted-foreground">
+                {formatDistance(distance)}
+              </span>
+            </span>
+          )}
+          {/* Suggestive Loyalty Badge */}
+          {item.category === "stays" && (
+            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+              <CreditCard className="h-2 w-2 text-accent" />
+              <span className="font-inter text-[7px] text-muted-foreground">💳 Amex Platinum (5x)</span>
+            </span>
+          )}
+          {item.category === "dining" && (
+            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+              <CreditCard className="h-2 w-2 text-accent" />
+              <span className="font-inter text-[7px] text-muted-foreground">💳 Sapphire (3x)</span>
+            </span>
+          )}
+        </div>
       </div>
 
       {editing && (

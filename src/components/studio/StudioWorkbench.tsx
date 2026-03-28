@@ -53,9 +53,10 @@ interface PendingItem {
 }
 
 export default function StudioWorkbench() {
-  const { activeFolder, addItem } = useStudioStore();
+  const { activeFolder, addItem, anchorItemId, setAnchorItem } = useStudioStore();
   const [addOpen, setAddOpen] = useState(false);
   const [addCategory, setAddCategory] = useState<StudioCategory>("stays");
+  const [sortByProximity, setSortByProximity] = useState(false);
 
   /* URL Ingestor state */
   const [scrapeUrl, setScrapeUrl] = useState("");

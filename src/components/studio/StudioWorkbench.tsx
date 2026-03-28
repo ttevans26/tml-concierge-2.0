@@ -61,12 +61,15 @@ export default function StudioWorkbench() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
   const handleScrape = async () => {
+    console.log("DEBUG: Scrape Triggered", scrapeUrl);
     if (!scrapeUrl.trim()) return;
     setScraping(true);
     try {
+      console.log("DEBUG: Invoking scrape-and-parse edge function");
       const { data, error } = await supabase.functions.invoke("scrape-and-parse", {
         body: { url: scrapeUrl.trim() },
       });
+      console.log("DEBUG: Scrape response", { data, error });
       if (error) throw error;
       const items = data?.items || [];
       if (items.length === 0) {
@@ -84,7 +87,7 @@ export default function StudioWorkbench() {
         toast.success(`Found ${mapped.length} item${mapped.length !== 1 ? "s" : ""} to review.`);
       }
     } catch (err: any) {
-      console.error("Scrape error:", err);
+      console.error("DEBUG: Scrape error:", err);
       toast.error(err?.message || "Failed to scrape URL. Please try again.");
     }
     setScrapeUrl("");

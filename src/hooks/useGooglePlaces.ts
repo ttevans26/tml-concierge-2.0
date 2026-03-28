@@ -80,6 +80,7 @@ export function useGooglePlaces(
 
   const search = useCallback(
     (query: string) => {
+      console.log("DEBUG: Google Places Search Triggered", query, "service ready:", !!serviceRef.current);
       if (!query.trim() || !serviceRef.current) {
         setPredictions([]);
         return;
@@ -91,6 +92,7 @@ export function useGooglePlaces(
           types: options?.types || ["establishment"],
         },
         (results: any[] | null, status: string) => {
+          console.log("DEBUG: Google Places response", status, results?.length ?? 0, "results");
           setLoading(false);
           if (status === "OK" && results) {
             setPredictions(results);

@@ -81,9 +81,25 @@ export default function AddItemDialog({
   const [departure, setDeparture] = useState("");
   const [arrival, setArrival] = useState("");
   const [lookingUp, setLookingUp] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  const [googlePlaceId, setGooglePlaceId] = useState("");
+  const [apiMetadata, setApiMetadata] = useState<Record<string, unknown>>({});
 
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const activeTrip = useTripStore((s) => s.activeTrip);
+
+  const usePlaces = category !== "logistics";
+  const { predictions, search: searchPlaces, getDetails, loading: placesLoading } = useGooglePlaces({
+    types: PLACES_TYPES[category] || ["establishment"],
+    enabled: usePlaces,
+  });
+
+  // Debounced search
+  useEffect(() => {
+    if (!usePlaces || !searchQuery.trim()) return;
+    const timer = setTimeout(() => searchPlaces(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchPlaces, usePlaces]);
 
   const reset = () => {
     setTitle(""); setCost(""); setStartTime(""); setEndTime("");
@@ -91,23 +107,29 @@ export default function AddItemDialog({
     setCheckoutDate(""); setLocation("");
     setLogisticsType("plane"); setReferenceNumber("");
     setDeparture(""); setArrival(""); setLookingUp(false);
+    setSelectedPlace(null); setGooglePlaceId(""); setApiMetadata({});
   };
 
-  // Simulated search results
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    const pool = category === "stays" ? SIMULATED_HOTELS
-      : category === "dining" ? SIMULATED_RESTAURANTS
-      : [];
-    return pool.filter((p) => p.name.toLowerCase().includes(q));
-  }, [searchQuery, category]);
-
-  const selectPlace = (place: { name: string; url: string }) => {
-    setTitle(place.name);
-    setSourceUrl(place.url);
-    setSearchQuery(place.name);
+  const selectPlace = async (prediction: { place_id: string; description: string }) => {
+    setSearchQuery(prediction.description);
     setShowResults(false);
+    const details = await getDetails(prediction.place_id);
+    if (details) {
+      setTitle(details.name);
+      setLocation(details.address);
+      setSourceUrl(details.website || "");
+      setGooglePlaceId(details.placeId);
+      setSelectedPlace(details);
+      setApiMetadata({
+        phone: details.phone,
+        rating: details.rating,
+        hours: details.hours,
+        lat: details.lat,
+        lng: details.lng,
+      });
+    } else {
+      setTitle(prediction.description);
+    }
   };
 
   const handleLookup = async () => {

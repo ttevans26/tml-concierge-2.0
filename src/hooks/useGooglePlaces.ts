@@ -14,12 +14,21 @@ export interface PlaceResult {
   lng: number | null;
 }
 
+export interface PlacePrediction {
+  description: string;
+  place_id: string;
+  structured_formatting: {
+    main_text: string;
+    secondary_text: string;
+  };
+}
+
 let scriptLoaded = false;
 let scriptLoading = false;
 const loadCallbacks: (() => void)[] = [];
 
 function loadGoogleMapsScript(): Promise<void> {
-  if (scriptLoaded && window.google?.maps?.places) return Promise.resolve();
+  if (scriptLoaded && (window as any).google?.maps?.places) return Promise.resolve();
   return new Promise((resolve) => {
     if (scriptLoading) {
       loadCallbacks.push(resolve);
@@ -38,30 +47,33 @@ function loadGoogleMapsScript(): Promise<void> {
     };
     script.onerror = () => {
       scriptLoading = false;
-      resolve(); // fail silently
+      resolve();
     };
     document.head.appendChild(script);
   });
 }
 
+function getGoogle(): any {
+  return (window as any).google;
+}
+
 export function useGooglePlaces(
-  inputRef: React.RefObject<HTMLInputElement | null>,
   options?: { types?: string[]; enabled?: boolean }
 ) {
-  const [predictions, setPredictions] = useState<google.maps.places.AutocompletePrediction[]>([]);
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [loading, setLoading] = useState(false);
-  const serviceRef = useRef<google.maps.places.AutocompleteService | null>(null);
-  const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
+  const serviceRef = useRef<any>(null);
+  const placesServiceRef = useRef<any>(null);
   const enabled = options?.enabled ?? true;
 
   useEffect(() => {
     if (!enabled) return;
     loadGoogleMapsScript().then(() => {
-      if (window.google?.maps?.places) {
-        serviceRef.current = new google.maps.places.AutocompleteService();
-        // PlacesService needs a div or map
+      const g = getGoogle();
+      if (g?.maps?.places) {
+        serviceRef.current = new g.maps.places.AutocompleteService();
         const div = document.createElement("div");
-        placesServiceRef.current = new google.maps.places.PlacesService(div);
+        placesServiceRef.current = new g.maps.places.PlacesService(div);
       }
     });
   }, [enabled]);
@@ -78,9 +90,9 @@ export function useGooglePlaces(
           input: query,
           types: options?.types || ["establishment"],
         },
-        (results, status) => {
+        (results: any[] | null, status: string) => {
           setLoading(false);
-          if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+          if (status === "OK" && results) {
             setPredictions(results);
           } else {
             setPredictions([]);
@@ -95,7 +107,7 @@ export function useGooglePlaces(
     (placeId: string): Promise<PlaceResult | null> => {
       if (!placesServiceRef.current) return Promise.resolve(null);
       return new Promise((resolve) => {
-        placesServiceRef.current!.getDetails(
+        placesServiceRef.current.getDetails(
           {
             placeId,
             fields: [
@@ -109,8 +121,8 @@ export function useGooglePlaces(
               "geometry",
             ],
           },
-          (place, status) => {
-            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+          (place: any, status: string) => {
+            if (status === "OK" && place) {
               resolve({
                 name: place.name || "",
                 address: place.formatted_address || "",

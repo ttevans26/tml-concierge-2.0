@@ -16,7 +16,7 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
   return (
     <>
       <div
-        className="group relative cursor-pointer rounded-sm border-thin border-border bg-card px-2 py-1.5 transition-shadow hover:shadow-sm"
+        className={`group relative cursor-pointer rounded-sm border-thin border-border bg-card px-2 py-1.5 transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""}`}
         onClick={() => setEditing(true)}
       >
         <button

@@ -13,7 +13,8 @@ import {
 import { Label } from "@/components/ui/label";
 
 export default function StudioVault() {
-  const { folders, activeFolder, setActiveFolder, addFolder, deleteFolder } = useStudioStore();
+  const { folders, activeFolder, setActiveFolder, addFolder, deleteFolder, fetchFolders } = useStudioStore();
+  useEffect(() => { fetchFolders(); }, []);
   const [search, setSearch] = useState("");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");

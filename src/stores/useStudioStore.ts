@@ -37,6 +37,7 @@ interface StudioStore {
   folders: StudioFolder[];
   activeFolder: StudioFolder | null;
   loading: boolean;
+  anchorItemId: string | null;
 
   fetchFolders: () => Promise<void>;
   setActiveFolder: (folder: StudioFolder | null) => void;
@@ -44,6 +45,7 @@ interface StudioStore {
   addItem: (folderId: string, item: Omit<StudioItem, "id" | "folder_id" | "user_id" | "created_at" | "updated_at">) => Promise<StudioItem | null>;
   deleteItem: (folderId: string, itemId: string) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
+  setAnchorItem: (itemId: string | null) => void;
 }
 
 export const useStudioStore = create<StudioStore>((set, get) => ({

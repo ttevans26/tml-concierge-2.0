@@ -81,6 +81,7 @@ export type Database = {
       }
       itinerary_items: {
         Row: {
+          api_metadata: Json | null
           approval_status: Database["public"]["Enums"]["approval_status"]
           cancellation_deadline: string | null
           category: Database["public"]["Enums"]["itinerary_category"]
@@ -91,6 +92,7 @@ export type Database = {
           date: string | null
           description: string | null
           end_time: string | null
+          google_place_id: string | null
           id: string
           location_lat: number | null
           location_lng: number | null
@@ -99,6 +101,7 @@ export type Database = {
           points_used: number | null
           sort_order: number
           source_reference: string | null
+          source_url: string | null
           start_time: string | null
           title: string
           trip_id: string
@@ -106,6 +109,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          api_metadata?: Json | null
           approval_status?: Database["public"]["Enums"]["approval_status"]
           cancellation_deadline?: string | null
           category: Database["public"]["Enums"]["itinerary_category"]
@@ -116,6 +120,7 @@ export type Database = {
           date?: string | null
           description?: string | null
           end_time?: string | null
+          google_place_id?: string | null
           id?: string
           location_lat?: number | null
           location_lng?: number | null
@@ -124,6 +129,7 @@ export type Database = {
           points_used?: number | null
           sort_order?: number
           source_reference?: string | null
+          source_url?: string | null
           start_time?: string | null
           title: string
           trip_id: string
@@ -131,6 +137,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          api_metadata?: Json | null
           approval_status?: Database["public"]["Enums"]["approval_status"]
           cancellation_deadline?: string | null
           category?: Database["public"]["Enums"]["itinerary_category"]
@@ -141,6 +148,7 @@ export type Database = {
           date?: string | null
           description?: string | null
           end_time?: string | null
+          google_place_id?: string | null
           id?: string
           location_lat?: number | null
           location_lng?: number | null
@@ -149,6 +157,7 @@ export type Database = {
           points_used?: number | null
           sort_order?: number
           source_reference?: string | null
+          source_url?: string | null
           start_time?: string | null
           title?: string
           trip_id?: string
@@ -200,6 +209,101 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      studio_folders: {
+        Row: {
+          created_at: string
+          id: string
+          is_global: boolean
+          location: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          location?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_global?: boolean
+          location?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      studio_items: {
+        Row: {
+          address: string | null
+          api_metadata: Json | null
+          category: string
+          cost: number | null
+          created_at: string
+          description: string | null
+          folder_id: string
+          google_place_id: string | null
+          id: string
+          lat: number | null
+          lng: number | null
+          source_url: string | null
+          title: string
+          updated_at: string
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          api_metadata?: Json | null
+          category?: string
+          cost?: number | null
+          created_at?: string
+          description?: string | null
+          folder_id: string
+          google_place_id?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          source_url?: string | null
+          title: string
+          updated_at?: string
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          api_metadata?: Json | null
+          category?: string
+          cost?: number | null
+          created_at?: string
+          description?: string | null
+          folder_id?: string
+          google_place_id?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          source_url?: string | null
+          title?: string
+          updated_at?: string
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "studio_items_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "studio_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tml_core_tenets: {
         Row: {

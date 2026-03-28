@@ -155,7 +155,7 @@ function CategoryLane({
                 )}
               </div>
               <button
-                onClick={() => deleteItem(item.folderId, item.id)}
+                onClick={() => deleteItem(item.folder_id, item.id)}
                 className="hidden shrink-0 text-muted-foreground hover:text-destructive group-hover:block"
               >
                 <Trash2 className="h-3 w-3" />
@@ -203,6 +203,9 @@ function AddStudioItemDialog({
       lat: null,
       lng: null,
       cost: cost ? parseFloat(cost) : null,
+      google_place_id: null,
+      source_url: null,
+      api_metadata: {},
     });
     setTitle("");
     setAddress("");

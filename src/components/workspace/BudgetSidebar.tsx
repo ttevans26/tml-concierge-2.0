@@ -1,19 +1,14 @@
-import { useMemo } from "react";
 import { Wallet, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { useTripStore } from "@/stores/useTripStore";
+import { useTripStore, selectTotalReservedCost, selectRemainingBudget } from "@/stores/useTripStore";
 
 export default function BudgetSidebar() {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
+  const totalSpent = useTripStore(selectTotalReservedCost);
+  const remaining = useTripStore(selectRemainingBudget);
 
-  const totalSpent = useMemo(
-    () => itineraryItems.reduce((sum, i) => sum + (i.cost ?? 0), 0),
-    [itineraryItems]
-  );
-
-  const budget = activeTrip?.total_trip_budget ?? 0;
-  const remaining = Math.max(budget - totalSpent, 0);
+  const budget = activeTrip?.total_trip_budget ? Number(activeTrip.total_trip_budget) : 0;
   const pct = budget > 0 ? Math.min((totalSpent / budget) * 100, 100) : 0;
 
   return (
@@ -23,6 +18,16 @@ export default function BudgetSidebar() {
         <h2 className="font-playfair text-sm font-semibold text-foreground">
           Budget Reserve
         </h2>
+      </div>
+
+      {/* Remaining budget hero */}
+      <div className="border-b border-border bg-secondary/20 px-4 py-5 text-center">
+        <p className="font-inter text-[10px] uppercase tracking-widest text-muted-foreground">
+          Remaining Budget
+        </p>
+        <p className="mt-1 font-playfair text-2xl font-bold text-accent">
+          {budget > 0 ? `$${remaining.toLocaleString()}` : "—"}
+        </p>
       </div>
 
       {/* Budget bar */}
@@ -40,7 +45,7 @@ export default function BudgetSidebar() {
         {/* Progress */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="font-inter text-[11px] text-muted-foreground">Spent</span>
+            <span className="font-inter text-[11px] text-muted-foreground">Reserved</span>
             <span className="font-inter text-xs font-medium text-foreground">
               ${totalSpent.toLocaleString()}
             </span>

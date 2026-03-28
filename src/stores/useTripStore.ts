@@ -43,6 +43,9 @@ export interface ItineraryItem {
   location_lng: number | null;
   sort_order: number;
   metadata: Record<string, unknown>;
+  google_place_id: string | null;
+  source_url: string | null;
+  api_metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +94,10 @@ interface TripStore {
   profile: Profile | null;
   loading: boolean;
 
+  /* anchor */
+  activeAnchor: ItineraryItem | null;
+  setActiveAnchor: (item: ItineraryItem | null) => void;
+
   /* actions */
   fetchTrips: () => Promise<void>;
   fetchItineraryItems: (tripId: string) => Promise<void>;
@@ -108,6 +115,18 @@ interface TripStore {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Derived selectors (use outside store)                             */
+/* ------------------------------------------------------------------ */
+
+export const selectTotalReservedCost = (state: TripStore) =>
+  state.itineraryItems.reduce((sum, i) => sum + (i.cost ? Number(i.cost) : 0), 0);
+
+export const selectRemainingBudget = (state: TripStore) => {
+  const budget = state.activeTrip?.total_trip_budget ?? 0;
+  return Math.max(Number(budget) - selectTotalReservedCost(state), 0);
+};
+
+/* ------------------------------------------------------------------ */
 /*  Store implementation                                              */
 /* ------------------------------------------------------------------ */
 
@@ -118,6 +137,9 @@ export const useTripStore = create<TripStore>((set, get) => ({
   flights: [],
   profile: null,
   loading: false,
+  activeAnchor: null,
+
+  setActiveAnchor: (item) => set({ activeAnchor: item }),
 
   /* ---- Fetch ---- */
 
@@ -130,7 +152,6 @@ export const useTripStore = create<TripStore>((set, get) => ({
     if (error) {
       console.error("Supabase fetchTrips error:", error);
     } else {
-      console.log("Fetched Trips:", data);
       set({ trips: (data as Trip[]) || [] });
     }
     set({ loading: false });

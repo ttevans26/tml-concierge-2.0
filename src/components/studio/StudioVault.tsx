@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Plus, FolderOpen, Bookmark, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,8 @@ import {
 import { Label } from "@/components/ui/label";
 
 export default function StudioVault() {
-  const { folders, activeFolder, setActiveFolder, addFolder, deleteFolder } = useStudioStore();
+  const { folders, activeFolder, setActiveFolder, addFolder, deleteFolder, fetchFolders } = useStudioStore();
+  useEffect(() => { fetchFolders(); }, []);
   const [search, setSearch] = useState("");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
@@ -98,7 +99,7 @@ export default function StudioVault() {
             folder={folder}
             isActive={activeFolder?.id === folder.id}
             onSelect={() => setActiveFolder(activeFolder?.id === folder.id ? null : folder)}
-            onDelete={() => !folder.isGlobal && deleteFolder(folder.id)}
+            onDelete={() => !folder.is_global && deleteFolder(folder.id)}
           />
         ))}
         {filtered.length === 0 && (
@@ -133,7 +134,7 @@ function FolderRow({
       }`}
     >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border-thin border-border bg-background">
-        {folder.isGlobal ? (
+        {folder.is_global ? (
           <Bookmark className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
         ) : (
           <FolderOpen className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
@@ -145,7 +146,7 @@ function FolderRow({
           {folder.location} · {folder.items.length} items
         </p>
       </div>
-      {!folder.isGlobal && (
+      {!folder.is_global && (
         <button
           onClick={(e) => {
             e.stopPropagation();

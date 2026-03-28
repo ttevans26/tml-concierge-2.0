@@ -17,10 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, MapPin } from "lucide-react";
 import { useTripStore } from "@/stores/useTripStore";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { format, parseISO, eachDayOfInterval } from "date-fns";
+import { useGooglePlaces, type PlaceResult } from "@/hooks/useGooglePlaces";
 
 interface AddItemDialogProps {
   open: boolean;

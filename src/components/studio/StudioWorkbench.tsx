@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark,
-  GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard,
+  GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard, MapPin, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useStudioStore, StudioCategory, StudioItem } from "@/stores/useStudioStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -61,12 +62,15 @@ export default function StudioWorkbench() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
   const handleScrape = async () => {
+    console.log("DEBUG: Scrape Triggered", scrapeUrl);
     if (!scrapeUrl.trim()) return;
     setScraping(true);
     try {
+      console.log("DEBUG: Invoking scrape-and-parse edge function");
       const { data, error } = await supabase.functions.invoke("scrape-and-parse", {
         body: { url: scrapeUrl.trim() },
       });
+      console.log("DEBUG: Scrape response", { data, error });
       if (error) throw error;
       const items = data?.items || [];
       if (items.length === 0) {
@@ -84,7 +88,7 @@ export default function StudioWorkbench() {
         toast.success(`Found ${mapped.length} item${mapped.length !== 1 ? "s" : ""} to review.`);
       }
     } catch (err: any) {
-      console.error("Scrape error:", err);
+      console.error("DEBUG: Scrape error:", err);
       toast.error(err?.message || "Failed to scrape URL. Please try again.");
     }
     setScrapeUrl("");
@@ -376,33 +380,74 @@ function AddStudioItemDialog({
 }) {
   const { addItem } = useStudioStore();
   const [title, setTitle] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showResults, setShowResults] = useState(false);
   const [address, setAddress] = useState("");
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
+  const [googlePlaceId, setGooglePlaceId] = useState("");
+  const [apiMetadata, setApiMetadata] = useState<Record<string, unknown>>({});
+
+  const PLACES_TYPES_STUDIO: Record<string, string[]> = {
+    stays: ["lodging"],
+    dining: ["restaurant", "cafe", "bar"],
+    activity: ["establishment"],
+    sites: ["tourist_attraction", "museum", "park"],
+  };
+
+  const { predictions, search: searchPlaces, getDetails } = useGooglePlaces({
+    types: PLACES_TYPES_STUDIO[category] || ["establishment"],
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    const timer = setTimeout(() => searchPlaces(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchPlaces]);
+
+  const selectPlace = async (prediction: { place_id: string; description: string }) => {
+    setSearchQuery(prediction.description);
+    setShowResults(false);
+    const details = await getDetails(prediction.place_id);
+    if (details) {
+      setTitle(details.name);
+      setAddress(details.address);
+      setUrl(details.website || "");
+      setGooglePlaceId(details.placeId);
+      setApiMetadata({
+        phone: details.phone,
+        rating: details.rating,
+        hours: details.hours,
+        lat: details.lat,
+        lng: details.lng,
+      });
+    } else {
+      setTitle(prediction.description);
+    }
+  };
 
   const catMeta = CATEGORIES.find((c) => c.key === category)!;
 
   const handleSave = () => {
-    if (!title.trim()) return;
+    const finalTitle = title.trim() || searchQuery.trim();
+    if (!finalTitle) return;
     addItem(folderId, {
       category,
-      title: title.trim(),
+      title: finalTitle,
       description: description.trim() || null,
       address: address.trim() || null,
       url: url.trim() || null,
-      lat: null,
-      lng: null,
+      lat: (apiMetadata.lat as number) ?? null,
+      lng: (apiMetadata.lng as number) ?? null,
       cost: cost ? parseFloat(cost) : null,
-      google_place_id: null,
+      google_place_id: googlePlaceId || null,
       source_url: url.trim() || null,
-      api_metadata: {},
+      api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : {},
     });
-    setTitle("");
-    setAddress("");
-    setUrl("");
-    setDescription("");
-    setCost("");
+    setTitle(""); setSearchQuery(""); setAddress(""); setUrl("");
+    setDescription(""); setCost(""); setGooglePlaceId(""); setApiMetadata({});
     onOpenChange(false);
   };
 
@@ -428,17 +473,36 @@ function AddStudioItemDialog({
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="relative">
             <Label className="font-inter text-xs">{catMeta.label} Name</Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={catMeta.watermark}
-              className="mt-1 border-thin font-inter text-sm"
-            />
-            <p className="mt-1 font-inter text-[9px] text-muted-foreground/60">
-              Google Places autocomplete will be available with API integration
-            </p>
+            <div className="relative mt-1">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/50" />
+              <Input
+                value={searchQuery || title}
+                onChange={(e) => { setSearchQuery(e.target.value); setTitle(e.target.value); setShowResults(true); }}
+                onFocus={() => searchQuery && setShowResults(true)}
+                placeholder={catMeta.watermark}
+                className="border-thin font-inter text-sm pl-8"
+              />
+            </div>
+            {showResults && predictions.length > 0 && (
+              <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border bg-card shadow-md">
+                {predictions.map((r) => (
+                  <button
+                    key={r.place_id}
+                    type="button"
+                    onClick={() => selectPlace(r)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
+                  >
+                    <MapPin className="h-3 w-3 shrink-0 text-accent" />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{r.structured_formatting.main_text}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">{r.structured_formatting.secondary_text}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <Label className="font-inter text-xs">Address / Location</Label>

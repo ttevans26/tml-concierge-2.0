@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useStudioStore, StudioCategory, StudioItem } from "@/stores/useStudioStore";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;

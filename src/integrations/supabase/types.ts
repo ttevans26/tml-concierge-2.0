@@ -253,6 +253,7 @@ export type Database = {
           id: string
           lat: number | null
           lng: number | null
+          source_reference: string | null
           source_url: string | null
           title: string
           updated_at: string
@@ -271,6 +272,7 @@ export type Database = {
           id?: string
           lat?: number | null
           lng?: number | null
+          source_reference?: string | null
           source_url?: string | null
           title: string
           updated_at?: string
@@ -289,6 +291,7 @@ export type Database = {
           id?: string
           lat?: number | null
           lng?: number | null
+          source_reference?: string | null
           source_url?: string | null
           title?: string
           updated_at?: string
@@ -542,6 +545,7 @@ export type Database = {
         | "dining"
         | "agenda"
         | "activity"
+        | "sites_of_interest"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -678,6 +682,7 @@ export const Constants = {
         "dining",
         "agenda",
         "activity",
+        "sites_of_interest",
       ],
     },
   },

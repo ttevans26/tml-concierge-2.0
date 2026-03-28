@@ -171,6 +171,8 @@ export default function AddItemDialog({
             end_time: endTime || null,
             source_reference: sourceUrl || null,
             location_name: location || null,
+            google_place_id: googlePlaceId || null,
+            api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
           });
         }
       } catch (err) {

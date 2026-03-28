@@ -135,6 +135,11 @@ export default function StudioWorkbench() {
     );
   }
 
+  // Find the anchor item
+  const anchorItem = anchorItemId
+    ? activeFolder.items.find((i) => i.id === anchorItemId) || null
+    : null;
+
   const grouped = CATEGORIES.map((cat) => ({
     ...cat,
     items: activeFolder.items.filter((i) => i.category === cat.key),
@@ -150,17 +155,33 @@ export default function StudioWorkbench() {
           </h2>
           <p className="font-inter text-[10px] text-muted-foreground">
             {activeFolder.location} · {activeFolder.items.length} items
+            {anchorItem && (
+              <span className="ml-1 text-accent">· ⚓ {anchorItem.title}</span>
+            )}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-thin font-inter text-xs"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="mr-1 h-3 w-3" />
-          Add Item
-        </Button>
+        <div className="flex items-center gap-2">
+          {anchorItem && (
+            <Button
+              variant={sortByProximity ? "default" : "outline"}
+              size="sm"
+              className="border-thin font-inter text-[10px] h-7 gap-1"
+              onClick={() => setSortByProximity(!sortByProximity)}
+            >
+              <ArrowUpDown className="h-3 w-3" />
+              {sortByProximity ? "Proximity ✓" : "Sort by Proximity"}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Add Item
+          </Button>
+        </div>
       </div>
 
       {/* URL Ingestor */}
@@ -262,6 +283,10 @@ export default function StudioWorkbench() {
           <CategoryLane
             key={cat.key}
             category={cat}
+            anchorItem={anchorItem}
+            sortByProximity={sortByProximity}
+            onSetAnchor={(itemId) => setAnchorItem(anchorItemId === itemId ? null : itemId)}
+            isAnchorId={anchorItemId}
             onAdd={() => {
               setAddCategory(cat.key);
               setAddOpen(true);

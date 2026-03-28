@@ -535,6 +535,46 @@ export default function AddItemDialog({
             </>
           )}
 
+          {/* ── SITES OF INTEREST ── */}
+          {category === "sites_of_interest" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+                  Site Name
+                </Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); setTitle(e.target.value); }}
+                    onFocus={() => searchQuery && setShowResults(true)}
+                    placeholder="e.g. The Eiffel Tower"
+                    required
+                    className="border-thin border-border bg-background pl-8 font-inter text-sm"
+                  />
+                  {showResults && predictions.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border bg-card shadow-md">
+                      {predictions.map((r) => (
+                        <button
+                          key={r.place_id}
+                          type="button"
+                          onClick={() => selectPlace(r)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
+                        >
+                          <MapPin className="h-3 w-3 shrink-0 text-accent" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{r.structured_formatting.main_text}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.structured_formatting.secondary_text}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
           <DialogFooter className="pt-2">
             <Button
               type="button"

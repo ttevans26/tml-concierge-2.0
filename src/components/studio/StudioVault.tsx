@@ -145,7 +145,7 @@ function FolderRow({
           {folder.location} · {folder.items.length} items
         </p>
       </div>
-      {!folder.isGlobal && (
+      {!folder.is_global && (
         <button
           onClick={(e) => {
             e.stopPropagation();

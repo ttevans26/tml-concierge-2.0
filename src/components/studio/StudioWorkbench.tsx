@@ -203,6 +203,9 @@ function AddStudioItemDialog({
       lat: null,
       lng: null,
       cost: cost ? parseFloat(cost) : null,
+      google_place_id: null,
+      source_url: null,
+      api_metadata: {},
     });
     setTitle("");
     setAddress("");

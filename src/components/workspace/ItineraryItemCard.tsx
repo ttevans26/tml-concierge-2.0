@@ -67,6 +67,19 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
             ${Number(item.cost).toLocaleString()}
           </p>
         )}
+        {/* Suggestive Loyalty Badge */}
+        {item.category === "stays" && (
+          <div className="mt-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+            <CreditCard className="h-2 w-2 text-accent" />
+            <span className="font-inter text-[7px] text-muted-foreground">💳 Amex Platinum (5x)</span>
+          </div>
+        )}
+        {item.category === "dining" && (
+          <div className="mt-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+            <CreditCard className="h-2 w-2 text-accent" />
+            <span className="font-inter text-[7px] text-muted-foreground">💳 Sapphire (3x)</span>
+          </div>
+        )}
       </div>
 
       {editing && (

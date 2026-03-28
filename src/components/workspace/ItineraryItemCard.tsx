@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, ExternalLink, Anchor } from "lucide-react";
+import { Pencil, ExternalLink, Anchor, CreditCard } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import EditItemDialog from "./EditItemDialog";
 

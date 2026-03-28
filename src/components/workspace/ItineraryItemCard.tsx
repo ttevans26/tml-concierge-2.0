@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Pencil, ExternalLink } from "lucide-react";
-import { ItineraryItem } from "@/stores/useTripStore";
+import { Pencil, ExternalLink, Anchor } from "lucide-react";
+import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import EditItemDialog from "./EditItemDialog";
 
 interface ItineraryItemCardProps {
@@ -9,6 +9,9 @@ interface ItineraryItemCardProps {
 
 export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
+  const activeAnchor = useTripStore((s) => s.activeAnchor);
+  const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);
+  const isAnchor = activeAnchor?.id === item.id;
 
   return (
     <>

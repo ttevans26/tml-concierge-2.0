@@ -175,4 +175,6 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
       activeFolder: get().activeFolder?.id === folderId ? null : get().activeFolder,
     });
   },
+
+  setAnchorItem: (itemId) => set({ anchorItemId: itemId }),
 }));

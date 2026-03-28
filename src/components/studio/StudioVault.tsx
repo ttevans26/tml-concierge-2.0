@@ -98,7 +98,7 @@ export default function StudioVault() {
             folder={folder}
             isActive={activeFolder?.id === folder.id}
             onSelect={() => setActiveFolder(activeFolder?.id === folder.id ? null : folder)}
-            onDelete={() => !folder.isGlobal && deleteFolder(folder.id)}
+            onDelete={() => !folder.is_global && deleteFolder(folder.id)}
           />
         ))}
         {filtered.length === 0 && (

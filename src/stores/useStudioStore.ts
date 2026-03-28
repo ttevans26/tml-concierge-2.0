@@ -52,6 +52,7 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
   folders: [],
   activeFolder: null,
   loading: false,
+  anchorItemId: null,
 
   fetchFolders: async () => {
     set({ loading: true });

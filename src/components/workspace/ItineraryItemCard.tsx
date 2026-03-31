@@ -28,7 +28,7 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
   return (
     <>
       <div
-        className={`group relative cursor-pointer rounded-sm border-thin border-border bg-card px-2 py-1.5 transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""}`}
+        className={`group relative cursor-pointer rounded-sm border-thin px-2 py-1.5 transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-card`}
         onClick={() => setEditing(true)}
       >
         {item.category === "stays" && (

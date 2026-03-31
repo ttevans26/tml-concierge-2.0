@@ -53,6 +53,11 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
             <Pencil className="h-2.5 w-2.5" />
           </button>
         )}
+        {hasConflict && (
+          <span className="mb-0.5 inline-block rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
+            Conflict
+          </span>
+        )}
         {item.start_time && (
           <p className="font-inter text-[9px] font-medium text-accent">
             {item.start_time.slice(0, 5)}

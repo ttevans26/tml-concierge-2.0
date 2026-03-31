@@ -169,7 +169,7 @@ export default function MatrixGrid() {
                       className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
                     >
                       {cellItems.map((item) => (
-                        <ItineraryItemCard key={item.id} item={item} />
+                        <ItineraryItemCard key={item.id} item={item} hasConflict={conflictIds.has(item.id)} />
                       ))}
                       {/* Add button: hidden for stays if occupied */}
                       {!stayOccupied && (

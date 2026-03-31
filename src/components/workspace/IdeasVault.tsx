@@ -168,14 +168,14 @@ export default function IdeasVault() {
           <Button
             variant="outline"
             size="sm"
-            className="border-thin font-inter text-xs h-8 gap-1 shrink-0"
+            className="border-thin font-inter text-xs min-h-[44px] min-w-[44px] gap-1 shrink-0"
             onClick={handleScrape}
             disabled={status === "fetching" || status === "analyzing" || !scrapeUrl.trim()}
           >
             {status === "fetching" || status === "analyzing" ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Sparkles className="h-3 w-3" />
+              <Sparkles className="h-4 w-4" />
             )}
           </Button>
         </div>

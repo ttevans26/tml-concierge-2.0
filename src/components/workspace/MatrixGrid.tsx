@@ -175,7 +175,7 @@ export default function MatrixGrid() {
                       {!stayOccupied && (
                         <button
                           onClick={() => openAdd(dateStr, cat.key)}
-                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 transition-colors hover:border-accent/50 hover:bg-accent/5"
+                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
                         >
                           <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
                             + Add

@@ -14,6 +14,7 @@ import ResetPassword from "./pages/ResetPassword";
 import TripWorkspace from "./pages/TripWorkspace";
 import Studio from "./pages/Studio";
 import NotFound from "./pages/NotFound";
+import PublicTripView from "./pages/PublicTripView";
 
 const queryClient = new QueryClient();
 

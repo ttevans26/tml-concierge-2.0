@@ -101,7 +101,7 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
     setSaving(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ preferences: prefs as unknown as Record<string, unknown> })
+      .update({ preferences: JSON.parse(JSON.stringify(prefs)) })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) {

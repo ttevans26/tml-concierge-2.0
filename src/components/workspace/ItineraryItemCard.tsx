@@ -6,9 +6,10 @@ import EditItemDialog from "./EditItemDialog";
 
 interface ItineraryItemCardProps {
   item: ItineraryItem;
+  hasConflict?: boolean;
 }
 
-export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
+export default function ItineraryItemCard({ item, hasConflict = false }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);

@@ -74,6 +74,9 @@ export default function MatrixGrid() {
     }
   }, [activeTrip?.start_date, activeTrip?.end_date]);
 
+  // Conflict detection
+  const conflictIds = useMemo(() => detectConflicts(itineraryItems), [itineraryItems]);
+
   // Compute daily totals (must be before early return)
   const dailyTotals = useMemo(() => {
     const totals: Record<string, number> = {};

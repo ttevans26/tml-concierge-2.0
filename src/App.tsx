@@ -14,6 +14,7 @@ import ResetPassword from "./pages/ResetPassword";
 import TripWorkspace from "./pages/TripWorkspace";
 import Studio from "./pages/Studio";
 import NotFound from "./pages/NotFound";
+import PublicTripView from "./pages/PublicTripView";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/view/:id" element={<PublicTripView />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route
               element={

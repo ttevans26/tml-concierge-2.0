@@ -6,9 +6,10 @@ import EditItemDialog from "./EditItemDialog";
 
 interface ItineraryItemCardProps {
   item: ItineraryItem;
+  hasConflict?: boolean;
 }
 
-export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
+export default function ItineraryItemCard({ item, hasConflict = false }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);
@@ -27,7 +28,7 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
   return (
     <>
       <div
-        className={`group relative cursor-pointer rounded-sm border-thin border-border bg-card px-2 py-1.5 transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""}`}
+        className={`group relative cursor-pointer rounded-sm border-thin px-2 py-1.5 transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-card`}
         onClick={() => setEditing(true)}
       >
         {item.category === "stays" && (
@@ -51,6 +52,11 @@ export default function ItineraryItemCard({ item }: ItineraryItemCardProps) {
           >
             <Pencil className="h-2.5 w-2.5" />
           </button>
+        )}
+        {hasConflict && (
+          <span className="mb-0.5 inline-block rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
+            Conflict
+          </span>
         )}
         {item.start_time && (
           <p className="font-inter text-[9px] font-medium text-accent">

@@ -6,6 +6,38 @@ import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
 import type { ItineraryItem } from "@/stores/useTripStore";
 
+/** Check if two time ranges overlap. Items without times don't conflict. */
+function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
+  if (!a.start_time || !b.start_time) return false;
+  const aEnd = a.end_time || a.start_time;
+  const bEnd = b.end_time || b.start_time;
+  return a.start_time < bEnd && b.start_time < aEnd;
+}
+
+/** Returns a Set of item IDs that have time conflicts in the same cell. */
+function detectConflicts(items: ItineraryItem[]): Set<string> {
+  const ids = new Set<string>();
+  // Group by date+category
+  const cells = new Map<string, ItineraryItem[]>();
+  for (const item of items) {
+    const key = `${item.date}|${item.category}`;
+    const arr = cells.get(key) || [];
+    arr.push(item);
+    cells.set(key, arr);
+  }
+  for (const group of cells.values()) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        if (timesOverlap(group[i], group[j])) {
+          ids.add(group[i].id);
+          ids.add(group[j].id);
+        }
+      }
+    }
+  }
+  return ids;
+}
+
 const CATEGORIES = [
   { key: "stays" as const, label: "Stays" },
   { key: "logistics" as const, label: "Logistics" },
@@ -41,6 +73,9 @@ export default function MatrixGrid() {
       return [];
     }
   }, [activeTrip?.start_date, activeTrip?.end_date]);
+
+  // Conflict detection
+  const conflictIds = useMemo(() => detectConflicts(itineraryItems), [itineraryItems]);
 
   // Compute daily totals (must be before early return)
   const dailyTotals = useMemo(() => {
@@ -134,13 +169,13 @@ export default function MatrixGrid() {
                       className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
                     >
                       {cellItems.map((item) => (
-                        <ItineraryItemCard key={item.id} item={item} />
+                        <ItineraryItemCard key={item.id} item={item} hasConflict={conflictIds.has(item.id)} />
                       ))}
                       {/* Add button: hidden for stays if occupied */}
                       {!stayOccupied && (
                         <button
                           onClick={() => openAdd(dateStr, cat.key)}
-                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 transition-colors hover:border-accent/50 hover:bg-accent/5"
+                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
                         >
                           <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
                             + Add

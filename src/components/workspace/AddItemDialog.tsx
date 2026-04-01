@@ -179,9 +179,9 @@ export default function AddItemDialog({
         flight_status: f.flight_status,
         delay_minutes: f.delay_minutes,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Flight lookup error:", err);
-      toast.error("Flight lookup failed. Please enter details manually.");
+      toast.error(err?.message || "Flight lookup failed. Please enter details manually.");
     }
 
     setLookingUp(false);

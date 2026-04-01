@@ -146,10 +146,16 @@ export default function AddItemDialog({
         body: { flight_iata: flightIata, flight_date: date },
       });
 
-      if (error) throw error;
+      if (error) {
+        // supabase.functions.invoke returns the body as data even on non-2xx
+        const msg = data?.error || error?.message || "Flight lookup failed";
+        toast.error(msg);
+        setLookingUp(false);
+        return;
+      }
 
       if (!data?.flight) {
-        toast.error("Flight details not found for this date. Please enter manually.");
+        toast.error(data?.error || "Flight details not found for this date. Please enter manually.");
         setLookingUp(false);
         return;
       }
@@ -173,9 +179,9 @@ export default function AddItemDialog({
         flight_status: f.flight_status,
         delay_minutes: f.delay_minutes,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Flight lookup error:", err);
-      toast.error("Flight lookup failed. Please enter details manually.");
+      toast.error(err?.message || "Flight lookup failed. Please enter details manually.");
     }
 
     setLookingUp(false);

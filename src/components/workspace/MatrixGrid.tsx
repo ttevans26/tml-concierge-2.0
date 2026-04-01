@@ -4,6 +4,7 @@ import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
+import TripSettingsModal from "./TripSettingsModal";
 import type { ItineraryItem } from "@/stores/useTripStore";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */

@@ -136,15 +136,48 @@ export default function AddItemDialog({
 
   const handleLookup = async () => {
     if (!referenceNumber.trim()) return;
+    if (logisticsType !== "plane") return;
     setLookingUp(true);
-    // Simulated lookup delay
-    await new Promise((r) => setTimeout(r, 800));
-    const isPlane = logisticsType === "plane";
-    setDeparture(isPlane ? "LAX" : "London St Pancras");
-    setArrival(isPlane ? "CDG" : "Paris Gare du Nord");
-    setStartTime(isPlane ? "10:30" : "08:01");
-    setEndTime(isPlane ? "18:45" : "10:23");
-    setTitle(`${referenceNumber.trim().toUpperCase()}`);
+
+    try {
+      // Normalize: "AF 1234" -> "AF1234"
+      const flightIata = referenceNumber.trim().replace(/\s+/g, "").toUpperCase();
+      const { data, error } = await supabase.functions.invoke("aviationstack-lookup", {
+        body: { flight_iata: flightIata, flight_date: date },
+      });
+
+      if (error) throw error;
+
+      if (!data?.flight) {
+        toast.error("Flight details not found for this date. Please enter manually.");
+        setLookingUp(false);
+        return;
+      }
+
+      const f = data.flight;
+      setDeparture(f.departure_airport || "");
+      setArrival(f.arrival_airport || "");
+      if (f.departure_time) {
+        const depDate = new Date(f.departure_time);
+        setStartTime(format(depDate, "HH:mm"));
+      }
+      if (f.arrival_time) {
+        const arrDate = new Date(f.arrival_time);
+        setEndTime(format(arrDate, "HH:mm"));
+      }
+      setTitle(flightIata);
+      setApiMetadata({
+        airline: f.airline,
+        terminal: f.terminal,
+        gate: f.gate,
+        flight_status: f.flight_status,
+        delay_minutes: f.delay_minutes,
+      });
+    } catch (err) {
+      console.error("Flight lookup error:", err);
+      toast.error("Flight lookup failed. Please enter details manually.");
+    }
+
     setLookingUp(false);
   };
 

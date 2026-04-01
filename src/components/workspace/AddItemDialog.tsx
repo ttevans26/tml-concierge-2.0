@@ -448,7 +448,7 @@ export default function AddItemDialog({
                     disabled={lookingUp || !referenceNumber.trim()}
                     className="shrink-0 border-thin border-border font-inter text-xs"
                   >
-                    {lookingUp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Lookup"}
+                    {lookingUp ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Consulting flight manifests...</> : "Lookup"}
                   </Button>
                 </div>
               </div>

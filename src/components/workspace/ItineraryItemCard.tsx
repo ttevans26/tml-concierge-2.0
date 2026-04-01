@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Pencil, ExternalLink, Anchor, CreditCard, Navigation } from "lucide-react";
+import { Pencil, ExternalLink, Anchor, CreditCard, Navigation, AlertTriangle, Star } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import { haversineDistance, formatDistance } from "@/lib/distance";
 import EditItemDialog from "./EditItemDialog";
@@ -9,10 +9,58 @@ interface ItineraryItemCardProps {
   hasConflict?: boolean;
 }
 
+/** Compute match level against global travel preferences stored in profile */
+function computeMatch(
+  item: ItineraryItem,
+  prefs: Record<string, unknown> | null | undefined
+): "high" | "partial" | null {
+  if (!prefs || Object.keys(prefs).length === 0) return null;
+  const meta = (item.api_metadata || {}) as Record<string, unknown>;
+
+  let totalCriteria = 0;
+  let matched = 0;
+
+  // Star rating check (stays only)
+  const prefStars = Number(prefs.hotelStarRating) || 0;
+  if (item.category === "stays" && prefStars > 0) {
+    totalCriteria++;
+    const itemStars = Number(meta.star_rating || meta.stars || 0);
+    if (itemStars >= prefStars) matched++;
+  }
+
+  // Review score
+  const prefScore = Number(prefs.minReviewScore) || 0;
+  if (prefScore > 0) {
+    totalCriteria++;
+    const itemRating = Number(meta.rating || meta.review_score || 0);
+    if (itemRating >= prefScore) matched++;
+  }
+
+  // Amenities
+  const prefAmenities = (prefs.amenities as string[]) || [];
+  if (prefAmenities.length > 0 && item.category === "stays") {
+    totalCriteria++;
+    const itemAmenities = ((meta.amenities as string[]) || []).map((a: string) =>
+      a.toLowerCase()
+    );
+    const hasAll = prefAmenities.every((a) =>
+      itemAmenities.some((ia) => ia.includes(a.toLowerCase()))
+    );
+    if (hasAll) matched++;
+  }
+
+  if (totalCriteria === 0) return null;
+  if (matched === totalCriteria) return "high";
+  if (matched > 0) return "partial";
+  return "partial"; // has criteria but none matched
+}
+
 export default function ItineraryItemCard({ item, hasConflict = false }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);
+  const activeTrip = useTripStore((s) => s.activeTrip);
+  const profile = useTripStore((s) => s.profile);
   const isAnchor = activeAnchor?.id === item.id;
 
   const distance = useMemo(() => {
@@ -24,6 +72,18 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
     if (aLat == null || aLng == null || iLat == null || iLng == null) return null;
     return haversineDistance(aLat, aLng, iLat, iLng);
   }, [activeAnchor, item]);
+
+  // Budget alert: item cost exceeds nightly budget target
+  const overBudget = useMemo(() => {
+    if (!activeTrip?.target_nightly_budget || item.cost == null) return false;
+    return Number(item.cost) > Number(activeTrip.target_nightly_budget);
+  }, [activeTrip?.target_nightly_budget, item.cost]);
+
+  // Match indicator
+  const matchLevel = useMemo(
+    () => computeMatch(item, profile?.preferences as Record<string, unknown>),
+    [item, profile?.preferences]
+  );
 
   return (
     <>
@@ -56,6 +116,11 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
         {hasConflict && (
           <span className="mb-0.5 inline-block rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
             Conflict
+          </span>
+        )}
+        {overBudget && (
+          <span className="mb-0.5 ml-0.5 inline-flex items-center gap-0.5 rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
+            <AlertTriangle className="h-2 w-2" /> Over Budget
           </span>
         )}
         {item.start_time && (
@@ -92,6 +157,19 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
               <span className="font-inter text-[7px] text-muted-foreground">
                 {formatDistance(distance)}
               </span>
+            </span>
+          )}
+          {/* Match Indicator */}
+          {matchLevel === "high" && (
+            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-accent/30 bg-accent/5 px-1 py-0.5">
+              <Star className="h-2 w-2 fill-accent text-accent" />
+              <span className="font-inter text-[7px] font-medium text-accent">High Match</span>
+            </span>
+          )}
+          {matchLevel === "partial" && (
+            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+              <Star className="h-2 w-2 text-muted-foreground" />
+              <span className="font-inter text-[7px] text-muted-foreground">Partial</span>
             </span>
           )}
           {/* Suggestive Loyalty Badge */}

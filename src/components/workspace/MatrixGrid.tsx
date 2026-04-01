@@ -4,6 +4,7 @@ import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
+import TripSettingsModal from "./TripSettingsModal";
 import type { ItineraryItem } from "@/stores/useTripStore";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
@@ -109,9 +110,12 @@ export default function MatrixGrid() {
     <div className="flex h-full flex-col bg-background">
       {/* Grid header */}
       <div className="shrink-0 border-b border-border px-4 py-3">
-        <h2 className="font-playfair text-sm font-semibold text-foreground">
-          Matrix Grid
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-playfair text-sm font-semibold text-foreground">
+            Matrix Grid
+          </h2>
+          <TripSettingsModal />
+        </div>
         <p className="mt-0.5 font-inter text-[11px] text-muted-foreground">
           {days.length} day{days.length !== 1 ? "s" : ""} · {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")}
         </p>

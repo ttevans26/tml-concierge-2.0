@@ -1,11 +1,25 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
 import TripSettingsModal from "./TripSettingsModal";
+import SmartPullTray, { type ExtractedItem } from "./SmartPullTray";
 import type { ItineraryItem } from "@/stores/useTripStore";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Mail, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -18,7 +32,6 @@ function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
 /** Returns a Set of item IDs that have time conflicts in the same cell. */
 function detectConflicts(items: ItineraryItem[]): Set<string> {
   const ids = new Set<string>();
-  // Group by date+category
   const cells = new Map<string, ItineraryItem[]>();
   for (const item of items) {
     const key = `${item.date}|${item.category}`;
@@ -56,12 +69,21 @@ const CELL_BG: Record<string, string> = {
 export default function MatrixGrid() {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
+  const createItineraryItem = useTripStore((s) => s.createItineraryItem);
+  const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
 
   const [dialogState, setDialogState] = useState<{
     open: boolean;
     date: string;
     category: ItineraryItem["category"];
   }>({ open: false, date: "", category: "activity" });
+
+  // Smart Pull state
+  const [smartPullOpen, setSmartPullOpen] = useState(false);
+  const [emailText, setEmailText] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [pendingItems, setPendingItems] = useState<ExtractedItem[]>([]);
+  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
   const days = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) return [];
@@ -75,10 +97,8 @@ export default function MatrixGrid() {
     }
   }, [activeTrip?.start_date, activeTrip?.end_date]);
 
-  // Conflict detection
   const conflictIds = useMemo(() => detectConflicts(itineraryItems), [itineraryItems]);
 
-  // Compute daily totals (must be before early return)
   const dailyTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     for (const day of days) {
@@ -89,6 +109,119 @@ export default function MatrixGrid() {
     }
     return totals;
   }, [days, itineraryItems]);
+
+  /* ---- Smart Pull handlers ---- */
+
+  const handleExtract = useCallback(async () => {
+    if (!emailText.trim()) return;
+    setExtracting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("smart-pull", {
+        body: { email_text: emailText.trim() },
+      });
+
+      if (error) {
+        toast.error(error.message || "Smart Pull failed");
+        return;
+      }
+
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      const items: ExtractedItem[] = (data?.items || []).map(
+        (item: any, idx: number) => ({
+          ...item,
+          id: `sp-${Date.now()}-${idx}`,
+        })
+      );
+
+      if (items.length === 0) {
+        toast.info("No travel items found in this text.");
+        return;
+      }
+
+      setPendingItems((prev) => [...prev, ...items]);
+      setSmartPullOpen(false);
+      setEmailText("");
+      toast.success(`Extracted ${items.length} item${items.length !== 1 ? "s" : ""}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Smart Pull failed");
+    } finally {
+      setExtracting(false);
+    }
+  }, [emailText]);
+
+  const handleAccept = useCallback(
+    async (item: ExtractedItem) => {
+      if (!activeTrip) return;
+      setAcceptingIds((prev) => new Set(prev).add(item.id));
+
+      try {
+        const newItem = await createItineraryItem({
+          trip_id: activeTrip.id,
+          category: item.category,
+          title: item.title,
+          description: item.description || null,
+          date: item.date || null,
+          start_time: item.start_time || null,
+          end_time: item.end_time || null,
+          cost: item.estimated_cost ?? null,
+          currency: item.currency || "USD",
+          confirmation_code: item.confirmation_code || null,
+          location_name: item.location_name || null,
+          approval_status: "draft",
+          api_metadata: {
+            smart_pull: true,
+            flight_number: item.flight_number || null,
+            departure_airport: item.departure_airport || null,
+            arrival_airport: item.arrival_airport || null,
+          },
+        });
+
+        setPendingItems((prev) => prev.filter((p) => p.id !== item.id));
+        toast.success(`Added "${item.title}" to itinerary`);
+
+        // Background Aviationstack enrichment for flights
+        if (newItem && item.flight_number) {
+          supabase.functions
+            .invoke("aviationstack-lookup", {
+              body: { flight_iata: item.flight_number },
+            })
+            .then(({ data: flightData }) => {
+              if (flightData?.gate || flightData?.terminal) {
+                updateItineraryItem(newItem.id, {
+                  api_metadata: {
+                    ...((newItem.api_metadata as Record<string, unknown>) || {}),
+                    gate: flightData.gate,
+                    terminal: flightData.terminal,
+                    flight_status: flightData.status,
+                  },
+                });
+                toast.info(`Gate/terminal info added for ${item.flight_number}`);
+              }
+            })
+            .catch(() => {
+              toast.info("Gate info unavailable — flight data preserved.");
+            });
+        }
+      } catch {
+        toast.error("Failed to add item");
+      } finally {
+        setAcceptingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      }
+    },
+    [activeTrip, createItineraryItem, updateItineraryItem]
+  );
+
+  const handleDismiss = useCallback((itemId: string) => {
+    setPendingItems((prev) => prev.filter((p) => p.id !== itemId));
+  }, []);
 
   if (days.length === 0) {
     return (
@@ -114,19 +247,37 @@ export default function MatrixGrid() {
           <h2 className="font-playfair text-sm font-semibold text-foreground">
             Matrix Grid
           </h2>
-          <TripSettingsModal />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-[44px] gap-1.5 touch-manipulation"
+              onClick={() => setSmartPullOpen(true)}
+            >
+              <Mail className="h-4 w-4" />
+              <span className="font-inter text-xs">Smart Pull</span>
+            </Button>
+            <TripSettingsModal />
+          </div>
         </div>
         <p className="mt-0.5 font-inter text-[11px] text-muted-foreground">
           {days.length} day{days.length !== 1 ? "s" : ""} · {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")}
         </p>
       </div>
 
+      {/* Smart Pull review tray */}
+      <SmartPullTray
+        items={pendingItems}
+        onAccept={handleAccept}
+        onDismiss={handleDismiss}
+        acceptingIds={acceptingIds}
+      />
+
       {/* Scrollable matrix */}
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
           {/* Category labels column — sticky left */}
           <div className="sticky left-0 z-20 w-24 shrink-0 border-r border-border bg-card">
-            {/* Corner cell matching date header */}
             <div className="sticky top-0 z-30 h-10 border-b border-border bg-card" />
             {CATEGORIES.map((cat) => (
               <div
@@ -138,7 +289,6 @@ export default function MatrixGrid() {
                 </span>
               </div>
             ))}
-            {/* Daily total label */}
             <div className="flex h-8 items-center border-b border-border px-3">
               <span className="font-inter text-[10px] font-semibold uppercase tracking-widest text-accent">
                 Daily $
@@ -152,14 +302,12 @@ export default function MatrixGrid() {
             const total = dailyTotals[dateStr] || 0;
             return (
               <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
-                {/* Day header — sticky top */}
                 <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
                   <span className="font-inter text-[11px] font-medium text-foreground">
                     {format(day, "EEE, MMM d")}
                   </span>
                 </div>
 
-                {/* Category cells */}
                 {CATEGORIES.map((cat) => {
                   const cellItems = itineraryItems.filter(
                     (item) => item.date === dateStr && item.category === cat.key
@@ -175,7 +323,6 @@ export default function MatrixGrid() {
                       {cellItems.map((item) => (
                         <ItineraryItemCard key={item.id} item={item} hasConflict={conflictIds.has(item.id)} />
                       ))}
-                      {/* Add button: hidden for stays if occupied */}
                       {!stayOccupied && (
                         <button
                           onClick={() => openAdd(dateStr, cat.key)}
@@ -190,7 +337,6 @@ export default function MatrixGrid() {
                   );
                 })}
 
-                {/* Daily total row */}
                 <div className="flex h-8 items-center justify-center border-b border-border bg-secondary/20">
                   <span className="font-inter text-[10px] font-semibold text-foreground">
                     {total > 0 ? `$${total.toLocaleString()}` : "—"}
@@ -212,6 +358,41 @@ export default function MatrixGrid() {
           category={dialogState.category}
         />
       )}
+
+      {/* Smart Pull paste dialog */}
+      <Dialog open={smartPullOpen} onOpenChange={setSmartPullOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-playfair">Smart Pull</DialogTitle>
+            <DialogDescription className="font-inter text-xs">
+              Paste a booking confirmation email and AI will extract the travel details.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Paste your confirmation email text here…"
+            className="min-h-[160px] font-inter text-xs"
+            value={emailText}
+            onChange={(e) => setEmailText(e.target.value)}
+            disabled={extracting}
+          />
+          <DialogFooter>
+            <Button
+              onClick={handleExtract}
+              disabled={extracting || emailText.trim().length < 10}
+              className="min-h-[44px] touch-manipulation"
+            >
+              {extracting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Analyzing confirmation…
+                </>
+              ) : (
+                "Extract"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

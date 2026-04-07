@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
-import IdeasVault from "@/components/workspace/IdeasVault";
+import StudioSidebar from "@/components/workspace/StudioSidebar";
 import MatrixGrid from "@/components/workspace/MatrixGrid";
 import BudgetSidebar from "@/components/workspace/BudgetSidebar";
 

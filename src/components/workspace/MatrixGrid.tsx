@@ -376,6 +376,8 @@ export default function MatrixGrid() {
                     <div
                       key={cat.key}
                       className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
                       {cellItems.map((item) => (
                         <ItineraryItemCard key={item.id} item={item} hasConflict={conflictIds.has(item.id)} />

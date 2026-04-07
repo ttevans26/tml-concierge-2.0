@@ -14,6 +14,7 @@ export interface Trip {
   start_date: string | null;
   end_date: string | null;
   is_published: boolean;
+  share_token: string | null;
   target_nightly_budget: number | null;
   total_trip_budget: number | null;
   cover_image_url: string | null;

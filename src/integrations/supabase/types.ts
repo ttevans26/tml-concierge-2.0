@@ -389,6 +389,7 @@ export type Database = {
           id: string
           is_published: boolean
           name: string
+          share_token: string
           start_date: string | null
           target_nightly_budget: number | null
           total_trip_budget: number | null
@@ -404,6 +405,7 @@ export type Database = {
           id?: string
           is_published?: boolean
           name: string
+          share_token?: string
           start_date?: string | null
           target_nightly_budget?: number | null
           total_trip_budget?: number | null
@@ -419,6 +421,7 @@ export type Database = {
           id?: string
           is_published?: boolean
           name?: string
+          share_token?: string
           start_date?: string | null
           target_nightly_budget?: number | null
           total_trip_budget?: number | null

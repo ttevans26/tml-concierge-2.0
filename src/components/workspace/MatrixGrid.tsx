@@ -258,6 +258,7 @@ export default function MatrixGrid() {
               <Mail className="h-4 w-4" />
               <span className="font-inter text-xs">Smart Pull</span>
             </Button>
+            <ShareControls />
             <TripSettingsModal />
           </div>
         </div>

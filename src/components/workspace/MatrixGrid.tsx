@@ -10,6 +10,7 @@ import type { ItineraryItem } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Mail, Loader2 } from "lucide-react";
+import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
 import {
@@ -224,6 +225,60 @@ export default function MatrixGrid() {
     setPendingItems((prev) => prev.filter((p) => p.id !== itemId));
   }, []);
 
+  /* ---- Drag-and-drop from Studio sidebar ---- */
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent, dateStr: string, category: ItineraryItem["category"]) => {
+      const raw = e.dataTransfer.getData("application/studio-item");
+      if (!raw || !activeTrip) return;
+      e.preventDefault();
+
+      try {
+        const studioItem: StudioItem = JSON.parse(raw);
+
+        // Map studio category to itinerary category
+        let mappedCategory: ItineraryItem["category"] = category;
+        if (studioItem.category === "stays") mappedCategory = "stays";
+        else if (studioItem.category === "dining") mappedCategory = "dining";
+        else if (studioItem.category === "activity") mappedCategory = "activity";
+        else if (studioItem.category === "sites") mappedCategory = "sites_of_interest";
+
+        await createItineraryItem({
+          trip_id: activeTrip.id,
+          category: mappedCategory,
+          title: studioItem.title,
+          description: studioItem.description || null,
+          date: dateStr,
+          cost: studioItem.cost ?? null,
+          location_name: studioItem.address || null,
+          location_lat: studioItem.lat ?? null,
+          location_lng: studioItem.lng ?? null,
+          google_place_id: studioItem.google_place_id || null,
+          source_url: studioItem.source_url || null,
+          approval_status: "draft",
+          api_metadata: {
+            studio_source: true,
+            studio_item_id: studioItem.id,
+            studio_folder_id: studioItem.folder_id,
+            ...(studioItem.api_metadata || {}),
+          },
+        });
+
+        toast.success(`"${studioItem.title}" added to ${format(parseISO(dateStr), "MMM d")}`);
+      } catch {
+        toast.error("Failed to drop item");
+      }
+    },
+    [activeTrip, createItineraryItem]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/studio-item")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }, []);
+
   if (days.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-background px-8 text-center">
@@ -321,6 +376,8 @@ export default function MatrixGrid() {
                     <div
                       key={cat.key}
                       className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
                       {cellItems.map((item) => (
                         <ItineraryItemCard key={item.id} item={item} hasConflict={conflictIds.has(item.id)} />

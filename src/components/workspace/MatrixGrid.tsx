@@ -10,6 +10,7 @@ import type { ItineraryItem } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Mail, Loader2 } from "lucide-react";
+import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -257,6 +258,7 @@ export default function MatrixGrid() {
               <Mail className="h-4 w-4" />
               <span className="font-inter text-xs">Smart Pull</span>
             </Button>
+            <ShareControls />
             <TripSettingsModal />
           </div>
         </div>

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
+import { Wifi } from "lucide-react";
 
 interface PublicItem {
   id: string;
@@ -42,42 +43,52 @@ const CELL_BG: Record<string, string> = {
 };
 
 export default function PublicTripView() {
-  const { id } = useParams<{ id: string }>();
+  const { token } = useParams<{ token: string }>();
   const [trip, setTrip] = useState<PublicTrip | null>(null);
   const [items, setItems] = useState<PublicItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lastSync, setLastSync] = useState<Date>(new Date());
+
+  const fetchData = async (shareToken: string) => {
+    // Lookup trip by share_token
+    const { data: tripData, error: tripErr } = await supabase
+      .from("trips")
+      .select("id, name, destination, start_date, end_date, is_published, share_token")
+      .eq("share_token", shareToken)
+      .eq("is_published", true)
+      .single();
+
+    if (tripErr || !tripData) {
+      setError("This itinerary is private or does not exist.");
+      setLoading(false);
+      return;
+    }
+    setTrip(tripData as PublicTrip);
+
+    // Fetch public items (view strips cost/confirmation)
+    const { data: itemsData } = await supabase
+      .from("itinerary_items_public")
+      .select("*")
+      .eq("trip_id", (tripData as any).id)
+      .order("sort_order");
+
+    setItems((itemsData as PublicItem[]) || []);
+    setLastSync(new Date());
+    setLoading(false);
+  };
 
   useEffect(() => {
-    if (!id) return;
-    (async () => {
-      setLoading(true);
-      // Fetch published trip
-      const { data: tripData, error: tripErr } = await supabase
-        .from("trips")
-        .select("id, name, destination, start_date, end_date, is_published")
-        .eq("id", id)
-        .eq("is_published", true)
-        .single();
+    if (!token) return;
+    fetchData(token);
 
-      if (tripErr || !tripData) {
-        setError("This itinerary is private or does not exist.");
-        setLoading(false);
-        return;
-      }
-      setTrip(tripData as PublicTrip);
+    // Live sync: poll every 30s
+    const interval = setInterval(() => {
+      fetchData(token);
+    }, 30_000);
 
-      // Fetch public items (view strips cost/confirmation)
-      const { data: itemsData } = await supabase
-        .from("itinerary_items_public")
-        .select("*")
-        .eq("trip_id", id)
-        .order("sort_order");
-
-      setItems((itemsData as PublicItem[]) || []);
-      setLoading(false);
-    })();
-  }, [id]);
+    return () => clearInterval(interval);
+  }, [token]);
 
   const days = useMemo(() => {
     if (!trip?.start_date || !trip?.end_date) return [];
@@ -112,18 +123,29 @@ export default function PublicTripView() {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="border-b border-border px-6 py-5">
-        <h1 className="font-playfair text-xl font-semibold text-foreground">{trip.name}</h1>
-        {trip.destination && (
-          <p className="mt-0.5 font-inter text-xs text-muted-foreground">{trip.destination}</p>
-        )}
-        {days.length > 0 && (
-          <p className="mt-1 font-inter text-[11px] text-muted-foreground">
-            {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")} · {days.length} days
-          </p>
-        )}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-playfair text-xl font-semibold text-foreground">{trip.name}</h1>
+            {trip.destination && (
+              <p className="mt-0.5 font-inter text-xs text-muted-foreground">{trip.destination}</p>
+            )}
+            {days.length > 0 && (
+              <p className="mt-1 font-inter text-[11px] text-muted-foreground">
+                {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")} · {days.length} days
+              </p>
+            )}
+          </div>
+          {/* Live Sync Indicator */}
+          <div className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-3 py-1.5">
+            <Wifi className="h-3 w-3 text-green-500 animate-pulse" />
+            <span className="font-inter text-[9px] font-medium text-muted-foreground">
+              Live · {format(lastSync, "h:mm a")}
+            </span>
+          </div>
+        </div>
       </header>
 
-      {/* Read-only Matrix */}
+      {/* Read-only Matrix — no cost row, no add/edit/delete */}
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
           {/* Category labels */}

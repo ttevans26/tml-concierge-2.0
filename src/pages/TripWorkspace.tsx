@@ -76,7 +76,7 @@ export default function TripWorkspace() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left — Ideas Vault 20% */}
         <div className="hidden w-[20%] shrink-0 lg:block">
-          <IdeasVault />
+          <StudioSidebar />
         </div>
 
         {/* Center — Matrix Grid 60% */}

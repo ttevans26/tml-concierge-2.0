@@ -120,6 +120,7 @@ export function useGooglePlaces(
               "website",
               "formatted_phone_number",
               "rating",
+              "user_ratings_total",
               "opening_hours",
               "geometry",
             ],

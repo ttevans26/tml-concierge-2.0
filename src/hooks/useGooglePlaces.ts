@@ -10,6 +10,7 @@ export interface PlaceResult {
   phone: string | null;
   rating: number | null;
   userRatingsTotal: number | null;
+  photoUrl: string | null;
   hours: string[] | null;
   lat: number | null;
   lng: number | null;
@@ -121,12 +122,17 @@ export function useGooglePlaces(
               "formatted_phone_number",
               "rating",
               "user_ratings_total",
+              "photos",
               "opening_hours",
               "geometry",
             ],
           },
           (place: any, status: string) => {
             if (status === "OK" && place) {
+              const firstPhoto = place.photos?.[0];
+              const photoUrl = firstPhoto
+                ? firstPhoto.getUrl({ maxWidth: 400, maxHeight: 300 })
+                : null;
               resolve({
                 name: place.name || "",
                 address: place.formatted_address || "",
@@ -135,6 +141,7 @@ export function useGooglePlaces(
                 phone: place.formatted_phone_number || null,
                 rating: place.rating ?? null,
                 userRatingsTotal: place.user_ratings_total ?? null,
+                photoUrl,
                 hours: place.opening_hours?.weekday_text || null,
                 lat: place.geometry?.location?.lat() ?? null,
                 lng: place.geometry?.location?.lng() ?? null,

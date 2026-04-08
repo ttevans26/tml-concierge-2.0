@@ -125,6 +125,7 @@ export default function AddItemDialog({
       setApiMetadata({
         phone: details.phone,
         rating: details.rating,
+        user_ratings_total: details.userRatingsTotal,
         hours: details.hours,
         lat: details.lat,
         lng: details.lng,

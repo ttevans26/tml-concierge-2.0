@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Pencil, ExternalLink, Anchor, CreditCard, Navigation, AlertTriangle, Star } from "lucide-react";
+import { Pencil, ExternalLink, Anchor, CreditCard, Navigation, AlertTriangle, Star, MapPin } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import { haversineDistance, formatDistance } from "@/lib/distance";
 import EditItemDialog from "./EditItemDialog";
@@ -20,7 +20,6 @@ function computeMatch(
   let totalCriteria = 0;
   let matched = 0;
 
-  // Star rating check (stays only)
   const prefStars = Number(prefs.hotelStarRating) || 0;
   if (item.category === "stays" && prefStars > 0) {
     totalCriteria++;
@@ -28,7 +27,6 @@ function computeMatch(
     if (itemStars >= prefStars) matched++;
   }
 
-  // Review score
   const prefScore = Number(prefs.minReviewScore) || 0;
   if (prefScore > 0) {
     totalCriteria++;
@@ -36,7 +34,6 @@ function computeMatch(
     if (itemRating >= prefScore) matched++;
   }
 
-  // Amenities
   const prefAmenities = (prefs.amenities as string[]) || [];
   if (prefAmenities.length > 0 && item.category === "stays") {
     totalCriteria++;
@@ -52,7 +49,7 @@ function computeMatch(
   if (totalCriteria === 0) return null;
   if (matched === totalCriteria) return "high";
   if (matched > 0) return "partial";
-  return "partial"; // has criteria but none matched
+  return "partial";
 }
 
 export default function ItineraryItemCard({ item, hasConflict = false }: ItineraryItemCardProps) {
@@ -62,6 +59,12 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
   const activeTrip = useTripStore((s) => s.activeTrip);
   const profile = useTripStore((s) => s.profile);
   const isAnchor = activeAnchor?.id === item.id;
+
+  const meta = (item.api_metadata || {}) as Record<string, unknown>;
+  const photoUrl = (meta.photo_url as string) || null;
+  const mapsUrl = item.google_place_id
+    ? `https://www.google.com/maps/place/?q=place_id:${item.google_place_id}`
+    : null;
 
   const distance = useMemo(() => {
     if (!activeAnchor || activeAnchor.id === item.id) return null;
@@ -73,13 +76,11 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
     return haversineDistance(aLat, aLng, iLat, iLng);
   }, [activeAnchor, item]);
 
-  // Budget alert: item cost exceeds nightly budget target
   const overBudget = useMemo(() => {
     if (!activeTrip?.target_nightly_budget || item.cost == null) return false;
     return Number(item.cost) > Number(activeTrip.target_nightly_budget);
   }, [activeTrip?.target_nightly_budget, item.cost]);
 
-  // Match indicator
   const matchLevel = useMemo(
     () => computeMatch(item, profile?.preferences as Record<string, unknown>),
     [item, profile?.preferences]
@@ -88,103 +89,126 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
   return (
     <>
       <div
-        className={`group relative cursor-pointer rounded-sm border-thin px-2 py-1.5 transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-card`}
+        className={`group relative cursor-pointer rounded-sm border-thin overflow-hidden transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-card`}
         onClick={() => setEditing(true)}
       >
-        {item.category === "stays" && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveAnchor(isAnchor ? null : item);
-            }}
-            className={`absolute right-1 top-1 rounded-sm p-0.5 ${isAnchor ? "text-accent" : "hidden text-muted-foreground/50 hover:text-accent group-hover:block"}`}
-          >
-            <Anchor className="h-2.5 w-2.5" />
-          </button>
+        {/* Photo background */}
+        {photoUrl && (
+          <div className="absolute inset-0 z-0">
+            <img
+              src={photoUrl}
+              alt=""
+              className="h-full w-full object-cover opacity-15"
+              loading="lazy"
+            />
+          </div>
         )}
-        {item.category !== "stays" && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditing(true);
-            }}
-            className="absolute right-1 top-1 hidden rounded-sm p-0.5 text-muted-foreground/50 hover:text-accent group-hover:block"
-          >
-            <Pencil className="h-2.5 w-2.5" />
-          </button>
-        )}
-        {hasConflict && (
-          <span className="mb-0.5 inline-block rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
-            Conflict
-          </span>
-        )}
-        {overBudget && (
-          <span className="mb-0.5 ml-0.5 inline-flex items-center gap-0.5 rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
-            <AlertTriangle className="h-2 w-2" /> Over Budget
-          </span>
-        )}
-        {item.start_time && (
-          <p className="font-inter text-[9px] font-medium text-accent">
-            {item.start_time.slice(0, 5)}
-          </p>
-        )}
-        <div className="flex items-center gap-1">
-          <p className="truncate font-inter text-[10px] font-medium text-foreground leading-tight">
-            {item.title}
-          </p>
-          {item.source_reference && (
-            <a
-              href={item.source_reference}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 text-accent hover:text-accent/80"
-            >
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-          )}
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          {item.cost != null && item.cost > 0 && (
-            <span className="font-inter text-[9px] text-muted-foreground">
-              ${Number(item.cost).toLocaleString()}
-            </span>
-          )}
-          {/* Distance Badge */}
-          {distance != null && (
-            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
-              <Navigation className="h-2 w-2 text-accent" />
-              <span className="font-inter text-[7px] text-muted-foreground">
-                {formatDistance(distance)}
-              </span>
-            </span>
-          )}
-          {/* Match Indicator */}
-          {matchLevel === "high" && (
-            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-accent/30 bg-accent/5 px-1 py-0.5">
-              <Star className="h-2 w-2 fill-accent text-accent" />
-              <span className="font-inter text-[7px] font-medium text-accent">High Match</span>
-            </span>
-          )}
-          {matchLevel === "partial" && (
-            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
-              <Star className="h-2 w-2 text-muted-foreground" />
-              <span className="font-inter text-[7px] text-muted-foreground">Partial</span>
-            </span>
-          )}
-          {/* Suggestive Loyalty Badge */}
+
+        <div className="relative z-10 px-2 py-1.5">
           {item.category === "stays" && (
-            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
-              <CreditCard className="h-2 w-2 text-accent" />
-              <span className="font-inter text-[7px] text-muted-foreground">💳 Amex Platinum (5x)</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveAnchor(isAnchor ? null : item);
+              }}
+              className={`absolute right-1 top-1 rounded-sm p-0.5 ${isAnchor ? "text-accent" : "hidden text-muted-foreground/50 hover:text-accent group-hover:block"}`}
+            >
+              <Anchor className="h-2.5 w-2.5" />
+            </button>
+          )}
+          {item.category !== "stays" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditing(true);
+              }}
+              className="absolute right-1 top-1 hidden rounded-sm p-0.5 text-muted-foreground/50 hover:text-accent group-hover:block"
+            >
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+          )}
+          {hasConflict && (
+            <span className="mb-0.5 inline-block rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
+              Conflict
             </span>
           )}
-          {item.category === "dining" && (
-            <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
-              <CreditCard className="h-2 w-2 text-accent" />
-              <span className="font-inter text-[7px] text-muted-foreground">💳 Sapphire (3x)</span>
+          {overBudget && (
+            <span className="mb-0.5 ml-0.5 inline-flex items-center gap-0.5 rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
+              <AlertTriangle className="h-2 w-2" /> Over Budget
             </span>
           )}
+          {item.start_time && (
+            <p className="font-inter text-[9px] font-medium text-accent">
+              {item.start_time.slice(0, 5)}
+            </p>
+          )}
+          <div className="flex items-center gap-1">
+            <p className="truncate font-inter text-[10px] font-medium text-foreground leading-tight">
+              {item.title}
+            </p>
+            {item.source_reference && (
+              <a
+                href={item.source_reference}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0 text-accent hover:text-accent/80"
+              >
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            )}
+            {mapsUrl && (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0 text-accent hover:text-accent/80"
+                title="View on Maps"
+              >
+                <MapPin className="h-2.5 w-2.5" />
+              </a>
+            )}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1">
+            {item.cost != null && item.cost > 0 && (
+              <span className="font-inter text-[9px] text-muted-foreground">
+                ${Number(item.cost).toLocaleString()}
+              </span>
+            )}
+            {distance != null && (
+              <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+                <Navigation className="h-2 w-2 text-accent" />
+                <span className="font-inter text-[7px] text-muted-foreground">
+                  {formatDistance(distance)}
+                </span>
+              </span>
+            )}
+            {matchLevel === "high" && (
+              <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-accent/30 bg-accent/5 px-1 py-0.5">
+                <Star className="h-2 w-2 fill-accent text-accent" />
+                <span className="font-inter text-[7px] font-medium text-accent">High Match</span>
+              </span>
+            )}
+            {matchLevel === "partial" && (
+              <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+                <Star className="h-2 w-2 text-muted-foreground" />
+                <span className="font-inter text-[7px] text-muted-foreground">Partial</span>
+              </span>
+            )}
+            {item.category === "stays" && (
+              <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+                <CreditCard className="h-2 w-2 text-accent" />
+                <span className="font-inter text-[7px] text-muted-foreground">💳 Amex Platinum (5x)</span>
+              </span>
+            )}
+            {item.category === "dining" && (
+              <span className="inline-flex items-center gap-0.5 rounded-sm border-thin border-border bg-background/80 px-1 py-0.5">
+                <CreditCard className="h-2 w-2 text-accent" />
+                <span className="font-inter text-[7px] text-muted-foreground">💳 Sapphire (3x)</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

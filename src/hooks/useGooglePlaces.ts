@@ -9,6 +9,7 @@ export interface PlaceResult {
   website: string | null;
   phone: string | null;
   rating: number | null;
+  userRatingsTotal: number | null;
   hours: string[] | null;
   lat: number | null;
   lng: number | null;

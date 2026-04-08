@@ -125,6 +125,7 @@ export default function AddItemDialog({
       setApiMetadata({
         phone: details.phone,
         rating: details.rating,
+        user_ratings_total: details.userRatingsTotal,
         hours: details.hours,
         lat: details.lat,
         lng: details.lng,
@@ -212,6 +213,8 @@ export default function AddItemDialog({
             end_time: endTime || null,
             source_reference: sourceUrl || null,
             location_name: location || null,
+            location_lat: selectedPlace?.lat ?? null,
+            location_lng: selectedPlace?.lng ?? null,
             google_place_id: googlePlaceId || null,
             api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
           });
@@ -235,8 +238,11 @@ export default function AddItemDialog({
         start_time: startTime || null,
         end_time: endTime || null,
         source_reference: sourceUrl || null,
-        location_name: category === "stays" ? location || null : null,
+        location_name: category === "stays" ? location || null : selectedPlace?.address || null,
+        location_lat: selectedPlace?.lat ?? null,
+        location_lng: selectedPlace?.lng ?? null,
         google_place_id: googlePlaceId || null,
+        source_url: selectedPlace?.website || null,
         api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
       });
     }
@@ -527,16 +533,52 @@ export default function AddItemDialog({
             <>
               <div className="space-y-1.5">
                 <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
-                  Title
+                  Activity Name
                 </Label>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={placeholderText}
-                  required
-                  className="border-thin border-border bg-background font-inter text-sm"
-                />
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); setTitle(e.target.value); }}
+                    onFocus={() => searchQuery && setShowResults(true)}
+                    placeholder={placeholderText}
+                    required
+                    className="border-thin border-border bg-background pl-8 font-inter text-sm"
+                  />
+                  {showResults && predictions.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border bg-card shadow-md">
+                      {predictions.map((r) => (
+                        <button
+                          key={r.place_id}
+                          type="button"
+                          onClick={() => selectPlace(r)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left font-inter text-xs text-foreground hover:bg-secondary/40"
+                        >
+                          <MapPin className="h-3 w-3 shrink-0 text-accent" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{r.structured_formatting.main_text}</p>
+                            <p className="truncate text-[10px] text-muted-foreground">{r.structured_formatting.secondary_text}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {selectedPlace && (
+                <div className="rounded-sm border border-dashed border-border bg-secondary/20 px-3 py-2 space-y-0.5">
+                  <p className="font-inter text-[10px] text-muted-foreground truncate">{selectedPlace.address}</p>
+                  {selectedPlace.website && (
+                    <p className="font-inter text-[10px] text-accent truncate">{selectedPlace.website}</p>
+                  )}
+                  {selectedPlace.rating && (
+                    <p className="font-inter text-[10px] text-muted-foreground">
+                      ⭐ {selectedPlace.rating}{selectedPlace.userRatingsTotal ? ` (${selectedPlace.userRatingsTotal.toLocaleString()} reviews)` : ''}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">

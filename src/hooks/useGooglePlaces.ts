@@ -9,6 +9,7 @@ export interface PlaceResult {
   website: string | null;
   phone: string | null;
   rating: number | null;
+  userRatingsTotal: number | null;
   hours: string[] | null;
   lat: number | null;
   lng: number | null;
@@ -119,6 +120,7 @@ export function useGooglePlaces(
               "website",
               "formatted_phone_number",
               "rating",
+              "user_ratings_total",
               "opening_hours",
               "geometry",
             ],
@@ -132,6 +134,7 @@ export function useGooglePlaces(
                 website: place.website || null,
                 phone: place.formatted_phone_number || null,
                 rating: place.rating ?? null,
+                userRatingsTotal: place.user_ratings_total ?? null,
                 hours: place.opening_hours?.weekday_text || null,
                 lat: place.geometry?.location?.lat() ?? null,
                 lng: place.geometry?.location?.lng() ?? null,

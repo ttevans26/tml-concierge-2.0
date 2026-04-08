@@ -126,6 +126,7 @@ export default function AddItemDialog({
         phone: details.phone,
         rating: details.rating,
         user_ratings_total: details.userRatingsTotal,
+        photo_url: details.photoUrl,
         hours: details.hours,
         lat: details.lat,
         lng: details.lng,

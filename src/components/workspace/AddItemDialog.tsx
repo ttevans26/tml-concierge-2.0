@@ -213,6 +213,8 @@ export default function AddItemDialog({
             end_time: endTime || null,
             source_reference: sourceUrl || null,
             location_name: location || null,
+            location_lat: selectedPlace?.lat ?? null,
+            location_lng: selectedPlace?.lng ?? null,
             google_place_id: googlePlaceId || null,
             api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
           });

@@ -238,8 +238,11 @@ export default function AddItemDialog({
         start_time: startTime || null,
         end_time: endTime || null,
         source_reference: sourceUrl || null,
-        location_name: category === "stays" ? location || null : null,
+        location_name: category === "stays" ? location || null : selectedPlace?.address || null,
+        location_lat: selectedPlace?.lat ?? null,
+        location_lng: selectedPlace?.lng ?? null,
         google_place_id: googlePlaceId || null,
+        source_url: selectedPlace?.website || null,
         api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
       });
     }

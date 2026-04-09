@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   Hotel, UtensilsCrossed, Compass, Landmark, FolderOpen,
-  GripVertical, ChevronDown, Archive, Filter,
+  GripVertical, ChevronDown, Archive, Filter, Sparkles, RefreshCw, Loader2,
 } from "lucide-react";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
@@ -15,6 +15,8 @@ import {
 import { useStudioStore, type StudioFolder, type StudioItem } from "@/stores/useStudioStore";
 import { useTripStore } from "@/stores/useTripStore";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 /* ---- helpers ---- */
 
@@ -29,7 +31,6 @@ function categoryMeta(cat: string) {
   return CATEGORY_META[cat] || CATEGORY_META.activity;
 }
 
-/** Simple keyword match between trip destination and folder name/location */
 function relevanceScore(folder: StudioFolder, destination: string): number {
   if (!destination) return 0;
   const dest = destination.toLowerCase();
@@ -44,15 +45,12 @@ function relevanceScore(folder: StudioFolder, destination: string): number {
 
 /* ---- Draggable item card ---- */
 
-function DraggableStudioItem({ item }: { item: StudioItem }) {
+function DraggableStudioItem({ item, isConcierge }: { item: StudioItem; isConcierge?: boolean }) {
   const meta = categoryMeta(item.category);
   const Icon = meta.icon;
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData(
-      "application/studio-item",
-      JSON.stringify(item)
-    );
+    e.dataTransfer.setData("application/studio-item", JSON.stringify(item));
     e.dataTransfer.effectAllowed = "copy";
   };
 
@@ -60,16 +58,24 @@ function DraggableStudioItem({ item }: { item: StudioItem }) {
     <div
       draggable
       onDragStart={handleDragStart}
-      className="group flex cursor-grab items-start gap-2 rounded-sm border border-border bg-card px-2.5 py-2 transition-shadow active:cursor-grabbing hover:shadow-sm"
+      className={`group flex cursor-grab items-start gap-2 rounded-sm border px-2.5 py-2 transition-shadow active:cursor-grabbing hover:shadow-sm ${
+        isConcierge
+          ? "border-accent/30 bg-accent/5"
+          : "border-border bg-card"
+      }`}
     >
       <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/40 group-hover:text-muted-foreground" />
-      <Icon className="mt-0.5 h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+      {isConcierge ? (
+        <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+      ) : (
+        <Icon className="mt-0.5 h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate font-inter text-[11px] font-medium text-foreground">
           {item.title}
         </p>
         {item.description && (
-          <p className="mt-0.5 line-clamp-1 font-inter text-[10px] text-muted-foreground">
+          <p className="mt-0.5 line-clamp-2 font-inter text-[10px] text-muted-foreground italic">
             {item.description}
           </p>
         )}
@@ -113,6 +119,114 @@ function FolderSection({ folder, defaultOpen }: { folder: StudioFolder; defaultO
         </div>
       </AccordionContent>
     </AccordionItem>
+  );
+}
+
+/* ---- Concierge Inspiration Section ---- */
+
+function ConciergeInspirationSection() {
+  const activeTrip = useTripStore((s) => s.activeTrip);
+  const itineraryItems = useTripStore((s) => s.itineraryItems);
+  const [suggestions, setSuggestions] = useState<StudioItem[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
+  const prevDestRef = useRef(activeTrip?.destination);
+  const prevDatesRef = useRef(`${activeTrip?.start_date}-${activeTrip?.end_date}`);
+
+  const fetchSuggestions = useCallback(async () => {
+    if (!activeTrip?.destination) return;
+    setLoadingSuggestions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("get-concierge-suggestions", {
+        body: {
+          destination: activeTrip.destination,
+          startDate: activeTrip.start_date,
+          endDate: activeTrip.end_date,
+          existingItems: itineraryItems.map((i) => ({
+            category: i.category,
+            title: i.title,
+            date: i.date,
+          })),
+        },
+      });
+      if (error) throw error;
+      setSuggestions(data?.suggestions || []);
+    } catch (e: any) {
+      console.error("Concierge error:", e);
+      toast.error("Could not fetch suggestions");
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }, [activeTrip?.destination, activeTrip?.start_date, activeTrip?.end_date, itineraryItems]);
+
+  // Auto-refresh when destination or dates change
+  useEffect(() => {
+    const newDest = activeTrip?.destination || "";
+    const newDates = `${activeTrip?.start_date}-${activeTrip?.end_date}`;
+    if (newDest && (newDest !== prevDestRef.current || newDates !== prevDatesRef.current)) {
+      prevDestRef.current = newDest;
+      prevDatesRef.current = newDates;
+      fetchSuggestions();
+    }
+  }, [activeTrip?.destination, activeTrip?.start_date, activeTrip?.end_date, fetchSuggestions]);
+
+  if (!activeTrip?.destination) return null;
+
+  return (
+    <div className="border-t border-accent/20">
+      {/* Header with gradient accent */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between px-4 py-3 hover:bg-accent/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 to-accent/5 border border-accent/30">
+            <Sparkles className="h-3 w-3 text-accent" strokeWidth={2} />
+          </div>
+          <span className="font-inter text-[11px] font-semibold text-accent">
+            Concierge Inspiration
+          </span>
+          {suggestions.length > 0 && (
+            <Badge className="bg-accent/15 text-accent border-accent/30 font-inter text-[9px]">
+              {suggestions.length}
+            </Badge>
+          )}
+        </div>
+        <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="px-4 pb-3">
+          {/* Refresh button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchSuggestions}
+            disabled={loadingSuggestions}
+            className="mb-2 w-full h-7 font-inter text-[10px] border-accent/20 text-accent hover:bg-accent/5"
+          >
+            {loadingSuggestions ? (
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 h-3 w-3" />
+            )}
+            {loadingSuggestions ? "Generating…" : "Refresh Suggestions"}
+          </Button>
+
+          {/* Suggestion items */}
+          <div className="space-y-1.5">
+            {suggestions.length === 0 && !loadingSuggestions && (
+              <p className="font-inter text-[10px] text-muted-foreground italic text-center py-2">
+                Click refresh to get AI-powered suggestions for your trip.
+              </p>
+            )}
+            {suggestions.map((item) => (
+              <DraggableStudioItem key={item.id} item={item} isConcierge />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -175,7 +289,6 @@ export default function StudioSidebar() {
           </div>
         ) : (
           <div className="py-2">
-            {/* Relevant folders */}
             {relevant.length > 0 && (
               <div>
                 <div className="px-4 pb-1 pt-2">
@@ -183,22 +296,14 @@ export default function StudioSidebar() {
                     Matched to "{destination}"
                   </p>
                 </div>
-                <Accordion
-                  type="multiple"
-                  defaultValue={relevant.map((f) => f.id)}
-                >
+                <Accordion type="multiple" defaultValue={relevant.map((f) => f.id)}>
                   {relevant.map((folder) => (
-                    <FolderSection
-                      key={folder.id}
-                      folder={folder}
-                      defaultOpen
-                    />
+                    <FolderSection key={folder.id} folder={folder} defaultOpen />
                   ))}
                 </Accordion>
               </div>
             )}
 
-            {/* Global / other folders */}
             {global.length > 0 && (
               <div>
                 <div className="px-4 pb-1 pt-3">
@@ -218,11 +323,13 @@ export default function StudioSidebar() {
             )}
           </div>
         )}
+
+        {/* Concierge Inspiration — always at the bottom */}
+        <ConciergeInspirationSection />
       </ScrollArea>
     </div>
   );
 
-  /* Mobile: bottom-sheet via filter icon */
   if (isMobile) {
     return (
       <Sheet>
@@ -245,7 +352,6 @@ export default function StudioSidebar() {
     );
   }
 
-  /* Desktop: static panel */
   return (
     <div className="flex h-full flex-col border-r border-border bg-card">
       {sidebarContent}

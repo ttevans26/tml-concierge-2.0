@@ -89,6 +89,7 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
         minReviewScore: (p.minReviewScore as string) ?? DEFAULT_PREFS.minReviewScore,
         loyaltyPrograms: (p.loyaltyPrograms as string[]) ?? [],
         amenities: (p.amenities as string[]) ?? [],
+        creditCards: (p.creditCards as string[]) ?? [],
         innerCity: p.innerCity !== undefined ? Boolean(p.innerCity) : true,
         coastal: p.coastal !== undefined ? Boolean(p.coastal) : true,
       });

@@ -27,6 +27,7 @@ interface TravelPreferences {
   minReviewScore: string;
   loyaltyPrograms: string[];
   amenities: string[];
+  creditCards: string[];
   innerCity: boolean;
   coastal: boolean;
 }
@@ -36,6 +37,7 @@ const DEFAULT_PREFS: TravelPreferences = {
   minReviewScore: "4.5",
   loyaltyPrograms: [],
   amenities: [],
+  creditCards: [],
   innerCity: true,
   coastal: true,
 };
@@ -51,6 +53,15 @@ const LOYALTY_OPTIONS = [
 ];
 
 const AMENITY_OPTIONS = ["Spa", "Pool", "Gym", "AC"];
+
+const CREDIT_CARD_OPTIONS = [
+  "Chase Sapphire Reserve",
+  "Amex Platinum",
+  "Amex Gold",
+  "Capital One Venture X",
+  "Citi Prestige",
+  "US Bank Altitude Reserve",
+];
 
 interface Props {
   open: boolean;

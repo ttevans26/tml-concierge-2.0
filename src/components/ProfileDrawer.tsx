@@ -305,6 +305,29 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
 
               <Separator />
 
+              {/* Credit Cards */}
+              <section>
+                <h3 className="font-inter text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                  Active Credit Cards
+                </h3>
+                <div className="grid grid-cols-1 gap-2">
+                  {CREDIT_CARD_OPTIONS.map((card) => (
+                    <label key={card} className="flex items-center gap-2.5 cursor-pointer group">
+                      <Checkbox
+                        checked={prefs.creditCards.includes(card)}
+                        onCheckedChange={() => toggleCreditCard(card)}
+                        className="border-border data-[state=checked]:bg-foreground data-[state=checked]:border-foreground"
+                      />
+                      <span className="font-inter text-sm text-foreground group-hover:text-foreground/80 transition-colors">
+                        {card}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </section>
+
+              <Separator />
+
               {/* Environment Selection */}
               <section>
                 <h3 className="font-inter text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-3">

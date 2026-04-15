@@ -141,6 +141,15 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
     }));
   };
 
+  const toggleCreditCard = (card: string) => {
+    setPrefs((p) => ({
+      ...p,
+      creditCards: p.creditCards.includes(card)
+        ? p.creditCards.filter((c) => c !== card)
+        : [...p.creditCards, card],
+    }));
+  };
+
   const handleSignOut = async () => {
     await signOut();
     onOpenChange(false);

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,11 +30,47 @@ serve(async (req) => {
       );
     }
 
+    // Fetch user preferences from profiles table
+    let prefsBlock = "";
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("preferences")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (profile?.preferences && typeof profile.preferences === "object") {
+          const p = profile.preferences as Record<string, unknown>;
+          const parts: string[] = [];
+          if (p.minReviewScore) parts.push(`Minimum Google review score: ${p.minReviewScore}`);
+          if (p.hotelStarRating) parts.push(`Minimum hotel star rating: ${p.hotelStarRating}★`);
+          if (Array.isArray(p.loyaltyPrograms) && p.loyaltyPrograms.length > 0)
+            parts.push(`Preferred loyalty programs: ${(p.loyaltyPrograms as string[]).join(", ")}`);
+          if (Array.isArray(p.amenities) && p.amenities.length > 0)
+            parts.push(`Mandatory amenities: ${(p.amenities as string[]).join(", ")}`);
+          if (Array.isArray(p.creditCards) && p.creditCards.length > 0)
+            parts.push(`Active credit cards: ${(p.creditCards as string[]).join(", ")}. Suggest places that maximize points for these cards.`);
+          if (p.innerCity === true) parts.push("Prefers inner-city locations");
+          if (p.coastal === true) parts.push("Prefers coastal environments");
+          if (parts.length > 0) {
+            prefsBlock = `\n\nThe traveler has the following preferences and constraints that you MUST adhere to:\n${parts.map(p => `- ${p}`).join("\n")}`;
+          }
+        }
+      }
+    }
+
     const itemsSummary = (existingItems || [])
       .map((i: any) => `${i.category}: ${i.title} (${i.date || "unscheduled"})`)
       .join("\n");
 
-    const systemPrompt = `You are a luxury travel concierge for TML Concierge, a premium travel planning platform. You suggest hidden gems, route optimizations, and missing essentials for trips. Always explain WHY you suggest each item in a brief "Consultant's Note" style description.`;
+    const systemPrompt = `You are a luxury travel concierge for TML Concierge, a premium travel planning platform. You suggest hidden gems, route optimizations, and missing essentials for trips. Always explain WHY you suggest each item in a brief "Consultant's Note" style description.${prefsBlock ? `\n\nCRITICAL CONSTRAINTS: You must ONLY suggest properties and experiences that meet the traveler's stated quality benchmarks. Never suggest anything below their minimum standards.${prefsBlock}` : ""}`;
 
     const userPrompt = `A traveler is planning a trip to **${destination}**${startDate ? ` from ${startDate} to ${endDate}` : ""}.
 
@@ -126,7 +163,6 @@ Return suggestions using the "suggest_items" tool.`;
       }
     }
 
-    // Format as studio-item-like objects with unique IDs
     const items = suggestions.map((s: any, i: number) => ({
       id: `concierge-${Date.now()}-${i}`,
       folder_id: "concierge",

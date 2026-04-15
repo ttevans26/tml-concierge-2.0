@@ -27,6 +27,7 @@ interface TravelPreferences {
   minReviewScore: string;
   loyaltyPrograms: string[];
   amenities: string[];
+  creditCards: string[];
   innerCity: boolean;
   coastal: boolean;
 }
@@ -36,6 +37,7 @@ const DEFAULT_PREFS: TravelPreferences = {
   minReviewScore: "4.5",
   loyaltyPrograms: [],
   amenities: [],
+  creditCards: [],
   innerCity: true,
   coastal: true,
 };
@@ -51,6 +53,15 @@ const LOYALTY_OPTIONS = [
 ];
 
 const AMENITY_OPTIONS = ["Spa", "Pool", "Gym", "AC"];
+
+const CREDIT_CARD_OPTIONS = [
+  "Chase Sapphire Reserve",
+  "Amex Platinum",
+  "Amex Gold",
+  "Capital One Venture X",
+  "Citi Prestige",
+  "US Bank Altitude Reserve",
+];
 
 interface Props {
   open: boolean;
@@ -78,6 +89,7 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
         minReviewScore: (p.minReviewScore as string) ?? DEFAULT_PREFS.minReviewScore,
         loyaltyPrograms: (p.loyaltyPrograms as string[]) ?? [],
         amenities: (p.amenities as string[]) ?? [],
+        creditCards: (p.creditCards as string[]) ?? [],
         innerCity: p.innerCity !== undefined ? Boolean(p.innerCity) : true,
         coastal: p.coastal !== undefined ? Boolean(p.coastal) : true,
       });
@@ -126,6 +138,15 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
       amenities: p.amenities.includes(amenity)
         ? p.amenities.filter((a) => a !== amenity)
         : [...p.amenities, amenity],
+    }));
+  };
+
+  const toggleCreditCard = (card: string) => {
+    setPrefs((p) => ({
+      ...p,
+      creditCards: p.creditCards.includes(card)
+        ? p.creditCards.filter((c) => c !== card)
+        : [...p.creditCards, card],
     }));
   };
 
@@ -279,6 +300,29 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
                       </button>
                     );
                   })}
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* Credit Cards */}
+              <section>
+                <h3 className="font-inter text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                  Active Credit Cards
+                </h3>
+                <div className="grid grid-cols-1 gap-2">
+                  {CREDIT_CARD_OPTIONS.map((card) => (
+                    <label key={card} className="flex items-center gap-2.5 cursor-pointer group">
+                      <Checkbox
+                        checked={prefs.creditCards.includes(card)}
+                        onCheckedChange={() => toggleCreditCard(card)}
+                        className="border-border data-[state=checked]:bg-foreground data-[state=checked]:border-foreground"
+                      />
+                      <span className="font-inter text-sm text-foreground group-hover:text-foreground/80 transition-colors">
+                        {card}
+                      </span>
+                    </label>
+                  ))}
                 </div>
               </section>
 

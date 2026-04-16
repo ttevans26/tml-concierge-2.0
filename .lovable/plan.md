@@ -1,60 +1,56 @@
 
 
-## Smart Pull: Email-Based Travel Extraction
+## Plan: Geographic URL Parser for Google Maps Links
 
-### What This Builds
+### Problem
+Pasting a Google Maps URL into the "Import via URL" scraper sends it to the `scrape-and-parse` edge function, which tries to fetch the HTML and parse travel items via AI — this fails for Maps URLs because the content is JavaScript-rendered and yields no meaningful text.
 
-A "Smart Pull" feature allowing users to paste email confirmation text, have AI extract structured travel data, review items in a dashed-border tray with Accept/Dismiss controls, and optionally enrich flights with Aviationstack gate/terminal data. Confirmation codes render as clickable Google Search deep links for instant verification.
+### Solution
+Intercept Google Maps URLs client-side in `StudioWorkbench.tsx` before they hit the edge function. Extract the place name from the URL, resolve it via the existing Google Places API (`useGooglePlaces` hook), and add the item directly to the active folder with full metadata.
 
-### Files to Create/Modify
+### Implementation Steps
 
-| File | Action |
-|------|--------|
-| `supabase/functions/smart-pull/index.ts` | Create — Gemini-powered email parser |
-| `src/components/workspace/SmartPullTray.tsx` | Create — Review tray with Accept/Dismiss |
-| `src/components/workspace/MatrixGrid.tsx` | Modify — Add Smart Pull button + dialog + tray |
+**1. Add Google Maps URL detection and parsing in `StudioWorkbench.tsx`**
 
-### Step 1: Edge Function — `smart-pull`
+Update `handleScrape` to detect Google Maps URLs (patterns: `google.com/maps/place/`, `maps.google.com`, `goo.gl/maps`, `maps.app.goo.gl`) and branch into a dedicated `handleGoogleMapsUrl` flow instead of calling the edge function.
 
-- Accept `{ email_text: string }`
-- Use Lovable AI Gateway with `google/gemini-3-flash-preview`
-- System prompt instructs extraction of: title, category (stays/logistics/dining/activity), date, start_time, end_time, description, confirmation_code, flight_number, departure_airport, arrival_airport, estimated_cost
-- Use tool calling (structured output) to guarantee JSON schema compliance
-- Return `{ items: ExtractedItem[] }`
-- Handle 429/402 rate limit errors
+The parser will extract the place name from the URL path (e.g., `/maps/place/La+Trattoria/...` → `"La Trattoria"`), or fall back to extracting coordinates from `@lat,lng,zoom` patterns.
 
-### Step 2: Smart Pull Dialog in MatrixGrid
+**2. Resolve via Google Places API**
 
-- Add a `Mail` icon button next to Trip Settings in the header
-- Opens a Dialog with a `<Textarea>` for pasting email text and a "Extract" submit button (min-h 44px)
-- On submit: call `supabase.functions.invoke('smart-pull')` with the text
-- Loading state: "Analyzing confirmation..." 
-- On success: close dialog, populate `pendingItems` state array
-- On error: toast with specific error message
+Use the existing `useGooglePlaces` hook's `search()` and `getDetails()` to:
+- Search for the extracted name (appended with the active folder's location for geo-context, e.g., "La Trattoria, Antibes")
+- Auto-select the first high-confidence match
+- Fetch full details: name, address, coordinates, rating, photos, website
 
-### Step 3: SmartPullTray Component
+**3. Auto-add to active folder**
 
-- Renders above the matrix grid when `pendingItems.length > 0`
-- Each card has:
-  - Dashed border (`border-dashed border-border`)
-  - Title, category badge, date, times, cost
-  - **Confirmation code deep link**: if `confirmation_code` exists, render as `<a href="https://www.google.com/search?q={code}" target="_blank">` styled as a clickable monospace badge
-  - **Accept** button: calls `useTripStore.createItineraryItem()` with `approval_status: 'draft'`, maps extracted fields to itinerary_items columns, stores flight metadata in `api_metadata` JSONB
-  - **Dismiss** button: removes from pending list
-- All interactive elements ≥ 44px touch targets
+On successful resolution, call `addItem()` with all metadata populated (`google_place_id`, `lat`, `lng`, `api_metadata` with rating/photo/hours). Show a success toast. The store update will trigger the Proximity Map to re-render with the new pin.
 
-### Step 4: Background Aviationstack Enrichment
+**4. Proximity Map auto-zoom**
 
-- On Accept, if item has `flight_number` in extracted metadata:
-  - Fire non-blocking `supabase.functions.invoke('aviationstack-lookup')` 
-  - On success: call `updateItineraryItem()` to merge gate/terminal into `api_metadata`
-  - On failure: toast "Gate info unavailable" — do NOT remove or alter the accepted item
+The existing `StudioMap.tsx` already watches `activeFolder.items` and recalculates bounds on change. Adding a new item with coordinates will automatically trigger a re-render with the new marker and adjusted viewport. No map changes needed.
+
+**5. "Search Manually" fallback**
+
+If the Places API search returns no results or fails:
+- Show a toast with a "Search Manually" action button
+- Pre-fill the `AddStudioItemDialog` with the extracted name and open it automatically
+- Add state: `prefillTitle` and pass it to the dialog
+
+### Files Modified
+- `src/components/studio/StudioWorkbench.tsx` — Add Maps URL detection, Places resolution, fallback dialog pre-fill
 
 ### Technical Details
 
-- **Model**: `google/gemini-3-flash-preview` via Lovable AI Gateway
-- **Auth**: Uses `LOVABLE_API_KEY` (already configured)
-- **No DB migration needed** — uses existing `itinerary_items` table and JSONB columns (`metadata`, `api_metadata`)
-- **State**: `pendingItems` managed as local React state in MatrixGrid, passed to SmartPullTray as props
-- **Deep link format**: `https://www.google.com/search?q=${encodeURIComponent(confirmationCode)}`
+URL parsing regex patterns:
+```text
+/maps\/place\/([^/@]+)/     → extract name from path
+/@(-?\d+\.\d+),(-?\d+\.\d+)/ → extract coords as fallback
+/maps\.app\.goo\.gl/        → short link detection (fetch redirect)
+```
+
+The `useGooglePlaces` hook needs a minor enhancement: expose a `findPlace(query)` method that combines `search` + auto-select first result + `getDetails` in one call. Alternatively, we use `PlacesService.findPlaceFromQuery` directly (already used in StudioMap's resync logic).
+
+Since the Google Maps JS API is already loaded, we can use `google.maps.places.PlacesService.findPlaceFromQuery` directly in the handler without modifying the hook.
 

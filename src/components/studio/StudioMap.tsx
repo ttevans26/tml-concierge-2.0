@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { MapPin, Compass, RefreshCw } from "lucide-react";
+import { MapPin, Compass, RefreshCw, CheckCircle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
+import { supabase } from "@/integrations/supabase/client";
 import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 import { toast } from "sonner";
 
@@ -192,7 +193,7 @@ export default function StudioMap() {
                   Missing Coordinates
                 </p>
                 {allItems.filter((i) => !getCoords(i)).map((item) => (
-                  <ResyncRow key={item.id} item={item} />
+                  <ResyncRow key={item.id} item={item} folderLocation={activeFolder.location} mapInstance={mapInstanceRef.current} />
                 ))}
               </div>
             )}
@@ -203,38 +204,90 @@ export default function StudioMap() {
   );
 }
 
-/** Row for items missing coords, with a re-sync button */
-function ResyncRow({ item }: { item: StudioItem }) {
-  const { getDetails } = useGooglePlaces({ enabled: true });
+/** Row for items missing coords — auto-heals via name + folder location search */
+function ResyncRow({ item, folderLocation, mapInstance }: { item: StudioItem; folderLocation: string; mapInstance: any }) {
   const fetchFolders = useStudioStore((s) => s.fetchFolders);
   const [syncing, setSyncing] = useState(false);
+  const [healed, setHealed] = useState(false);
 
   const handleResync = useCallback(async () => {
-    if (item.google_place_id) {
-      setSyncing(true);
-      try {
-        const details = await getDetails(item.google_place_id);
-        if (details) {
-          const { supabase } = await import("@/integrations/supabase/client");
-          const meta = { ...(item.api_metadata || {}), rating: details.rating, user_ratings_total: details.userRatingsTotal, photo_url: details.photoUrl };
-          await supabase
-            .from("studio_items")
-            .update({ lat: details.lat, lng: details.lng, address: details.address, api_metadata: meta } as any)
-            .eq("id", item.id);
-          await fetchFolders();
-          toast.success(`Re-synced "${item.title}"`);
-        } else {
-          toast.error("Could not fetch place details");
-        }
-      } catch {
-        toast.error("Re-sync failed");
-      } finally {
+    setSyncing(true);
+    try {
+      const g = (window as any).google;
+      if (!g?.maps?.places) {
+        toast.error("Google Maps not loaded yet");
         setSyncing(false);
+        return;
       }
-    } else {
-      toast.info("No Google Place ID linked. Edit the item to search and link a place.");
+
+      // Use FindPlaceFromQuery via PlacesService
+      const div = document.createElement("div");
+      const service = new g.maps.places.PlacesService(div);
+      const query = `${item.title}${folderLocation ? ", " + folderLocation : ""}`;
+
+      const placeResult: any = await new Promise((resolve) => {
+        service.findPlaceFromQuery(
+          { query, fields: ["place_id", "name", "geometry", "formatted_address", "rating", "user_ratings_total", "photos", "website"] },
+          (results: any[] | null, status: string) => {
+            if (status === "OK" && results && results.length > 0) resolve(results[0]);
+            else resolve(null);
+          }
+        );
+      });
+
+      if (!placeResult) {
+        toast.error(`No match found for "${item.title}"`);
+        setSyncing(false);
+        return;
+      }
+
+      const lat = placeResult.geometry?.location?.lat() ?? null;
+      const lng = placeResult.geometry?.location?.lng() ?? null;
+      const firstPhoto = placeResult.photos?.[0];
+      const photoUrl = firstPhoto ? firstPhoto.getUrl({ maxWidth: 400, maxHeight: 300 }) : null;
+
+      const meta = {
+        ...(item.api_metadata || {}),
+        rating: placeResult.rating ?? null,
+        user_ratings_total: placeResult.user_ratings_total ?? null,
+        photo_url: photoUrl,
+      };
+
+      await supabase
+        .from("studio_items")
+        .update({
+          google_place_id: placeResult.place_id,
+          lat,
+          lng,
+          address: placeResult.formatted_address || null,
+          api_metadata: meta,
+        } as any)
+        .eq("id", item.id);
+
+      await fetchFolders();
+      setHealed(true);
+      toast.success(`Linked "${item.title}" → ${placeResult.name}`);
+
+      // Fly to healed coords
+      if (mapInstance && lat != null && lng != null) {
+        mapInstance.panTo({ lat, lng });
+        mapInstance.setZoom(15);
+      }
+    } catch {
+      toast.error("Re-sync failed");
+    } finally {
+      setSyncing(false);
     }
-  }, [item, getDetails, fetchFolders]);
+  }, [item, folderLocation, fetchFolders, mapInstance]);
+
+  if (healed) {
+    return (
+      <div className="flex items-center gap-1.5 py-0.5">
+        <span className="flex-1 truncate font-inter text-[10px] text-foreground">{item.title}</span>
+        <CheckCircle className="h-3 w-3 shrink-0 text-green-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-1.5 py-0.5">
@@ -243,7 +296,7 @@ function ResyncRow({ item }: { item: StudioItem }) {
         onClick={handleResync}
         disabled={syncing}
         className="shrink-0 rounded-sm p-0.5 text-accent hover:text-accent/80 disabled:opacity-50"
-        title={item.google_place_id ? "Re-sync from Google Places" : "No Place ID — edit to link"}
+        title={`Auto-link "${item.title}" via Google Places`}
       >
         <RefreshCw className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`} />
       </button>

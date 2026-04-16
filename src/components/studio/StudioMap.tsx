@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { MapPin, Compass, RefreshCw } from "lucide-react";
+import { MapPin, Compass, RefreshCw, CheckCircle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
+import { supabase } from "@/integrations/supabase/client";
 import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 import { toast } from "sonner";
 

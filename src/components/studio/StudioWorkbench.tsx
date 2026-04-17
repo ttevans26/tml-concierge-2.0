@@ -62,15 +62,182 @@ export default function StudioWorkbench() {
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scraping, setScraping] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+  const [prefillTitle, setPrefillTitle] = useState<string>("");
+
+  /* ---- Google Maps URL parsing helpers ---- */
+  const isGoogleMapsUrl = (url: string): boolean => {
+    return /(?:google\.[a-z.]+\/maps|maps\.google\.|goo\.gl\/maps|maps\.app\.goo\.gl)/i.test(url);
+  };
+
+  const extractMapsPlaceName = (url: string): { name: string | null; coords: { lat: number; lng: number } | null } => {
+    let name: string | null = null;
+    let coords: { lat: number; lng: number } | null = null;
+
+    // Extract name from /maps/place/<name>/...
+    const placeMatch = url.match(/\/maps\/place\/([^/@?]+)/i);
+    if (placeMatch) {
+      try {
+        name = decodeURIComponent(placeMatch[1].replace(/\+/g, " ")).trim();
+      } catch {
+        name = placeMatch[1].replace(/\+/g, " ").trim();
+      }
+    }
+
+    // Extract coords from @lat,lng,zoom
+    const coordMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (coordMatch) {
+      coords = { lat: parseFloat(coordMatch[1]), lng: parseFloat(coordMatch[2]) };
+    }
+
+    // Try ?q= param
+    if (!name) {
+      const qMatch = url.match(/[?&]q=([^&]+)/);
+      if (qMatch) {
+        try {
+          name = decodeURIComponent(qMatch[1].replace(/\+/g, " ")).trim();
+        } catch {
+          name = qMatch[1].replace(/\+/g, " ").trim();
+        }
+      }
+    }
+
+    return { name, coords };
+  };
+
+  const handleGoogleMapsUrl = async (url: string) => {
+    if (!activeFolder) return;
+    console.log("DEBUG: Google Maps URL detected", url);
+
+    const { name, coords } = extractMapsPlaceName(url);
+    console.log("DEBUG: Extracted from Maps URL", { name, coords });
+
+    if (!name && !coords) {
+      toast.error("Couldn't parse this Maps link. Try opening it in Maps and copying a cleaner URL.");
+      return;
+    }
+
+    // Ensure Maps JS is loaded
+    const g = (window as any).google;
+    if (!g?.maps?.places) {
+      toast.error("Google Maps not loaded yet. Try again in a moment.");
+      return;
+    }
+
+    const query = name
+      ? `${name}${activeFolder.location ? `, ${activeFolder.location}` : ""}`
+      : "";
+
+    const div = document.createElement("div");
+    const placesService = new g.maps.places.PlacesService(div);
+
+    const findPlace = (): Promise<any | null> =>
+      new Promise((resolve) => {
+        if (!query) return resolve(null);
+        placesService.findPlaceFromQuery(
+          {
+            query,
+            fields: ["place_id", "name", "formatted_address", "geometry", "rating", "user_ratings_total", "photos"],
+            ...(coords ? { locationBias: new g.maps.LatLng(coords.lat, coords.lng) } : {}),
+          },
+          (results: any[] | null, status: string) => {
+            console.log("DEBUG: findPlaceFromQuery", status, results?.length ?? 0);
+            if (status === "OK" && results && results.length > 0) resolve(results[0]);
+            else resolve(null);
+          }
+        );
+      });
+
+    const getDetailsAsync = (placeId: string): Promise<any | null> =>
+      new Promise((resolve) => {
+        placesService.getDetails(
+          {
+            placeId,
+            fields: [
+              "name", "formatted_address", "place_id", "website",
+              "formatted_phone_number", "rating", "user_ratings_total",
+              "photos", "opening_hours", "geometry",
+            ],
+          },
+          (place: any, status: string) => {
+            if (status === "OK" && place) resolve(place);
+            else resolve(null);
+          }
+        );
+      });
+
+    const match = await findPlace();
+
+    if (!match || !match.place_id) {
+      toast.error(`Couldn't auto-link "${name}". Opening manual entry…`, {
+        action: {
+          label: "Search Manually",
+          onClick: () => {
+            setPrefillTitle(name || "");
+            setAddOpen(true);
+          },
+        },
+      });
+      // Auto-open the dialog with prefilled name
+      setPrefillTitle(name || "");
+      setAddCategory("activity");
+      setAddOpen(true);
+      return;
+    }
+
+    const details = await getDetailsAsync(match.place_id);
+    const place = details || match;
+
+    const lat = place.geometry?.location?.lat?.() ?? coords?.lat ?? null;
+    const lng = place.geometry?.location?.lng?.() ?? coords?.lng ?? null;
+    const photoUrl = place.photos?.[0]?.getUrl?.({ maxWidth: 400, maxHeight: 300 }) ?? null;
+
+    await addItem(activeFolder.id, {
+      category: "activity",
+      title: place.name || name || "Untitled",
+      description: null,
+      address: place.formatted_address || null,
+      url: place.website || url,
+      lat,
+      lng,
+      cost: null,
+      google_place_id: place.place_id || null,
+      source_url: url,
+      api_metadata: {
+        lat, lng, photo_url: photoUrl,
+        rating: place.rating ?? null,
+        user_ratings_total: place.user_ratings_total ?? null,
+        phone: place.formatted_phone_number ?? null,
+        hours: place.opening_hours?.weekday_text ?? null,
+      },
+    });
+
+    toast.success(`Added "${place.name || name}" to ${activeFolder.name}.`);
+  };
 
   const handleScrape = async () => {
     console.log("DEBUG: Scrape Triggered", scrapeUrl);
-    if (!scrapeUrl.trim()) return;
+    const url = scrapeUrl.trim();
+    if (!url) return;
+
+    // Intercept Google Maps URLs
+    if (isGoogleMapsUrl(url)) {
+      setScraping(true);
+      try {
+        await handleGoogleMapsUrl(url);
+      } catch (err: any) {
+        console.error("DEBUG: Maps URL error", err);
+        toast.error(err?.message || "Failed to import Maps link.");
+      }
+      setScrapeUrl("");
+      setScraping(false);
+      return;
+    }
+
     setScraping(true);
     try {
       console.log("DEBUG: Invoking scrape-and-parse edge function");
       const { data, error } = await supabase.functions.invoke("scrape-and-parse", {
-        body: { url: scrapeUrl.trim() },
+        body: { url },
       });
       console.log("DEBUG: Scrape response", { data, error });
       if (error) throw error;

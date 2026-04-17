@@ -249,7 +249,7 @@ export default function StudioWorkbench() {
           id: crypto.randomUUID(),
           title: item.title || "Untitled",
           address: item.address || null,
-          url: item.url || scrapeUrl.trim(),
+          url: item.url || url,
           category: (["stays", "dining", "activity", "sites"].includes(item.category) ? item.category : "activity") as StudioCategory,
           description: item.description || null,
         }));

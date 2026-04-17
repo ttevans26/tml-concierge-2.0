@@ -631,12 +631,14 @@ function AddStudioItemDialog({
   category,
   onCategoryChange,
   folderId,
+  prefillTitle,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   category: StudioCategory;
   onCategoryChange: (c: StudioCategory) => void;
   folderId: string;
+  prefillTitle?: string;
 }) {
   const { addItem } = useStudioStore();
   const [title, setTitle] = useState("");
@@ -648,6 +650,15 @@ function AddStudioItemDialog({
   const [cost, setCost] = useState("");
   const [googlePlaceId, setGooglePlaceId] = useState("");
   const [apiMetadata, setApiMetadata] = useState<Record<string, unknown>>({});
+
+  // Prefill title when dialog opens with a prefillTitle (e.g., from failed Maps URL parse)
+  useEffect(() => {
+    if (open && prefillTitle) {
+      setTitle(prefillTitle);
+      setSearchQuery(prefillTitle);
+      setShowResults(true);
+    }
+  }, [open, prefillTitle]);
 
   const PLACES_TYPES_STUDIO: Record<string, string[]> = {
     stays: ["lodging"],

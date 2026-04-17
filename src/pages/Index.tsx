@@ -1,12 +1,48 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MapPin, Calendar, Wallet } from "lucide-react";
+import { Plus, MapPin, Calendar, Wallet, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore, Trip } from "@/stores/useTripStore";
 import { useAuth } from "@/hooks/useAuth";
 import CreateTripDialog from "@/components/CreateTripDialog";
-import { format } from "date-fns";
+import { format, differenceInCalendarDays, startOfDay } from "date-fns";
+
+/* ------------------------------------------------------------------ */
+/*  Countdown Widget                                                   */
+/* ------------------------------------------------------------------ */
+
+function TripCountdown({ startDate, endDate }: { startDate?: string | null; endDate?: string | null }) {
+  if (!startDate) return null;
+
+  const today = startOfDay(new Date());
+  const start = startOfDay(new Date(startDate));
+  const end = endDate ? startOfDay(new Date(endDate)) : start;
+
+  const daysUntil = differenceInCalendarDays(start, today);
+  const daysAfterEnd = differenceInCalendarDays(today, end);
+
+  // Trip already concluded — hide
+  if (daysAfterEnd > 0) return null;
+
+  // Trip is active (today between start and end inclusive)
+  if (daysUntil <= 0 && daysAfterEnd <= 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-sm border-thin border-[hsl(140_30%_55%/0.35)] bg-[hsl(140_30%_95%/0.6)] px-2 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider text-[hsl(140_35%_30%)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[hsl(140_45%_45%)]" />
+        Active Now
+      </span>
+    );
+  }
+
+  // Upcoming
+  return (
+    <span className="inline-flex items-center gap-1 font-inter text-[10px] font-medium tracking-wide text-accent/90">
+      <Hourglass className="h-3 w-3" strokeWidth={1.5} />
+      T-minus {daysUntil} {daysUntil === 1 ? "day" : "days"}
+    </span>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Trip Card                                                          */
@@ -23,9 +59,12 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   return (
     <div onClick={onClick} className="group flex cursor-pointer flex-col justify-between rounded-sm border-thin border-border bg-card p-6 transition-shadow hover:shadow-md">
       <div>
-        <h3 className="font-playfair text-lg font-semibold text-foreground leading-snug">
-          {trip.name}
-        </h3>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-playfair text-lg font-semibold text-foreground leading-snug">
+            {trip.name}
+          </h3>
+          <TripCountdown startDate={trip.start_date} endDate={trip.end_date} />
+        </div>
 
         {trip.destination && (
           <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">

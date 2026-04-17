@@ -465,10 +465,11 @@ export default function StudioWorkbench() {
       {/* Add dialog */}
       <AddStudioItemDialog
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(o) => { setAddOpen(o); if (!o) setPrefillTitle(""); }}
         category={addCategory}
         onCategoryChange={setAddCategory}
         folderId={activeFolder.id}
+        prefillTitle={prefillTitle}
       />
     </div>
   );

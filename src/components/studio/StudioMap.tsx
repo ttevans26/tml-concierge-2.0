@@ -2,10 +2,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { MapPin, Compass, RefreshCw, CheckCircle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
 import { supabase } from "@/integrations/supabase/client";
-import { useGooglePlaces } from "@/hooks/useGooglePlaces";
+import { loadGoogleMapsScript, geocodeAddress } from "@/lib/googleMaps";
 import { toast } from "sonner";
-
-const GOOGLE_MAPS_API_KEY = "AIzaSyAz8jCkGRyZuOQLPOA5QpAAJPvhBK0e4iU";
 
 const PIN_HEX: Record<string, string> = {
   stays: "#5B6B8A",
@@ -14,42 +12,7 @@ const PIN_HEX: Record<string, string> = {
   sites: "#8A5B9A",
 };
 
-let mapsScriptLoaded = false;
-let mapsScriptLoading = false;
-const mapsCallbacks: (() => void)[] = [];
-
-function ensureMapsScript(): Promise<void> {
-  const g = (window as any).google;
-  if (mapsScriptLoaded && g?.maps) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (mapsScriptLoading) {
-      mapsCallbacks.push(resolve);
-      return;
-    }
-    // Check if already loaded by useGooglePlaces
-    if (g?.maps) {
-      mapsScriptLoaded = true;
-      resolve();
-      return;
-    }
-    mapsScriptLoading = true;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = () => {
-      mapsScriptLoaded = true;
-      mapsScriptLoading = false;
-      resolve();
-      mapsCallbacks.forEach((cb) => cb());
-      mapsCallbacks.length = 0;
-    };
-    script.onerror = () => {
-      mapsScriptLoading = false;
-      resolve();
-    };
-    document.head.appendChild(script);
-  });
-}
+const ensureMapsScript = loadGoogleMapsScript;
 
 /** Extract lat/lng from item, checking top-level fields and api_metadata */
 function getCoords(item: StudioItem): { lat: number; lng: number } | null {

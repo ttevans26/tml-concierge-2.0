@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MapPin, Calendar, Wallet, Hourglass } from "lucide-react";
+import { Plus, MapPin, Calendar, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore, Trip } from "@/stores/useTripStore";

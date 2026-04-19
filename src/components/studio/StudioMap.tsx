@@ -176,6 +176,7 @@ function ResyncRow({ item, folderLocation, mapInstance }: { item: StudioItem; fo
   const handleResync = useCallback(async () => {
     setSyncing(true);
     try {
+      await loadGoogleMapsScript();
       const g = (window as any).google;
       if (!g?.maps?.places) {
         toast.error("Google Maps not loaded yet");
@@ -183,10 +184,10 @@ function ResyncRow({ item, folderLocation, mapInstance }: { item: StudioItem; fo
         return;
       }
 
-      // Use FindPlaceFromQuery via PlacesService
+      // 1) Try FindPlaceFromQuery (richer metadata)
       const div = document.createElement("div");
       const service = new g.maps.places.PlacesService(div);
-      const query = `${item.title}${folderLocation ? ", " + folderLocation : ""}`;
+      const query = `${item.title}${folderLocation ? ", " + folderLocation : ""}${item.address ? ", " + item.address : ""}`;
 
       const placeResult: any = await new Promise((resolve) => {
         service.findPlaceFromQuery(
@@ -198,45 +199,61 @@ function ResyncRow({ item, folderLocation, mapInstance }: { item: StudioItem; fo
         );
       });
 
-      if (!placeResult) {
-        toast.error(`No match found for "${item.title}"`);
-        setSyncing(false);
-        return;
+      let lat: number | null = null;
+      let lng: number | null = null;
+      let placeId: string | null = null;
+      let formattedAddress: string | null = null;
+      let meta = { ...(item.api_metadata || {}) };
+
+      if (placeResult) {
+        lat = placeResult.geometry?.location?.lat() ?? null;
+        lng = placeResult.geometry?.location?.lng() ?? null;
+        placeId = placeResult.place_id || null;
+        formattedAddress = placeResult.formatted_address || null;
+        const firstPhoto = placeResult.photos?.[0];
+        const photoUrl = firstPhoto ? firstPhoto.getUrl({ maxWidth: 400, maxHeight: 300 }) : null;
+        meta = {
+          ...meta,
+          rating: placeResult.rating ?? null,
+          user_ratings_total: placeResult.user_ratings_total ?? null,
+          photo_url: photoUrl,
+        };
+      } else {
+        // 2) Fallback: plain Geocoder on address or title+location
+        const geocodeQuery = item.address || query;
+        const geo = await geocodeAddress(geocodeQuery);
+        if (!geo) {
+          toast.error(`No match found for "${item.title}"`);
+          setSyncing(false);
+          return;
+        }
+        lat = geo.lat;
+        lng = geo.lng;
+        placeId = geo.placeId;
+        formattedAddress = geo.formattedAddress;
       }
-
-      const lat = placeResult.geometry?.location?.lat() ?? null;
-      const lng = placeResult.geometry?.location?.lng() ?? null;
-      const firstPhoto = placeResult.photos?.[0];
-      const photoUrl = firstPhoto ? firstPhoto.getUrl({ maxWidth: 400, maxHeight: 300 }) : null;
-
-      const meta = {
-        ...(item.api_metadata || {}),
-        rating: placeResult.rating ?? null,
-        user_ratings_total: placeResult.user_ratings_total ?? null,
-        photo_url: photoUrl,
-      };
 
       await supabase
         .from("studio_items")
         .update({
-          google_place_id: placeResult.place_id,
+          google_place_id: placeId,
           lat,
           lng,
-          address: placeResult.formatted_address || null,
+          address: formattedAddress || item.address || null,
           api_metadata: meta,
         } as any)
         .eq("id", item.id);
 
       await fetchFolders();
       setHealed(true);
-      toast.success(`Linked "${item.title}" → ${placeResult.name}`);
+      toast.success(`Pinned "${item.title}"`);
 
-      // Fly to healed coords
       if (mapInstance && lat != null && lng != null) {
         mapInstance.panTo({ lat, lng });
         mapInstance.setZoom(15);
       }
-    } catch {
+    } catch (err) {
+      console.error("Resync error:", err);
       toast.error("Re-sync failed");
     } finally {
       setSyncing(false);

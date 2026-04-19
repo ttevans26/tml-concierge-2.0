@@ -12,8 +12,17 @@ import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 /*  Countdown Widget                                                   */
 /* ------------------------------------------------------------------ */
 
-function TripCountdown({ startDate, endDate }: { startDate?: string | null; endDate?: string | null }) {
-  if (!startDate) return null;
+function CountdownPanel({ startDate, endDate }: { startDate?: string | null; endDate?: string | null }) {
+  if (!startDate) {
+    return (
+      <div className="flex w-20 shrink-0 flex-col items-center justify-center border-l-thin border-border bg-secondary/60 px-2 py-4 sm:w-24">
+        <span className="font-playfair text-2xl font-semibold text-muted-foreground">—</span>
+        <span className="mt-1 text-center font-inter text-[8px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:text-[9px]">
+          No Date Set
+        </span>
+      </div>
+    );
+  }
 
   const today = startOfDay(new Date());
   const start = startOfDay(new Date(startDate));
@@ -22,25 +31,43 @@ function TripCountdown({ startDate, endDate }: { startDate?: string | null; endD
   const daysUntil = differenceInCalendarDays(start, today);
   const daysAfterEnd = differenceInCalendarDays(today, end);
 
-  // Trip already concluded — hide
-  if (daysAfterEnd > 0) return null;
-
-  // Trip is active (today between start and end inclusive)
-  if (daysUntil <= 0 && daysAfterEnd <= 0) {
+  // Concluded
+  if (daysAfterEnd > 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-sm border-thin border-[hsl(140_30%_55%/0.35)] bg-[hsl(140_30%_95%/0.6)] px-2 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider text-[hsl(140_35%_30%)]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[hsl(140_45%_45%)]" />
-        Active Now
-      </span>
+      <div className="flex w-20 shrink-0 flex-col items-center justify-center border-l-thin border-border bg-muted/70 px-2 py-4 sm:w-24">
+        <span className="font-playfair text-xl font-semibold text-muted-foreground sm:text-2xl">✓</span>
+        <span className="mt-1 text-center font-inter text-[8px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:text-[9px]">
+          Concluded
+        </span>
+      </div>
     );
   }
 
-  // Upcoming
+  // Active
+  if (daysUntil <= 0 && daysAfterEnd <= 0) {
+    return (
+      <div className="flex w-20 shrink-0 flex-col items-center justify-center border-l-thin border-[hsl(140_30%_55%/0.4)] bg-[hsl(140_30%_92%)] px-2 py-4 sm:w-24">
+        <span className="h-2 w-2 rounded-full bg-[hsl(140_45%_45%)]" />
+        <span className="mt-2 text-center font-playfair text-base font-bold text-[hsl(140_35%_25%)] sm:text-lg">
+          Active
+        </span>
+        <span className="mt-1 text-center font-inter text-[8px] font-semibold uppercase tracking-[0.12em] text-[hsl(140_35%_30%)] sm:text-[9px]">
+          In Progress
+        </span>
+      </div>
+    );
+  }
+
+  // Upcoming — Hero panel
   return (
-    <span className="inline-flex items-center gap-1 font-inter text-[10px] font-medium tracking-wide text-accent/90">
-      <Hourglass className="h-3 w-3" strokeWidth={1.5} />
-      T-minus {daysUntil} {daysUntil === 1 ? "day" : "days"}
-    </span>
+    <div className="flex w-20 shrink-0 flex-col items-center justify-center bg-accent px-2 py-4 text-accent-foreground sm:w-24">
+      <span className="font-playfair text-3xl font-bold leading-none tracking-tight sm:text-4xl">
+        {daysUntil}
+      </span>
+      <span className="mt-2 text-center font-inter text-[8px] font-semibold uppercase leading-tight tracking-[0.12em] sm:text-[9px]">
+        Days to<br />Departure
+      </span>
+    </div>
   );
 }
 

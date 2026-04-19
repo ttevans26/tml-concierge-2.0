@@ -28,10 +28,6 @@ function getGoogle(): any {
   return (window as any).google;
 }
 
-function getGoogle(): any {
-  return (window as any).google;
-}
-
 export function useGooglePlaces(
   options?: { types?: string[]; enabled?: boolean }
 ) {

@@ -84,36 +84,42 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         : null;
 
   return (
-    <div onClick={onClick} className="group flex cursor-pointer flex-col justify-between rounded-sm border-thin border-border bg-card p-6 transition-shadow hover:shadow-md">
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="font-playfair text-lg font-semibold text-foreground leading-snug">
+    <div
+      onClick={onClick}
+      className="group flex cursor-pointer overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md"
+    >
+      {/* Left — Trip Info */}
+      <div className="flex min-w-0 flex-1 flex-col justify-between p-5 sm:p-6">
+        <div className="min-w-0">
+          <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
             {trip.name}
           </h3>
-          <TripCountdown startDate={trip.start_date} endDate={trip.end_date} />
+
+          {trip.destination && (
+            <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={1.5} />
+              <span className="truncate">{trip.destination}</span>
+            </p>
+          )}
+
+          {dateRange && (
+            <p className="mt-1.5 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={1.5} />
+              <span className="truncate">{dateRange}</span>
+            </p>
+          )}
         </div>
 
-        {trip.destination && (
-          <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
-            {trip.destination}
-          </p>
-        )}
-
-        {dateRange && (
-          <p className="mt-1.5 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
-            {dateRange}
+        {trip.total_trip_budget != null && (
+          <p className="mt-4 flex items-center gap-1.5 font-inter text-sm font-medium text-foreground">
+            <Wallet className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={1.5} />
+            ${Number(trip.total_trip_budget).toLocaleString()}
           </p>
         )}
       </div>
 
-      {trip.total_trip_budget != null && (
-        <p className="mt-4 flex items-center gap-1.5 font-inter text-sm font-medium text-foreground">
-          <Wallet className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
-          ${Number(trip.total_trip_budget).toLocaleString()}
-        </p>
-      )}
+      {/* Right — Countdown Hero Panel */}
+      <CountdownPanel startDate={trip.start_date} endDate={trip.end_date} />
     </div>
   );
 }

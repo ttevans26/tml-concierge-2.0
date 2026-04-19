@@ -24,34 +24,8 @@ export interface PlacePrediction {
   };
 }
 
-let scriptLoaded = false;
-let scriptLoading = false;
-const loadCallbacks: (() => void)[] = [];
-
-function loadGoogleMapsScript(): Promise<void> {
-  if (scriptLoaded && (window as any).google?.maps?.places) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (scriptLoading) {
-      loadCallbacks.push(resolve);
-      return;
-    }
-    scriptLoading = true;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = () => {
-      scriptLoaded = true;
-      scriptLoading = false;
-      resolve();
-      loadCallbacks.forEach((cb) => cb());
-      loadCallbacks.length = 0;
-    };
-    script.onerror = () => {
-      scriptLoading = false;
-      resolve();
-    };
-    document.head.appendChild(script);
-  });
+function getGoogle(): any {
+  return (window as any).google;
 }
 
 function getGoogle(): any {

@@ -20,13 +20,15 @@ export default function AppHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur-sm">
-        {/* Left — Brand */}
+      <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur-sm sm:h-20 sm:px-6">
+        {/* Left — Brand: Luxury Seal */}
         <button
           onClick={() => navigate("/")}
-          className="font-playfair text-base font-semibold tracking-tight text-foreground"
+          className="group shrink-0 border-thin border-accent/60 px-3 py-1.5 transition-colors hover:border-accent sm:px-4 sm:py-2"
         >
-          TML Concierge
+          <span className="font-playfair text-base font-semibold tracking-[0.08em] text-accent sm:text-xl">
+            TML <span className="font-normal italic">Concierge</span>
+          </span>
         </button>
 
         {/* Center — Nav */}
@@ -38,13 +40,16 @@ export default function AppHeader() {
                 key={item.label}
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  "rounded-sm px-3 py-1.5 font-inter text-xs font-medium transition-colors",
+                  "relative px-4 py-2 font-inter text-sm font-medium transition-colors sm:px-5 sm:text-base",
                   active
-                    ? "bg-secondary text-foreground"
+                    ? "bg-accent/10 text-accent"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {item.label}
+                {active && (
+                  <span className="absolute inset-x-3 -bottom-px h-[2px] bg-accent" />
+                )}
               </button>
             );
           })}
@@ -55,7 +60,7 @@ export default function AppHeader() {
           <Button
             variant="ghost"
             size="sm"
-            className="hidden gap-1.5 font-inter text-xs text-muted-foreground hover:text-foreground sm:inline-flex"
+            className="hidden gap-1.5 font-inter text-xs text-muted-foreground hover:text-foreground md:inline-flex"
             onClick={() => setScheduleOpen(true)}
           >
             <CalendarClock className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
@@ -65,7 +70,7 @@ export default function AppHeader() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            className="h-10 w-10 text-muted-foreground hover:text-foreground"
           >
             <Bell className="h-4 w-4" strokeWidth={1.5} />
           </Button>
@@ -73,7 +78,7 @@ export default function AppHeader() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            className="h-10 w-10 text-muted-foreground hover:text-foreground"
             onClick={() => setProfileOpen(true)}
           >
             <User className="h-4 w-4" strokeWidth={1.5} />

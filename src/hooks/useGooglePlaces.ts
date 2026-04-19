@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-
-const GOOGLE_MAPS_API_KEY = "AIzaSyAz8jCkGRyZuOQLPOA5QpAAJPvhBK0e4iU";
+import { loadGoogleMapsScript } from "@/lib/googleMaps";
 
 export interface PlaceResult {
   name: string;

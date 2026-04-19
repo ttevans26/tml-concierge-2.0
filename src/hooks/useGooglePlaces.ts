@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-
-const GOOGLE_MAPS_API_KEY = "AIzaSyAz8jCkGRyZuOQLPOA5QpAAJPvhBK0e4iU";
+import { loadGoogleMapsScript } from "@/lib/googleMaps";
 
 export interface PlaceResult {
   name: string;
@@ -23,36 +22,6 @@ export interface PlacePrediction {
     main_text: string;
     secondary_text: string;
   };
-}
-
-let scriptLoaded = false;
-let scriptLoading = false;
-const loadCallbacks: (() => void)[] = [];
-
-function loadGoogleMapsScript(): Promise<void> {
-  if (scriptLoaded && (window as any).google?.maps?.places) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (scriptLoading) {
-      loadCallbacks.push(resolve);
-      return;
-    }
-    scriptLoading = true;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = () => {
-      scriptLoaded = true;
-      scriptLoading = false;
-      resolve();
-      loadCallbacks.forEach((cb) => cb());
-      loadCallbacks.length = 0;
-    };
-    script.onerror = () => {
-      scriptLoading = false;
-      resolve();
-    };
-    document.head.appendChild(script);
-  });
 }
 
 function getGoogle(): any {

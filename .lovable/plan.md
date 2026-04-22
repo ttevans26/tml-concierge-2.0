@@ -1,103 +1,73 @@
-# Mobile Responsiveness Audit & Plan
 
-**Goal:** Optimize the app for mobile (≤ `md`, primarily ≤ `sm`) **without changing the desktop design or any business logic**. Use Tailwind/shadcn breakpoints only (`sm` 640, `md` 768, `lg` 1024, `xl` 1280).
 
-**Non-goals:** No visual redesign on desktop. No state, routing, or data flow changes. No new features.
+## Plan: Calendar Month View for Trip Stays
 
----
+Add a new "Calendar" view toggle to the Trip Workspace that displays stays as colored bars across a month grid — like Apple Calendar's month view — so users can see at a glance where they are sleeping each night and where transitions happen.
 
-## 1. Audit — Current Issues by Screen
+### What the user gets
 
-### A. App Shell (`AppHeader.tsx`, `AppLayout.tsx`)
-- ✅ Header already hides nav (`sm:flex`) and "Plan w/ Concierge" (`sm:inline-flex`) on mobile.
-- ❌ **Brand → nav is hidden on `<sm` with no replacement** — user has no way to reach `/studio` or `/tools` from mobile. Need a mobile menu (sheet) trigger.
-- ❌ Header right cluster icon buttons are `h-8 w-8` (32px). Memory rule requires **44px touch targets** on mobile.
+- A view-mode switcher in the Matrix Grid header: **Matrix** (current horizontal grid) ⟷ **Calendar** (new month view).
+- The Calendar view shows the trip's date range laid out as a standard 7-column month grid (Sun–Sat), with multiple weeks stacked vertically.
+- Each unique stay (e.g., "Hôtel du Cap-Eden-Roc", "Villa La Mauresque") renders as a continuous colored bar spanning all the consecutive nights it occupies, with the location name written inside the bar.
+- Each distinct stay/location gets its own color, deterministically assigned from a refined palette (sage, dusty rose, slate, terracotta, lavender, ochre, etc.) tuned to the Quiet Luxury aesthetic.
+- **Overlap handling**: on transition days (checkout of one stay = check-in of another), both bars appear stacked in the same day cell with a subtle gradient overlap, so the handover is visually clear.
+- Clicking a bar opens the existing `EditItemDialog` for that stay.
+- Days outside the trip range are dimmed; days inside but with no stay show a subtle "—" placeholder.
 
-### B. Dashboard (`pages/Index.tsx`)
-- ✅ Card grid is responsive: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`.
-- ⚠️ Header `flex items-end justify-between` with `text-3xl` H1 + button can crowd 320–375px. Consider stacking on `<sm`.
+### Visual reference
 
-### C. Trip Workspace (`pages/TripWorkspace.tsx`)
-- ❌ **Critical:** Both side panels use `hidden ... lg:block`, so on `<lg` the user sees **only the Matrix Grid** — no access to Studio Sidebar or Budget Sidebar.
-- `StudioSidebar` already has its own mobile sheet (FAB at `bottom-20 left-4`), but because `TripWorkspace` wraps it in `hidden lg:block`, **the mobile sheet never renders on mobile**.
-- `BudgetSidebar` has no mobile equivalent → completely inaccessible on phones/tablets.
+```text
+┌─────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│ Sun │ Mon │ Tue │ Wed │ Thu │ Fri │ Sat │
+├─────┼─────┼─────┼─────┼─────┼─────┼─────┤
+│ ··· │ ··· │  3  │  4  │  5  │  6  │  7  │
+│     │     │ ▓▓▓▓▓▓▓ Eden-Roc ▓▓▓▓▓▓▓▓▓▓▓│
+├─────┼─────┼─────┼─────┼─────┼─────┼─────┤
+│  8  │  9  │ 10  │ 11  │ 12  │ 13  │ 14  │
+│ ▓▓▓ Eden-Roc ▓▓│▒▒▒▒▒▒ Mauresque ▒▒▒▒▒▒│
+│        (overlap on day 10)              │
+└─────┴─────┴─────┴─────┴─────┴─────┴─────┘
+```
 
-### D. Studio Page (`pages/Studio.tsx`)
-- ❌ **Critical:** `ResizablePanelGroup direction="horizontal"` with three panels (22/48/30) is unusable on mobile — three panels squeezed into 375px gives ~80px each. Resizable handles are also hard to touch.
-- ❌ Map (`StudioMap`) at ~80px wide is meaningless.
+### Scope
 
-### E. StudioWorkbench (`components/studio/StudioWorkbench.tsx`)
-- ⚠️ Header row: title block + "Sort by Proximity" + "Add Item" buttons on a single flex row may overflow `<sm`.
-- ⚠️ Pending Review tray rows pack: icon + title + Select(w-24) + 2 icon buttons → cramped on narrow viewports.
-- ⚠️ Touch targets: small icon buttons (`p-1` ≈ 24px).
+In scope:
+- New Calendar month view component for stays.
+- View toggle in MatrixGrid header.
+- Stay-grouping logic that collapses per-night `itinerary_items` into contiguous ranges by `title` + `location_name`.
+- Deterministic color palette assignment per unique stay.
+- Click-to-edit on bars.
+- Mobile responsive (stacks into a vertical agenda-style list under `sm`).
 
-### F. StudioVault & StudioSidebar
-- ✅ StudioSidebar already supports mobile via `Sheet`.
-- ⚠️ FolderRow delete button `hidden ... group-hover:block` is unreachable on touch (no hover).
+Out of scope (can follow up):
+- Showing dining/activity/logistics items in the calendar (stays only for v1, matching the "where am I sleeping" mental model).
+- Drag-to-resize stay durations from the calendar (use Edit dialog for now).
+- Cross-month trips spanning calendar boundaries — handled but rendered as a continuous multi-week grid covering only the trip's span (no full empty months).
 
-### G. Modals & Dialogs
-- shadcn Dialog default width OK on mobile. Will spot-fix only if overflow observed.
+### Technical details
 
-### H. MatrixGrid
-- Horizontal-scroll spreadsheet is intentional. **No structural change.**
+**New file**: `src/components/workspace/CalendarStaysView.tsx`
+- Props: none (reads `activeTrip` and `itineraryItems` from `useTripStore`).
+- Build week rows using `date-fns` (`startOfWeek`, `endOfWeek`, `eachDayOfInterval`, `differenceInCalendarDays`) covering `trip.start_date` through `trip.end_date`, padded to whole weeks.
+- Group stays: filter `itineraryItems` where `category === "stays"`, sort by `date`, then collapse consecutive dates with the same `title` (fallback `location_name`) into `{ key, title, startDate, endDate, items[], colorIndex }` segments.
+- Color assignment: hash the stay's `title` to an index into a curated 8-color HSL palette defined in `tailwind.config.ts` extension or inline (muted sage `142 25% 55%`, terracotta `15 45% 60%`, slate `215 20% 50%`, ochre `40 50% 55%`, dusty rose `350 30% 65%`, lavender `260 25% 60%`, teal `185 30% 50%`, bronze `36 45% 50%`).
+- Rendering: CSS Grid with 7 columns per week row. Each week renders day-number cells in one layer, and stay bars in an absolutely-positioned overlay layer spanning `grid-column: start / end+1`. Bars get rounded-left if they're the segment start in that week, rounded-right if the end, square otherwise (handles wrapping across week boundaries).
+- Transition overlap: when two segments share a date (checkout = next check-in), render the outgoing segment ending at `day + 0.5` and the incoming starting at `day + 0.5` using a `grid-template-columns: repeat(14, 1fr)` half-day trick OR layer two bars with `clip-path: polygon` for a diagonal split. Use the polygon approach for cleaner Apple-Calendar-style diagonal handover.
+- Bar height: `~22px`, stacked if multiple bars in same row (rare beyond the transition case).
+- Click handler: `onClick={() => setEditingItem(segment.items[0])}` opens `EditItemDialog`.
+- Mobile (`<sm`): replace the 7-col grid with a vertical agenda list grouped by stay segment, each shown as a colored card with date range and night count.
 
-### I. Auth pages
-- Centered card layouts, likely fine. Touch only if broken on `375px`.
+**Edit**: `src/components/workspace/MatrixGrid.tsx`
+- Add `viewMode` state (`"matrix" | "calendar"`), persist to `localStorage` keyed `tml-view-mode`.
+- Add a small segmented toggle in the header (using existing `Tabs` or a two-button group styled to match), placed left of the Smart Pull button.
+- When `viewMode === "calendar"`, render `<CalendarStaysView />` in place of the scrollable matrix; keep the header, Smart Pull tray, and dialogs intact.
 
----
+**No DB changes.** All data comes from the existing per-night stay records.
 
-## 2. Solution — Per-File Plan
+**No new dependencies.** Uses `date-fns` (already installed), Tailwind, Lucide.
 
-Strict rule: **mobile-only additions** via `<sm`/`<md`/`<lg` classes. **Never** alter existing `lg:`/`md:`/`sm:` classes that drive desktop layout, except where adding a missing mobile fallback (e.g., removing `hidden lg:block` and replacing with a Sheet trigger that's `lg:hidden`).
+### Files touched
 
-### 1) `src/components/AppHeader.tsx` — Mobile nav menu
-- Add a `Menu` icon button visible only on `<sm` (`sm:hidden`) on the **left** beside the brand, opening a `Sheet` (side="left") containing the nav items + "Plan w/ Concierge".
-- Keep desktop layout untouched.
-- Bump icon buttons to `h-10 w-10` on `<sm` only (`h-10 w-10 sm:h-8 sm:w-8`).
+- `src/components/workspace/CalendarStaysView.tsx` (new)
+- `src/components/workspace/MatrixGrid.tsx` (add view toggle + conditional render)
 
-### 2) `src/pages/TripWorkspace.tsx` — Make sidebars reachable on mobile/tablet
-- Remove `hidden lg:block` wrappers; render `StudioSidebar` and `BudgetSidebar` directly. Each component decides via `useIsMobile()` whether to render inline (desktop) or as a Sheet trigger (mobile).
-- Layout: keep `lg:w-[20%]` widths exactly. On `<lg`, Matrix Grid takes full width and the two sidebars become floating Sheet triggers (FABs).
-
-### 3) `src/components/workspace/BudgetSidebar.tsx` — Add mobile Sheet (mirror StudioSidebar pattern)
-- Wrap content with `useIsMobile()`. On mobile: render a fixed FAB at `bottom-20 right-4` (Wallet icon) → opens bottom Sheet with the existing BudgetSidebar contents.
-- On desktop: unchanged.
-
-### 4) `src/pages/Studio.tsx` — Mobile tabs replace 3-column resizable
-- On `<lg`, replace `ResizablePanelGroup` with shadcn `Tabs` (Vault / Workbench / Map), each filling height. Sticky tab list at top.
-- On `lg+`, render the existing `ResizablePanelGroup` exactly as today.
-
-### 5) `src/components/studio/StudioWorkbench.tsx` — Mobile-friendly header & rows
-- Header: `flex-col gap-2 sm:flex-row sm:items-center sm:justify-between`.
-- Action buttons row: wrap on `<sm` (`flex-wrap`).
-- Pending Review rows: `flex-wrap` with `min-w-0` on the title block.
-- Bump icon buttons (accept/dismiss) from `p-1` to `p-2` on mobile.
-
-### 6) `src/components/studio/StudioVault.tsx` — Touch-visible delete
-- Change `hidden ... group-hover:block` to `block sm:hidden sm:group-hover:block`.
-
-### 7) Modals — Verify & spot-fix only if overflow
-- Add `max-h-[90vh] overflow-y-auto` minimally where needed. Don't preemptively change all dialogs.
-
-### 8) MatrixGrid — Verify only
-- Confirm horizontal scroll works on touch. No structural changes unless regression observed.
-
----
-
-## 3. Order of Implementation
-
-1. `AppHeader` — mobile menu sheet (unblocks nav on phones).
-2. `TripWorkspace` — remove `hidden lg:block` wrappers.
-3. `BudgetSidebar` — add mobile Sheet + FAB.
-4. `Studio` page — Tabs on `<lg`, ResizablePanelGroup on `lg+`.
-5. `StudioWorkbench` — header wrapping + touch targets.
-6. `StudioVault` — visible delete on touch.
-7. Manual QA at `360`, `375`, `768`, `1024`, `1311`.
-
----
-
-## 4. Risks & Mitigations
-
-- **Risk:** Changing `TripWorkspace` wrappers could affect desktop layout. **Mitigation:** Keep `lg:w-[20%]` widths exactly; mobile branches use `fixed` FABs that don't take flow space.
-- **Risk:** Tabs on Studio page change UX on tablet. **Mitigation:** Use `lg:` breakpoint (1024px) — wide tablets in landscape get desktop, portrait tablets get tabs.
-- **Risk:** Touch target bumps could shift desktop spacing. **Mitigation:** Use `sm:`-prefixed sizes so desktop sizes are explicitly preserved.

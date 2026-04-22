@@ -13,6 +13,7 @@ import { Mail, Loader2 } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
+import CalendarStaysView from "./CalendarStaysView";
 import {
   Dialog,
   DialogContent,
@@ -86,6 +87,21 @@ export default function MatrixGrid() {
   const [extracting, setExtracting] = useState(false);
   const [pendingItems, setPendingItems] = useState<ExtractedItem[]>([]);
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
+
+  // View mode: matrix grid vs. calendar month view (persisted)
+  const [viewMode, setViewMode] = useState<"matrix" | "calendar">(() => {
+    if (typeof window === "undefined") return "matrix";
+    const saved = window.localStorage.getItem("tml-view-mode");
+    return saved === "calendar" ? "calendar" : "matrix";
+  });
+  const changeViewMode = (m: "matrix" | "calendar") => {
+    setViewMode(m);
+    try {
+      window.localStorage.setItem("tml-view-mode", m);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const days = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) return [];
@@ -301,9 +317,32 @@ export default function MatrixGrid() {
       <div className="shrink-0 border-b border-border px-4 py-3">
         <div className="flex items-center justify-between">
           <h2 className="font-playfair text-sm font-semibold text-foreground">
-            Matrix Grid
+            {viewMode === "matrix" ? "Matrix Grid" : "Calendar"}
           </h2>
           <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="hidden sm:flex items-center rounded-sm border border-border overflow-hidden">
+              <button
+                onClick={() => changeViewMode("matrix")}
+                className={`px-2.5 py-1 font-inter text-[11px] min-h-[32px] touch-manipulation transition-colors ${
+                  viewMode === "matrix"
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-background text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Matrix
+              </button>
+              <button
+                onClick={() => changeViewMode("calendar")}
+                className={`px-2.5 py-1 font-inter text-[11px] min-h-[32px] border-l border-border touch-manipulation transition-colors ${
+                  viewMode === "calendar"
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-background text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Calendar
+              </button>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -316,6 +355,29 @@ export default function MatrixGrid() {
             <ShareControls />
             <TripSettingsModal />
           </div>
+        </div>
+        {/* Mobile view-mode toggle */}
+        <div className="mt-2 flex sm:hidden items-center rounded-sm border border-border overflow-hidden w-fit">
+          <button
+            onClick={() => changeViewMode("matrix")}
+            className={`px-3 py-1 font-inter text-[11px] min-h-[36px] touch-manipulation transition-colors ${
+              viewMode === "matrix"
+                ? "bg-accent text-accent-foreground"
+                : "bg-background text-muted-foreground"
+            }`}
+          >
+            Matrix
+          </button>
+          <button
+            onClick={() => changeViewMode("calendar")}
+            className={`px-3 py-1 font-inter text-[11px] min-h-[36px] border-l border-border touch-manipulation transition-colors ${
+              viewMode === "calendar"
+                ? "bg-accent text-accent-foreground"
+                : "bg-background text-muted-foreground"
+            }`}
+          >
+            Calendar
+          </button>
         </div>
         <p className="mt-0.5 font-inter text-[11px] text-muted-foreground">
           {days.length} day{days.length !== 1 ? "s" : ""} · {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")}
@@ -331,6 +393,9 @@ export default function MatrixGrid() {
       />
 
       {/* Scrollable matrix */}
+      {viewMode === "calendar" ? (
+        <CalendarStaysView />
+      ) : (
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
           {/* Category labels column — sticky left */}
@@ -407,6 +472,7 @@ export default function MatrixGrid() {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+      )}
 
       {activeTrip && (
         <AddItemDialog

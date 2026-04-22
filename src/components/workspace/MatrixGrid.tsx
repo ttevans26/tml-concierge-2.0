@@ -13,6 +13,7 @@ import { Mail, Loader2 } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
+import CalendarStaysView from "./CalendarStaysView";
 import {
   Dialog,
   DialogContent,
@@ -86,6 +87,21 @@ export default function MatrixGrid() {
   const [extracting, setExtracting] = useState(false);
   const [pendingItems, setPendingItems] = useState<ExtractedItem[]>([]);
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
+
+  // View mode: matrix grid vs. calendar month view (persisted)
+  const [viewMode, setViewMode] = useState<"matrix" | "calendar">(() => {
+    if (typeof window === "undefined") return "matrix";
+    const saved = window.localStorage.getItem("tml-view-mode");
+    return saved === "calendar" ? "calendar" : "matrix";
+  });
+  const changeViewMode = (m: "matrix" | "calendar") => {
+    setViewMode(m);
+    try {
+      window.localStorage.setItem("tml-view-mode", m);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const days = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) return [];

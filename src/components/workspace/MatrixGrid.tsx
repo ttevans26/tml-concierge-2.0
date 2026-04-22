@@ -393,6 +393,9 @@ export default function MatrixGrid() {
       />
 
       {/* Scrollable matrix */}
+      {viewMode === "calendar" ? (
+        <CalendarStaysView />
+      ) : (
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
           {/* Category labels column — sticky left */}

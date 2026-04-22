@@ -472,6 +472,7 @@ export default function MatrixGrid() {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+      )}
 
       {activeTrip && (
         <AddItemDialog

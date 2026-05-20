@@ -82,6 +82,17 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface ChecklistTask {
+  id: string;
+  trip_id: string;
+  task_text: string;
+  is_completed: boolean;
+  is_ai_generated: boolean;
+  context_trigger?: string;
+  detail?: string;
+  dismissed?: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Store shape                                                       */
 /* ------------------------------------------------------------------ */
@@ -98,6 +109,15 @@ interface TripStore {
   /* anchor */
   activeAnchor: ItineraryItem | null;
   setActiveAnchor: (item: ItineraryItem | null) => void;
+
+  /* checklist (client-side, sandbox-ready) */
+  checklistTasks: ChecklistTask[];
+  addChecklistTask: (input: { trip_id: string; task_text: string }) => void;
+  toggleChecklistTask: (id: string) => void;
+  updateChecklistTask: (id: string, patch: Partial<ChecklistTask>) => void;
+  deleteChecklistTask: (id: string) => void;
+  acceptAiTask: (id: string) => void;
+  dismissAiTask: (id: string) => void;
 
   /* actions */
   fetchTrips: () => Promise<void>;

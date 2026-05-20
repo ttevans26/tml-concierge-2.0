@@ -162,6 +162,43 @@ export const useTripStore = create<TripStore>((set, get) => ({
 
   setActiveAnchor: (item) => set({ activeAnchor: item }),
 
+  /* ---- Checklist (client-side) ---- */
+  checklistTasks: [],
+  addChecklistTask: ({ trip_id, task_text }) => {
+    const task: ChecklistTask = {
+      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      trip_id,
+      task_text,
+      is_completed: false,
+      is_ai_generated: false,
+    };
+    set({ checklistTasks: [...get().checklistTasks, task] });
+  },
+  toggleChecklistTask: (id) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) =>
+        t.id === id ? { ...t, is_completed: !t.is_completed } : t,
+      ),
+    }),
+  updateChecklistTask: (id, patch) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    }),
+  deleteChecklistTask: (id) =>
+    set({ checklistTasks: get().checklistTasks.filter((t) => t.id !== id) }),
+  acceptAiTask: (id) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) =>
+        t.id === id ? { ...t, is_ai_generated: false } : t,
+      ),
+    }),
+  dismissAiTask: (id) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) =>
+        t.id === id ? { ...t, dismissed: true } : t,
+      ),
+    }),
+
   /* ---- Fetch ---- */
 
   fetchTrips: async () => {

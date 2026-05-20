@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Check, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Check, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useTripStore, type Trip, type ChecklistTask } from "@/stores/useTripStore";
 import { deriveAiTasks } from "@/lib/checklistBackfill";
 import { Button } from "@/components/ui/button";

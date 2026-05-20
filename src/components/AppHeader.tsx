@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, User, CalendarClock } from "lucide-react";
+import { Bell, User, CalendarClock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ProfileDrawer from "@/components/ProfileDrawer";
@@ -57,6 +57,25 @@ export default function AppHeader() {
 
         {/* Right — Actions */}
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="hidden gap-1.5 font-inter text-xs text-muted-foreground hover:text-accent md:inline-flex"
+            onClick={() => navigate("/network")}
+          >
+            <Users className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
+            Travel Network
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Travel Network"
+            className="h-10 w-10 text-muted-foreground hover:text-foreground md:hidden"
+            onClick={() => navigate("/network")}
+          >
+            <Users className="h-4 w-4" strokeWidth={1.5} />
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"

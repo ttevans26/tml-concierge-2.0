@@ -1,73 +1,96 @@
+## Plan: Tools Workspace — Warnings Engine + AI Checklist
 
-
-## Plan: Calendar Month View for Trip Stays
-
-Add a new "Calendar" view toggle to the Trip Workspace that displays stays as colored bars across a month grid — like Apple Calendar's month view — so users can see at a glance where they are sleeping each night and where transitions happen.
+Build the missing `/tools` route and populate it with two flagship widgets: a contextual Real-Time Travel Warnings feed and a dual-track Pre-Travel Preparedness Checklist with AI backfills. All work is client-side (Zustand + mock data), in keeping with MVP `/dev-sandbox` scope.
 
 ### What the user gets
 
-- A view-mode switcher in the Matrix Grid header: **Matrix** (current horizontal grid) ⟷ **Calendar** (new month view).
-- The Calendar view shows the trip's date range laid out as a standard 7-column month grid (Sun–Sat), with multiple weeks stacked vertically.
-- Each unique stay (e.g., "Hôtel du Cap-Eden-Roc", "Villa La Mauresque") renders as a continuous colored bar spanning all the consecutive nights it occupies, with the location name written inside the bar.
-- Each distinct stay/location gets its own color, deterministically assigned from a refined palette (sage, dusty rose, slate, terracotta, lavender, ochre, etc.) tuned to the Quiet Luxury aesthetic.
-- **Overlap handling**: on transition days (checkout of one stay = check-in of another), both bars appear stacked in the same day cell with a subtle gradient overlap, so the handover is visually clear.
-- Clicking a bar opens the existing `EditItemDialog` for that stay.
-- Days outside the trip range are dimmed; days inside but with no stay show a subtle "—" placeholder.
+A new `Tools` page with a two-column editorial layout (stacks on mobile):
 
-### Visual reference
+- **Trip selector** at the top — chooses which trip in `useTripStore.trips` drives the contextual filtering (defaults to the next upcoming or `activeTrip`).
+- **Left / main column — Pre-Travel Preparedness Checklist**
+  - Track A: manual entries with add input, toggle checkbox, inline edit, delete.
+  - Track B: "✨ Suggested Logistics Insights" — AI-backfilled items rendered with a subtle bronze-beige `✨` glyph, italic Playfair subtext explaining the rationale (e.g., IDP rule for Italy), and an "Accept" affordance that promotes them into Track A as a confirmed task. Dismiss hides for that trip.
+  - Backfill rules derived from `itineraryItems` of the selected trip:
+    - Car rental in IT/ES/JP (logistics item whose title/description matches `car|rental|hertz|avis|sixt|europcar` and whose location resolves to those countries) → "Obtain an International Driving Permit (IDP)".
+    - Any stay/logistics in EU country list → "Verify biometric passport valid 3+ months past return date" + EES/ETIAS note.
+    - Trip duration > 7 days → "Arrange mail / package hold".
+    - Trip start within 14 days and no logistics item containing `flight|airline` → "Confirm online check-in window".
+- **Right column — Real-Time Travel Warnings Engine**
+  - Card list filtered to warnings whose `regions` intersect the selected trip's destinations AND whose `valid_from/valid_to` overlap the trip dates.
+  - Card anatomy: small uppercase Inter category eyebrow ("REGULATORY", "HEALTH", "ENVIRONMENTAL"), Playfair headline, 2–3 line Inter body, muted-amber 0.5px left border for advisories and forest-green (`#1B3022`) left border for regulatory/info. No red, no banners, no fills.
+  - Empty state: short serif line "No active advisories for this itinerary."
 
-```text
-┌─────┬─────┬─────┬─────┬─────┬─────┬─────┐
-│ Sun │ Mon │ Tue │ Wed │ Thu │ Fri │ Sat │
-├─────┼─────┼─────┼─────┼─────┼─────┼─────┤
-│ ··· │ ··· │  3  │  4  │  5  │  6  │  7  │
-│     │     │ ▓▓▓▓▓▓▓ Eden-Roc ▓▓▓▓▓▓▓▓▓▓▓│
-├─────┼─────┼─────┼─────┼─────┼─────┼─────┤
-│  8  │  9  │ 10  │ 11  │ 12  │ 13  │ 14  │
-│ ▓▓▓ Eden-Roc ▓▓│▒▒▒▒▒▒ Mauresque ▒▒▒▒▒▒│
-│        (overlap on day 10)              │
-└─────┴─────┴─────┴─────┴─────┴─────┴─────┘
+### Visual rules (strict)
+
+- Cream `#FDFCF8` bg, Onyx `#1A1A1A` text, Bronze Beige `#9B7E4B` accents, 0.5px borders, 2px radii.
+- Playfair for all headers / item titles; Inter for body, labels, checkboxes.
+- Whitespace-forward: section gap `space-y-10`, card padding `p-6`, no shadows beyond `shadow-sm`.
+- Warning accent colors added as semantic tokens in `index.css`: `--warning-forest: 145 30% 15%` and `--warning-amber: 38 55% 50%`.
+- Fully responsive: single column under `md`, two columns at `md+`.
+
+### Mock data (sandbox)
+
+A new `src/data/mockTravelWarnings.ts` exports a typed array of ~6 warnings spanning regulatory (EU EES/ETIAS, UK ETA), health (regional advisory), and environmental (heatwave/strike). Each entry has `id`, `category`, `title`, `body`, `severity` (`info | advisory`), `regions` (ISO country codes + free-text region match), `valid_from`, `valid_to`, `source_label`.
+
+### State (Zustand)
+
+Extend `useTripStore` with:
+
+```ts
+interface ChecklistTask {
+  id: string;
+  trip_id: string;
+  task_text: string;
+  is_completed: boolean;
+  is_ai_generated: boolean;
+  context_trigger?: string;
+  detail?: string; // explanatory subtext for AI items
+  dismissed?: boolean;
+}
+
+checklistTasks: ChecklistTask[];
+addChecklistTask(input): void;
+toggleChecklistTask(id): void;
+updateChecklistTask(id, patch): void;
+deleteChecklistTask(id): void;
+acceptAiTask(id): void;   // flips is_ai_generated=false, keeps text
+dismissAiTask(id): void;  // sets dismissed=true
 ```
 
-### Scope
+All ops are optimistic and local — no Supabase writes in this pass (matches MVP/sandbox guidance). State seeded with mock manual + AI tasks in dev-sandbox.
 
-In scope:
-- New Calendar month view component for stays.
-- View toggle in MatrixGrid header.
-- Stay-grouping logic that collapses per-night `itinerary_items` into contiguous ranges by `title` + `location_name`.
-- Deterministic color palette assignment per unique stay.
-- Click-to-edit on bars.
-- Mobile responsive (stacks into a vertical agenda-style list under `sm`).
+### Backfill logic
 
-Out of scope (can follow up):
-- Showing dining/activity/logistics items in the calendar (stays only for v1, matching the "where am I sleeping" mental model).
-- Drag-to-resize stay durations from the calendar (use Edit dialog for now).
-- Cross-month trips spanning calendar boundaries — handled but rendered as a continuous multi-week grid covering only the trip's span (no full empty months).
+Pure derivation in `src/lib/checklistBackfill.ts`:
 
-### Technical details
+```ts
+deriveAiTasks(trip, itineraryItems): ChecklistTask[]
+```
 
-**New file**: `src/components/workspace/CalendarStaysView.tsx`
-- Props: none (reads `activeTrip` and `itineraryItems` from `useTripStore`).
-- Build week rows using `date-fns` (`startOfWeek`, `endOfWeek`, `eachDayOfInterval`, `differenceInCalendarDays`) covering `trip.start_date` through `trip.end_date`, padded to whole weeks.
-- Group stays: filter `itineraryItems` where `category === "stays"`, sort by `date`, then collapse consecutive dates with the same `title` (fallback `location_name`) into `{ key, title, startDate, endDate, items[], colorIndex }` segments.
-- Color assignment: hash the stay's `title` to an index into a curated 8-color HSL palette defined in `tailwind.config.ts` extension or inline (muted sage `142 25% 55%`, terracotta `15 45% 60%`, slate `215 20% 50%`, ochre `40 50% 55%`, dusty rose `350 30% 65%`, lavender `260 25% 60%`, teal `185 30% 50%`, bronze `36 45% 50%`).
-- Rendering: CSS Grid with 7 columns per week row. Each week renders day-number cells in one layer, and stay bars in an absolutely-positioned overlay layer spanning `grid-column: start / end+1`. Bars get rounded-left if they're the segment start in that week, rounded-right if the end, square otherwise (handles wrapping across week boundaries).
-- Transition overlap: when two segments share a date (checkout = next check-in), render the outgoing segment ending at `day + 0.5` and the incoming starting at `day + 0.5` using a `grid-template-columns: repeat(14, 1fr)` half-day trick OR layer two bars with `clip-path: polygon` for a diagonal split. Use the polygon approach for cleaner Apple-Calendar-style diagonal handover.
-- Bar height: `~22px`, stacked if multiple bars in same row (rare beyond the transition case).
-- Click handler: `onClick={() => setEditingItem(segment.items[0])}` opens `EditItemDialog`.
-- Mobile (`<sm`): replace the 7-col grid with a vertical agenda list grouped by stay segment, each shown as a colored card with date range and night count.
+Runs in a `useMemo` inside the checklist component, merged with stored AI tasks so dismiss/accept state persists per trip. Rule registry is a small array of `{ id, predicate, build }` for easy extension.
 
-**Edit**: `src/components/workspace/MatrixGrid.tsx`
-- Add `viewMode` state (`"matrix" | "calendar"`), persist to `localStorage` keyed `tml-view-mode`.
-- Add a small segmented toggle in the header (using existing `Tabs` or a two-button group styled to match), placed left of the Smart Pull button.
-- When `viewMode === "calendar"`, render `<CalendarStaysView />` in place of the scrollable matrix; keep the header, Smart Pull tray, and dialogs intact.
+### Warning filtering
 
-**No DB changes.** All data comes from the existing per-night stay records.
+`src/lib/warningFilter.ts` exports `filterWarningsForTrip(warnings, trip, itineraryItems)` doing:
 
-**No new dependencies.** Uses `date-fns` (already installed), Tailwind, Lucide.
+- Region match: warning.regions intersects destinations collected from `trip.destination` + `itineraryItems[].location_name` (string contains, case-insensitive) or country codes derived from a small built-in city→country map for the demo (covers Italy, France, Spain, UK, Japan, USA — enough for sandbox).
+- Date match: warning window overlaps `[trip.start_date, trip.end_date]`.
 
-### Files touched
+### Files
 
-- `src/components/workspace/CalendarStaysView.tsx` (new)
-- `src/components/workspace/MatrixGrid.tsx` (add view toggle + conditional render)
+- `src/App.tsx` — add `/tools` route inside protected layout.
+- `src/pages/Tools.tsx` (new) — page shell, trip selector, two-column grid.
+- `src/components/tools/PreparednessChecklist.tsx` (new) — Tracks A + B, accept/dismiss/toggle/add.
+- `src/components/tools/TravelWarningsFeed.tsx` (new) — filtered list, editorial cards.
+- `src/lib/checklistBackfill.ts` (new) — rule registry + derivation.
+- `src/lib/warningFilter.ts` (new) — region/date overlap helpers + city→country map.
+- `src/data/mockTravelWarnings.ts` (new) — seed advisories.
+- `src/stores/useTripStore.ts` — extend with `checklistTasks` + CRUD/accept/dismiss; seed mock manual tasks for sandbox.
+- `src/index.css` — add `--warning-forest`, `--warning-amber` tokens (light + dark).
+- `tailwind.config.ts` — surface them as `warning-forest` / `warning-amber` colors.
 
+### Out of scope (next pass)
+
+- Supabase table + RLS for `checklist_tasks` (sandbox-only for now; trivial to add when promoted out of MVP).
+- Live geopolitical/health feed integrations (Travel.State.Gov, WHO, FCDO) — mock now, edge function later.
+- Per-user dismissal persistence across sessions (kept in-memory for this pass).

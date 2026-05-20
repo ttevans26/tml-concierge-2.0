@@ -9,7 +9,7 @@ import SmartPullTray, { type ExtractedItem } from "./SmartPullTray";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2, Lock, Globe } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,7 @@ export default function MatrixGrid() {
   const itineraryItems = useTripStore((s) => s.itineraryItems);
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
+  const updateTrip = useTripStore((s) => s.updateTrip);
 
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -356,6 +357,31 @@ export default function MatrixGrid() {
             <TripSettingsModal />
           </div>
         </div>
+        {activeTrip && (
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => updateTrip(activeTrip.id, { is_published: !activeTrip.is_published })}
+              title={
+                activeTrip.is_published
+                  ? "Public — visible to your network"
+                  : "Private — hidden even from your connections"
+              }
+              className={`inline-flex items-center gap-1.5 rounded-sm border-thin px-2 py-1 min-h-[32px] font-inter text-[11px] transition-colors touch-manipulation ${
+                activeTrip.is_published
+                  ? "border-accent/40 text-accent bg-accent/5 hover:bg-accent/10"
+                  : "border-foreground/20 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {activeTrip.is_published ? (
+                <Globe className="h-3 w-3" strokeWidth={1.5} />
+              ) : (
+                <Lock className="h-3 w-3" strokeWidth={1.5} />
+              )}
+              {activeTrip.is_published ? "Public Trip" : "Private Trip"}
+            </button>
+          </div>
+        )}
         {/* Mobile view-mode toggle */}
         <div className="mt-2 flex sm:hidden items-center rounded-sm border border-border overflow-hidden w-fit">
           <button

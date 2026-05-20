@@ -1,5 +1,7 @@
-import { LogOut, Settings, Users, ChevronLeft, Save, Loader2 } from "lucide-react";
+import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { useTripStore } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -70,6 +72,9 @@ interface Props {
 
 export default function ProfileDrawer({ open, onOpenChange }: Props) {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const isPublic = useTripStore((s) => s.networkProfile.isPublic);
+  const setProfileVisibility = useTripStore((s) => s.setProfileVisibility);
   const [view, setView] = useState<"menu" | "preferences">("menu");
   const [prefs, setPrefs] = useState<TravelPreferences>(DEFAULT_PREFS);
   const [saving, setSaving] = useState(false);
@@ -183,12 +188,42 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
 
               <Button
                 variant="ghost"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate("/network");
+                }}
                 className="justify-start gap-2.5 font-inter text-sm text-foreground"
               >
                 <Users className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 Travel Network
               </Button>
             </nav>
+
+            <Separator className="my-5" />
+
+            <section>
+              <h3 className="font-inter text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                Privacy
+              </h3>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    {isPublic ? (
+                      <Globe className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
+                    )}
+                    <span className="font-inter text-sm text-foreground">Public Profile</span>
+                  </div>
+                  <p className="mt-1 font-inter text-[11px] text-muted-foreground leading-relaxed">
+                    {isPublic
+                      ? "Anyone on the platform can follow you and see your public trips."
+                      : "Other travelers must request access before viewing your trips."}
+                  </p>
+                </div>
+                <Switch checked={isPublic} onCheckedChange={setProfileVisibility} />
+              </div>
+            </section>
 
             <Separator className="my-5" />
 

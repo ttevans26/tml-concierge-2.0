@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "@/integrations/supabase/client";
+import { MOCK_NETWORK_USERS } from "@/data/mockNetworkUsers";
 
 /* ------------------------------------------------------------------ */
 /*  Types (mirrors DB schema)                                         */
@@ -94,6 +95,21 @@ export interface ChecklistTask {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Travel Network                                                    */
+/* ------------------------------------------------------------------ */
+
+export type ConnectionStatus = "none" | "pending" | "connected";
+
+export interface NetworkUser {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  trips_planned: number;
+  is_public: boolean;
+  status: ConnectionStatus;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Store shape                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -118,6 +134,15 @@ interface TripStore {
   deleteChecklistTask: (id: string) => void;
   acceptAiTask: (id: string) => void;
   dismissAiTask: (id: string) => void;
+
+  /* travel network (client-side) */
+  networkProfile: { isPublic: boolean };
+  setProfileVisibility: (isPublic: boolean) => void;
+  networkUsers: NetworkUser[];
+  networkQuery: string;
+  setNetworkQuery: (q: string) => void;
+  followUser: (id: string) => void;
+  requestAccess: (id: string) => void;
 
   /* actions */
   fetchTrips: () => Promise<void>;
@@ -196,6 +221,25 @@ export const useTripStore = create<TripStore>((set, get) => ({
     set({
       checklistTasks: get().checklistTasks.map((t) =>
         t.id === id ? { ...t, dismissed: true } : t,
+      ),
+    }),
+
+  /* ---- Travel Network (client-side) ---- */
+  networkProfile: { isPublic: true },
+  setProfileVisibility: (isPublic) => set({ networkProfile: { isPublic } }),
+  networkUsers: MOCK_NETWORK_USERS,
+  networkQuery: "",
+  setNetworkQuery: (q) => set({ networkQuery: q }),
+  followUser: (id) =>
+    set({
+      networkUsers: get().networkUsers.map((u) =>
+        u.id === id ? { ...u, status: "connected" } : u,
+      ),
+    }),
+  requestAccess: (id) =>
+    set({
+      networkUsers: get().networkUsers.map((u) =>
+        u.id === id ? { ...u, status: "pending" } : u,
       ),
     }),
 

@@ -48,6 +48,10 @@
     --cell-activity: 38 30% 94%;
     --cell-sites: 280 25% 94%;
 
+    /* Travel warning accents */
+    --warning-forest: 145 30% 15%;
+    --warning-amber: 38 55% 50%;
+
     --sidebar-background: 43 50% 97%;
     --sidebar-foreground: 0 0% 15%;
     --sidebar-primary: 0 0% 10%;
@@ -93,6 +97,9 @@
     --cell-logistics: 210 18% 14%;
     --cell-activity: 38 18% 13%;
     --cell-sites: 280 18% 14%;
+
+    --warning-forest: 145 25% 55%;
+    --warning-amber: 38 55% 60%;
 
     --sidebar-background: 0 0% 8%;
     --sidebar-foreground: 43 30% 90%;

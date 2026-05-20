@@ -82,6 +82,17 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface ChecklistTask {
+  id: string;
+  trip_id: string;
+  task_text: string;
+  is_completed: boolean;
+  is_ai_generated: boolean;
+  context_trigger?: string;
+  detail?: string;
+  dismissed?: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Store shape                                                       */
 /* ------------------------------------------------------------------ */
@@ -98,6 +109,15 @@ interface TripStore {
   /* anchor */
   activeAnchor: ItineraryItem | null;
   setActiveAnchor: (item: ItineraryItem | null) => void;
+
+  /* checklist (client-side, sandbox-ready) */
+  checklistTasks: ChecklistTask[];
+  addChecklistTask: (input: { trip_id: string; task_text: string }) => void;
+  toggleChecklistTask: (id: string) => void;
+  updateChecklistTask: (id: string, patch: Partial<ChecklistTask>) => void;
+  deleteChecklistTask: (id: string) => void;
+  acceptAiTask: (id: string) => void;
+  dismissAiTask: (id: string) => void;
 
   /* actions */
   fetchTrips: () => Promise<void>;
@@ -141,6 +161,43 @@ export const useTripStore = create<TripStore>((set, get) => ({
   activeAnchor: null,
 
   setActiveAnchor: (item) => set({ activeAnchor: item }),
+
+  /* ---- Checklist (client-side) ---- */
+  checklistTasks: [],
+  addChecklistTask: ({ trip_id, task_text }) => {
+    const task: ChecklistTask = {
+      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      trip_id,
+      task_text,
+      is_completed: false,
+      is_ai_generated: false,
+    };
+    set({ checklistTasks: [...get().checklistTasks, task] });
+  },
+  toggleChecklistTask: (id) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) =>
+        t.id === id ? { ...t, is_completed: !t.is_completed } : t,
+      ),
+    }),
+  updateChecklistTask: (id, patch) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    }),
+  deleteChecklistTask: (id) =>
+    set({ checklistTasks: get().checklistTasks.filter((t) => t.id !== id) }),
+  acceptAiTask: (id) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) =>
+        t.id === id ? { ...t, is_ai_generated: false } : t,
+      ),
+    }),
+  dismissAiTask: (id) =>
+    set({
+      checklistTasks: get().checklistTasks.map((t) =>
+        t.id === id ? { ...t, dismissed: true } : t,
+      ),
+    }),
 
   /* ---- Fetch ---- */
 

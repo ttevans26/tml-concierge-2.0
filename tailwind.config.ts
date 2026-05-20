@@ -61,6 +61,8 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        "warning-forest": "hsl(var(--warning-forest))",
+        "warning-amber": "hsl(var(--warning-amber))",
       },
       borderRadius: {
         lg: "var(--radius)",

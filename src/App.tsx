@@ -15,6 +15,8 @@ import TripWorkspace from "./pages/TripWorkspace";
 import Studio from "./pages/Studio";
 import Tools from "./pages/Tools";
 import Network from "./pages/Network";
+import NetworkUserProfile from "./pages/NetworkUserProfile";
+import NetworkUserTrip from "./pages/NetworkUserTrip";
 import NotFound from "./pages/NotFound";
 import PublicTripView from "./pages/PublicTripView";
 
@@ -44,6 +46,8 @@ const App = () => (
               <Route path="/studio" element={<Studio />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/network" element={<Network />} />
+              <Route path="/network/user/:id" element={<NetworkUserProfile />} />
+              <Route path="/network/user/:id/trip/:tripId" element={<NetworkUserTrip />} />
               <Route path="/trip/:id" element={<TripWorkspace />} />
             </Route>
             <Route path="*" element={<NotFound />} />

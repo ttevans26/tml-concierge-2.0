@@ -224,6 +224,25 @@ export const useTripStore = create<TripStore>((set, get) => ({
       ),
     }),
 
+  /* ---- Travel Network (client-side) ---- */
+  networkProfile: { isPublic: true },
+  setProfileVisibility: (isPublic) => set({ networkProfile: { isPublic } }),
+  networkUsers: MOCK_NETWORK_USERS,
+  networkQuery: "",
+  setNetworkQuery: (q) => set({ networkQuery: q }),
+  followUser: (id) =>
+    set({
+      networkUsers: get().networkUsers.map((u) =>
+        u.id === id ? { ...u, status: "connected" } : u,
+      ),
+    }),
+  requestAccess: (id) =>
+    set({
+      networkUsers: get().networkUsers.map((u) =>
+        u.id === id ? { ...u, status: "pending" } : u,
+      ),
+    }),
+
   /* ---- Fetch ---- */
 
   fetchTrips: async () => {

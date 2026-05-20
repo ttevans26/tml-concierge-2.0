@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Users } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -8,8 +9,10 @@ function initials(name: string) {
 }
 
 export default function ConnectionsList() {
-  const connections = useTripStore((s) =>
-    s.networkUsers.filter((u) => u.status === "connected"),
+  const users = useTripStore((s) => s.networkUsers);
+  const connections = useMemo(
+    () => users.filter((u) => u.status === "connected"),
+    [users],
   );
 
   return (

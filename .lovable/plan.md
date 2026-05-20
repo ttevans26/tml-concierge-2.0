@@ -1,146 +1,80 @@
+## Plan: Connections Repository + Friend Profile & View-Only Trip
 
-## Plan: Travel Network — Social Directory & Dual-Layer Privacy
+Add a left-hand "Connections" repository to the Travel Network page, then deepen the social flow with friend profile pages and a redacted, read-only trip view.
 
-Build a new `/network` page where users discover other travelers, manage account-level privacy, and request access to private trips. Add a trip-level privacy toggle inside the trip workspace. All state is client-side (Zustand) with mock sandbox users, matching the "Quiet Luxury" aesthetic.
+### What the user gets
 
-### 1. Header entry point (right-hand profile toolbar only)
+1. **Left sidebar on `/network`** — a "Your Connections" repository listing everyone you follow (status: `connected`). Each row shows avatar, name, and "X Trips Planned" — the same tile metadata as the directory cards.
+2. **Click a connection → `/network/user/:id`** — a friend's profile page with their avatar, name, trip count, privacy chip, and a grid of trips they've made visible to you.
+3. **Click one of their trips → `/network/user/:id/trip/:tripId`** — a view-only Matrix-style trip view showing dates, location, stays, dining, activities, logistics — **with all sensitive fields redacted** (no cost, no points, no confirmation codes, no cancellation deadlines, no credit-card / booking refs).
 
-Edit `src/components/AppHeader.tsx`:
-- In the right-hand actions cluster (next to "Plan w/ Concierge", bell, and profile icon), insert a polished **"Travel Network"** text button.
-- Styling: `font-inter` text-xs, muted-foreground default, accent (bronze) on hover, with a small `Users` lucide icon in accent. Same ghost button treatment as "Plan w/ Concierge" for visual consistency.
-- On viewports below `md`, collapse to an icon-only `Users` button (44px touch target) so the entry point survives mobile.
-- **Do not** add Network to the center nav — entry originates exclusively from the profile toolbar per request.
-- Clicking navigates to `/network`.
+### Layout — `/network` (revised)
 
-### 2. New route `/network`
-
-Register in `src/App.tsx` under the `AppLayout` protected route group.
-
-Create `src/pages/Network.tsx` with the editorial layout:
+Desktop (≥ md): two-column shell inside the existing max-w-5xl canvas.
 
 ```text
-+-----------------------------------------------------+
-|  Travel Network                          (Playfair) |
-|  Discover other travelers and curators              |
-+-----------------------------------------------------+
-|  [ 🔍  Search travelers by name... ]                |  ← Search panel
-+-----------------------------------------------------+
-|  SUGGESTED CONNECTIONS                              |
-|  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐             |
-|  │ pic  │  │ pic  │  │ pic  │  │ pic  │             |  ← Horizontal snap-scroll
-|  │ Name │  │ Name │  │ Name │  │ Name │             |
-|  │ 12 T │  │ 4 T  │  │ 9 T  │  │ 2 T  │             |
-|  │[Foll]│  │[Req] │  │[Pend]│  │[Conn]│             |
-|  └──────┘  └──────┘  └──────┘  └──────┘             |
-+-----------------------------------------------------+
-|  SEARCH RESULTS  (only when query active)           |
-|  ── row tiles, one per match ──                     |
-+-----------------------------------------------------+
++--------------------------------------------------------+
+| Travel Network                                         |
++-----------------+--------------------------------------+
+| Your            |  Find a traveler  [search]           |
+| Connections (N) |--------------------------------------+
+|  • Eloise M.    |  Suggested Connections               |
+|  • Imogen V.    |  [tile] [tile] [tile] ...            |
+|  • Marcus A.    |                                      |
++-----------------+--------------------------------------+
 ```
 
-- Canvas: `bg-background` (cream), section panels with `border-thin border-foreground/15` and `rounded-sm` (2px).
-- Titles: `font-playfair`, body/metrics/buttons: `font-inter`.
-- Mobile: suggestions stay horizontal snap-scroll; search results stack vertically.
+Mobile: connections collapse into a horizontal snap-scroll strip above the search panel (so the existing single-column flow is preserved on the 964-px viewport down to phones).
 
-### 3. Profile Connection Card
+### Friend profile — `/network/user/:id`
 
-New component `src/components/network/ProfileCard.tsx`, two layouts via `variant: "tile" | "row"` prop:
-- Round avatar with initials fallback (sharp 2px square variant available).
-- Full name (Playfair 16–18px).
-- Metric badge "X Trips Planned" (Inter, muted).
-- Tiny privacy chip: `Lock` icon = Private profile, `Globe` icon = Public profile.
-- Action button driven by relationship state:
-  - `none` + public profile → **Follow**
-  - `none` + private profile → **Request Access**
-  - `pending` → **Pending** (disabled, muted)
-  - `connected` → **Connected** (outline with check)
-- Optimistic: store updates immediately on click.
+- Header: avatar (initials fallback), Playfair name, privacy chip (Globe/Lock), "X Trips Planned".
+- "Trips visible to you" section: card grid of mock trips. Each card shows trip name, destination, date range, and a Stays/Dining/Activity count strip.
+- If `is_public === false` and status !== `connected`: show a locked state with "Request Access" CTA (re-uses existing modal).
+- Back link to `/network`.
 
-### 4. Dual-layer privacy
+### View-only trip — `/network/user/:id/trip/:tripId`
 
-**Layer 1 — Profile-level privacy** (account):
+Layout mirrors the existing Matrix Grid visual language (Day columns × category rows) but renders a **`ReadOnlyMatrixGrid`** that:
 
-Add a "Privacy" section to `src/components/ProfileDrawer.tsx`:
-- Switch row "Public Profile" with helper copy.
-- When toggled to Private, inline note: "Other travelers will need to request access to view your trips."
-- Backed by `networkProfile.isPublic` in the store (client-only for now).
+- Uses the same category color tokens and cell layout as `MatrixGrid` / `PublicTripView`.
+- Renders simplified read-only cards showing **only**: title, location_name, date, start_time/end_time, short description.
+- **Hides**: `cost`, `currency`, `points_used`, `confirmation_code`, `cancellation_deadline`, `source_reference`, `api_metadata`, any badge tied to loyalty/credit cards.
+- Header shows trip name, destination, date range, and a small "Viewing as guest — financial details hidden" notice in the bronze accent treatment.
+- No edit affordances, no Smart Pull, no Concierge button, no Studio sidebar.
 
-**Layer 2 — Trip-level privacy** (per trip):
+### State & mock data (sandbox-only, no DB changes)
 
-Edit `src/components/workspace/MatrixGrid.tsx` header area:
-- Add a small `Lock`/`Globe` toggle button near the existing view toggle.
-- States: **Public** (visible to your network) / **Private** (hidden from everyone).
-- Persisted via existing `updateTrip` using `is_published` semantics (`true` = public, `false` = private). No DB migration.
-- Tooltip: "Private trips are hidden even from your connections."
+`src/stores/useTripStore.ts` additions:
 
-**Handshake modal:**
+- `NetworkTripSummary` type: `{ id, owner_id, name, destination, start_date, end_date, item_counts: { stays, dining, activity, logistics } }`.
+- `NetworkTripItem` type: redacted shape — `{ id, trip_id, category, title, description, date, start_time, end_time, location_name }`. **No cost/points/confirmation fields exist on this type at all**, so the read-only view physically cannot leak them.
+- `networkUserTrips: Record<userId, NetworkTripSummary[]>` and `networkTripItems: Record<tripId, NetworkTripItem[]>`.
+- Selectors: `selectConnections`, `selectUserById`, `selectVisibleTripsForUser(id)`, `selectTripItems(tripId)`.
 
-New `src/components/network/RequestAccessModal.tsx` — confirmation dialog after "Request Access":
-> "We've sent your request to {Name}. You'll be notified when they respond."
+`src/data/mockNetworkTrips.ts` (new): 2–3 trips for Eloise (connected) and Imogen (public), each with ~6–10 redacted itinerary items spread across categories and days. Marcus/Hiroshi (private/pending) get an empty list so the locked profile state is demonstrable.
 
-### 5. Zustand store additions
+### Components & routes
 
-Extend `src/stores/useTripStore.ts`:
+New:
+- `src/components/network/ConnectionsList.tsx` — left rail / mobile strip; reuses avatar + name + trips_planned styling from `ProfileCard`.
+- `src/components/network/UserTripCard.tsx` — trip summary card for the profile page.
+- `src/components/network/ReadOnlyMatrixGrid.tsx` — redacted Day × Category grid renderer.
+- `src/pages/NetworkUserProfile.tsx` — `/network/user/:id`.
+- `src/pages/NetworkUserTrip.tsx` — `/network/user/:id/trip/:tripId`.
+- `src/data/mockNetworkTrips.ts`.
 
-```ts
-export type ConnectionStatus = "none" | "pending" | "connected";
+Edited:
+- `src/pages/Network.tsx` — two-column layout, mount `ConnectionsList`.
+- `src/stores/useTripStore.ts` — add types, mock-backed slices, selectors.
+- `src/App.tsx` — register the two new protected routes inside `AppLayout`.
 
-export interface NetworkUser {
-  id: string;
-  name: string;
-  avatar_url: string | null;
-  trips_planned: number;
-  is_public: boolean;
-  status: ConnectionStatus;
-}
+### Design tokens
 
-interface NetworkSlice {
-  networkProfile: { isPublic: boolean };
-  setProfileVisibility: (isPublic: boolean) => void;
+Strict adherence to the Savvy Elite Editorial system already in use: cream canvas, 0.5px Onyx borders, 2px radii, Playfair headers, Inter body, bronze accent on the "guest view" notice and category chips. No new colors introduced.
 
-  networkUsers: NetworkUser[];          // seeded mock directory
-  networkQuery: string;
-  setNetworkQuery: (q: string) => void;
+### Out of scope
 
-  followUser: (id: string) => void;     // sets status -> "connected"
-  requestAccess: (id: string) => void;  // sets status -> "pending"
-}
-```
-
-Selectors:
-- `selectSuggestedConnections(state)` → users with `status === "none"`, capped at 6.
-- `selectSearchResults(state)` → filtered by `networkQuery` (case-insensitive substring on name).
-
-### 6. Sandbox mock data
-
-New `src/data/mockNetworkUsers.ts` — 5 travelers, alternating privacy:
-
-| Name | Trips | Public? | Initial status |
-|---|---|---|---|
-| Imogen Voss | 12 | Public | none |
-| Marcus Aurelio | 4 | Private | none |
-| Saskia Klein | 9 | Public | none |
-| Hiroshi Tanaka | 7 | Private | pending |
-| Eloise Marchand | 3 | Public | connected |
-
-Seeded into `networkUsers` on store init. All interactions stay in-memory for `/dev-sandbox` demos.
-
-### 7. Files touched
-
-**New**
-- `src/pages/Network.tsx`
-- `src/components/network/ProfileCard.tsx`
-- `src/components/network/RequestAccessModal.tsx`
-- `src/data/mockNetworkUsers.ts`
-
-**Edited**
-- `src/App.tsx` — add `/network` route
-- `src/components/AppHeader.tsx` — "Travel Network" button in right-hand toolbar (NOT center nav)
-- `src/components/ProfileDrawer.tsx` — profile privacy switch
-- `src/components/workspace/MatrixGrid.tsx` — trip privacy toggle
-- `src/stores/useTripStore.ts` — network slice, selectors, mock seed
-
-### Out of scope (next pass)
-- Supabase tables/RLS for follows + access requests
-- Real notifications when a request is approved
-- Network-aware filtering on `PublicTripView` (currently uses share tokens)
+- Real Supabase tables / RLS for friend trips (mock-only for now; existing `itinerary_items_public` view stays untouched).
+- Real-time updates, comments, reactions.
+- Editing or duplicating a friend's trip into your own.

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, User, CalendarClock, Users } from "lucide-react";
+import { User, CalendarClock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import SchedulingModal from "@/components/SchedulingModal";
+import NotificationsPopover from "@/components/NotificationsPopover";
 
 const navItems = [
   { label: "Trips", path: "/" },
@@ -86,13 +87,7 @@ export default function AppHeader() {
             Plan w/ Concierge
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 text-muted-foreground hover:text-foreground"
-          >
-            <Bell className="h-4 w-4" strokeWidth={1.5} />
-          </Button>
+          <NotificationsPopover />
 
           <Button
             variant="ghost"

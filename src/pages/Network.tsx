@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { useTripStore, type NetworkUser } from "@/stores/useTripStore";
 import ProfileCard from "@/components/network/ProfileCard";
 import RequestAccessModal from "@/components/network/RequestAccessModal";
+import ConnectionsList from "@/components/network/ConnectionsList";
 import { toast } from "sonner";
 
 export default function Network() {
@@ -56,8 +57,13 @@ export default function Network() {
           </div>
         </header>
 
-        {/* Search panel */}
-        <section className="mb-8 border-thin border-foreground/15 bg-card p-5 rounded-sm sm:p-6">
+        <div className="grid gap-6 md:grid-cols-[260px_1fr]">
+          {/* Left rail — connections repository */}
+          <ConnectionsList />
+
+          <div>
+            {/* Search panel */}
+            <section className="mb-8 border-thin border-foreground/15 bg-card p-5 rounded-sm sm:p-6">
           <label
             htmlFor="network-search"
             className="block font-inter text-[11px] uppercase tracking-widest text-muted-foreground mb-2"
@@ -131,6 +137,8 @@ export default function Network() {
             </div>
           )}
         </section>
+          </div>
+        </div>
       </div>
 
       <RequestAccessModal

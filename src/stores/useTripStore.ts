@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "@/integrations/supabase/client";
 import { MOCK_NETWORK_USERS } from "@/data/mockNetworkUsers";
+import { MOCK_NETWORK_TRIPS, MOCK_NETWORK_TRIP_ITEMS } from "@/data/mockNetworkTrips";
 
 /* ------------------------------------------------------------------ */
 /*  Types (mirrors DB schema)                                         */
@@ -109,6 +110,29 @@ export interface NetworkUser {
   status: ConnectionStatus;
 }
 
+export interface NetworkTripSummary {
+  id: string;
+  owner_id: string;
+  name: string;
+  destination: string | null;
+  start_date: string;
+  end_date: string;
+  item_counts: { stays: number; dining: number; activity: number; logistics: number };
+}
+
+/** Redacted itinerary item — by design contains NO cost / points / confirmation fields. */
+export interface NetworkTripItem {
+  id: string;
+  trip_id: string;
+  category: "stays" | "logistics" | "dining" | "activity";
+  title: string;
+  description: string | null;
+  date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  location_name: string | null;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Store shape                                                       */
 /* ------------------------------------------------------------------ */
@@ -143,6 +167,8 @@ interface TripStore {
   setNetworkQuery: (q: string) => void;
   followUser: (id: string) => void;
   requestAccess: (id: string) => void;
+  networkUserTrips: Record<string, NetworkTripSummary[]>;
+  networkTripItems: Record<string, NetworkTripItem[]>;
 
   /* actions */
   fetchTrips: () => Promise<void>;
@@ -242,6 +268,8 @@ export const useTripStore = create<TripStore>((set, get) => ({
         u.id === id ? { ...u, status: "pending" } : u,
       ),
     }),
+  networkUserTrips: MOCK_NETWORK_TRIPS,
+  networkTripItems: MOCK_NETWORK_TRIP_ITEMS,
 
   /* ---- Fetch ---- */
 

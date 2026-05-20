@@ -1,96 +1,146 @@
-## Plan: Tools Workspace — Warnings Engine + AI Checklist
 
-Build the missing `/tools` route and populate it with two flagship widgets: a contextual Real-Time Travel Warnings feed and a dual-track Pre-Travel Preparedness Checklist with AI backfills. All work is client-side (Zustand + mock data), in keeping with MVP `/dev-sandbox` scope.
+## Plan: Travel Network — Social Directory & Dual-Layer Privacy
 
-### What the user gets
+Build a new `/network` page where users discover other travelers, manage account-level privacy, and request access to private trips. Add a trip-level privacy toggle inside the trip workspace. All state is client-side (Zustand) with mock sandbox users, matching the "Quiet Luxury" aesthetic.
 
-A new `Tools` page with a two-column editorial layout (stacks on mobile):
+### 1. Header entry point (right-hand profile toolbar only)
 
-- **Trip selector** at the top — chooses which trip in `useTripStore.trips` drives the contextual filtering (defaults to the next upcoming or `activeTrip`).
-- **Left / main column — Pre-Travel Preparedness Checklist**
-  - Track A: manual entries with add input, toggle checkbox, inline edit, delete.
-  - Track B: "✨ Suggested Logistics Insights" — AI-backfilled items rendered with a subtle bronze-beige `✨` glyph, italic Playfair subtext explaining the rationale (e.g., IDP rule for Italy), and an "Accept" affordance that promotes them into Track A as a confirmed task. Dismiss hides for that trip.
-  - Backfill rules derived from `itineraryItems` of the selected trip:
-    - Car rental in IT/ES/JP (logistics item whose title/description matches `car|rental|hertz|avis|sixt|europcar` and whose location resolves to those countries) → "Obtain an International Driving Permit (IDP)".
-    - Any stay/logistics in EU country list → "Verify biometric passport valid 3+ months past return date" + EES/ETIAS note.
-    - Trip duration > 7 days → "Arrange mail / package hold".
-    - Trip start within 14 days and no logistics item containing `flight|airline` → "Confirm online check-in window".
-- **Right column — Real-Time Travel Warnings Engine**
-  - Card list filtered to warnings whose `regions` intersect the selected trip's destinations AND whose `valid_from/valid_to` overlap the trip dates.
-  - Card anatomy: small uppercase Inter category eyebrow ("REGULATORY", "HEALTH", "ENVIRONMENTAL"), Playfair headline, 2–3 line Inter body, muted-amber 0.5px left border for advisories and forest-green (`#1B3022`) left border for regulatory/info. No red, no banners, no fills.
-  - Empty state: short serif line "No active advisories for this itinerary."
+Edit `src/components/AppHeader.tsx`:
+- In the right-hand actions cluster (next to "Plan w/ Concierge", bell, and profile icon), insert a polished **"Travel Network"** text button.
+- Styling: `font-inter` text-xs, muted-foreground default, accent (bronze) on hover, with a small `Users` lucide icon in accent. Same ghost button treatment as "Plan w/ Concierge" for visual consistency.
+- On viewports below `md`, collapse to an icon-only `Users` button (44px touch target) so the entry point survives mobile.
+- **Do not** add Network to the center nav — entry originates exclusively from the profile toolbar per request.
+- Clicking navigates to `/network`.
 
-### Visual rules (strict)
+### 2. New route `/network`
 
-- Cream `#FDFCF8` bg, Onyx `#1A1A1A` text, Bronze Beige `#9B7E4B` accents, 0.5px borders, 2px radii.
-- Playfair for all headers / item titles; Inter for body, labels, checkboxes.
-- Whitespace-forward: section gap `space-y-10`, card padding `p-6`, no shadows beyond `shadow-sm`.
-- Warning accent colors added as semantic tokens in `index.css`: `--warning-forest: 145 30% 15%` and `--warning-amber: 38 55% 50%`.
-- Fully responsive: single column under `md`, two columns at `md+`.
+Register in `src/App.tsx` under the `AppLayout` protected route group.
 
-### Mock data (sandbox)
+Create `src/pages/Network.tsx` with the editorial layout:
 
-A new `src/data/mockTravelWarnings.ts` exports a typed array of ~6 warnings spanning regulatory (EU EES/ETIAS, UK ETA), health (regional advisory), and environmental (heatwave/strike). Each entry has `id`, `category`, `title`, `body`, `severity` (`info | advisory`), `regions` (ISO country codes + free-text region match), `valid_from`, `valid_to`, `source_label`.
+```text
++-----------------------------------------------------+
+|  Travel Network                          (Playfair) |
+|  Discover other travelers and curators              |
++-----------------------------------------------------+
+|  [ 🔍  Search travelers by name... ]                |  ← Search panel
++-----------------------------------------------------+
+|  SUGGESTED CONNECTIONS                              |
+|  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐             |
+|  │ pic  │  │ pic  │  │ pic  │  │ pic  │             |  ← Horizontal snap-scroll
+|  │ Name │  │ Name │  │ Name │  │ Name │             |
+|  │ 12 T │  │ 4 T  │  │ 9 T  │  │ 2 T  │             |
+|  │[Foll]│  │[Req] │  │[Pend]│  │[Conn]│             |
+|  └──────┘  └──────┘  └──────┘  └──────┘             |
++-----------------------------------------------------+
+|  SEARCH RESULTS  (only when query active)           |
+|  ── row tiles, one per match ──                     |
++-----------------------------------------------------+
+```
 
-### State (Zustand)
+- Canvas: `bg-background` (cream), section panels with `border-thin border-foreground/15` and `rounded-sm` (2px).
+- Titles: `font-playfair`, body/metrics/buttons: `font-inter`.
+- Mobile: suggestions stay horizontal snap-scroll; search results stack vertically.
 
-Extend `useTripStore` with:
+### 3. Profile Connection Card
+
+New component `src/components/network/ProfileCard.tsx`, two layouts via `variant: "tile" | "row"` prop:
+- Round avatar with initials fallback (sharp 2px square variant available).
+- Full name (Playfair 16–18px).
+- Metric badge "X Trips Planned" (Inter, muted).
+- Tiny privacy chip: `Lock` icon = Private profile, `Globe` icon = Public profile.
+- Action button driven by relationship state:
+  - `none` + public profile → **Follow**
+  - `none` + private profile → **Request Access**
+  - `pending` → **Pending** (disabled, muted)
+  - `connected` → **Connected** (outline with check)
+- Optimistic: store updates immediately on click.
+
+### 4. Dual-layer privacy
+
+**Layer 1 — Profile-level privacy** (account):
+
+Add a "Privacy" section to `src/components/ProfileDrawer.tsx`:
+- Switch row "Public Profile" with helper copy.
+- When toggled to Private, inline note: "Other travelers will need to request access to view your trips."
+- Backed by `networkProfile.isPublic` in the store (client-only for now).
+
+**Layer 2 — Trip-level privacy** (per trip):
+
+Edit `src/components/workspace/MatrixGrid.tsx` header area:
+- Add a small `Lock`/`Globe` toggle button near the existing view toggle.
+- States: **Public** (visible to your network) / **Private** (hidden from everyone).
+- Persisted via existing `updateTrip` using `is_published` semantics (`true` = public, `false` = private). No DB migration.
+- Tooltip: "Private trips are hidden even from your connections."
+
+**Handshake modal:**
+
+New `src/components/network/RequestAccessModal.tsx` — confirmation dialog after "Request Access":
+> "We've sent your request to {Name}. You'll be notified when they respond."
+
+### 5. Zustand store additions
+
+Extend `src/stores/useTripStore.ts`:
 
 ```ts
-interface ChecklistTask {
+export type ConnectionStatus = "none" | "pending" | "connected";
+
+export interface NetworkUser {
   id: string;
-  trip_id: string;
-  task_text: string;
-  is_completed: boolean;
-  is_ai_generated: boolean;
-  context_trigger?: string;
-  detail?: string; // explanatory subtext for AI items
-  dismissed?: boolean;
+  name: string;
+  avatar_url: string | null;
+  trips_planned: number;
+  is_public: boolean;
+  status: ConnectionStatus;
 }
 
-checklistTasks: ChecklistTask[];
-addChecklistTask(input): void;
-toggleChecklistTask(id): void;
-updateChecklistTask(id, patch): void;
-deleteChecklistTask(id): void;
-acceptAiTask(id): void;   // flips is_ai_generated=false, keeps text
-dismissAiTask(id): void;  // sets dismissed=true
+interface NetworkSlice {
+  networkProfile: { isPublic: boolean };
+  setProfileVisibility: (isPublic: boolean) => void;
+
+  networkUsers: NetworkUser[];          // seeded mock directory
+  networkQuery: string;
+  setNetworkQuery: (q: string) => void;
+
+  followUser: (id: string) => void;     // sets status -> "connected"
+  requestAccess: (id: string) => void;  // sets status -> "pending"
+}
 ```
 
-All ops are optimistic and local — no Supabase writes in this pass (matches MVP/sandbox guidance). State seeded with mock manual + AI tasks in dev-sandbox.
+Selectors:
+- `selectSuggestedConnections(state)` → users with `status === "none"`, capped at 6.
+- `selectSearchResults(state)` → filtered by `networkQuery` (case-insensitive substring on name).
 
-### Backfill logic
+### 6. Sandbox mock data
 
-Pure derivation in `src/lib/checklistBackfill.ts`:
+New `src/data/mockNetworkUsers.ts` — 5 travelers, alternating privacy:
 
-```ts
-deriveAiTasks(trip, itineraryItems): ChecklistTask[]
-```
+| Name | Trips | Public? | Initial status |
+|---|---|---|---|
+| Imogen Voss | 12 | Public | none |
+| Marcus Aurelio | 4 | Private | none |
+| Saskia Klein | 9 | Public | none |
+| Hiroshi Tanaka | 7 | Private | pending |
+| Eloise Marchand | 3 | Public | connected |
 
-Runs in a `useMemo` inside the checklist component, merged with stored AI tasks so dismiss/accept state persists per trip. Rule registry is a small array of `{ id, predicate, build }` for easy extension.
+Seeded into `networkUsers` on store init. All interactions stay in-memory for `/dev-sandbox` demos.
 
-### Warning filtering
+### 7. Files touched
 
-`src/lib/warningFilter.ts` exports `filterWarningsForTrip(warnings, trip, itineraryItems)` doing:
+**New**
+- `src/pages/Network.tsx`
+- `src/components/network/ProfileCard.tsx`
+- `src/components/network/RequestAccessModal.tsx`
+- `src/data/mockNetworkUsers.ts`
 
-- Region match: warning.regions intersects destinations collected from `trip.destination` + `itineraryItems[].location_name` (string contains, case-insensitive) or country codes derived from a small built-in city→country map for the demo (covers Italy, France, Spain, UK, Japan, USA — enough for sandbox).
-- Date match: warning window overlaps `[trip.start_date, trip.end_date]`.
-
-### Files
-
-- `src/App.tsx` — add `/tools` route inside protected layout.
-- `src/pages/Tools.tsx` (new) — page shell, trip selector, two-column grid.
-- `src/components/tools/PreparednessChecklist.tsx` (new) — Tracks A + B, accept/dismiss/toggle/add.
-- `src/components/tools/TravelWarningsFeed.tsx` (new) — filtered list, editorial cards.
-- `src/lib/checklistBackfill.ts` (new) — rule registry + derivation.
-- `src/lib/warningFilter.ts` (new) — region/date overlap helpers + city→country map.
-- `src/data/mockTravelWarnings.ts` (new) — seed advisories.
-- `src/stores/useTripStore.ts` — extend with `checklistTasks` + CRUD/accept/dismiss; seed mock manual tasks for sandbox.
-- `src/index.css` — add `--warning-forest`, `--warning-amber` tokens (light + dark).
-- `tailwind.config.ts` — surface them as `warning-forest` / `warning-amber` colors.
+**Edited**
+- `src/App.tsx` — add `/network` route
+- `src/components/AppHeader.tsx` — "Travel Network" button in right-hand toolbar (NOT center nav)
+- `src/components/ProfileDrawer.tsx` — profile privacy switch
+- `src/components/workspace/MatrixGrid.tsx` — trip privacy toggle
+- `src/stores/useTripStore.ts` — network slice, selectors, mock seed
 
 ### Out of scope (next pass)
-
-- Supabase table + RLS for `checklist_tasks` (sandbox-only for now; trivial to add when promoted out of MVP).
-- Live geopolitical/health feed integrations (Travel.State.Gov, WHO, FCDO) — mock now, edge function later.
-- Per-user dismissal persistence across sessions (kept in-memory for this pass).
+- Supabase tables/RLS for follows + access requests
+- Real notifications when a request is approved
+- Network-aware filtering on `PublicTripView` (currently uses share tokens)

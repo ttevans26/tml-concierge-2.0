@@ -1,36 +1,34 @@
 ## Goal
-Make the "Plan w/ Concierge" modal demo-ready with realistic dummy availability, and display the user's timezone (defaulting to PST) so slots are clearly anchored in time.
+Add a trip-association selector to the "Plan w/ Concierge" modal so users can optionally tie the appointment to one of their existing trips (for live collaboration) — or leave it unattached for preliminary ideation.
 
 ## Changes
 
 **File: `src/components/SchedulingModal.tsx`**
 
-1. **Dummy availability map** (module-level constant):
-   - `AVAILABILITY: Record<string, string[]>` keyed by `yyyy-MM-dd` → array of slot strings drawn from existing `TIME_SLOTS`.
-   - ~20 bookable dates across the next 6 weeks, skipping weekends and a few weekdays.
-   - Vary per day: some morning-only, some afternoon-only, some full day, some with just 2–3 "limited" slots.
-   - Add an `AVAILABILITY_UPDATED_AT` string for subtle demo polish.
+1. **Pull trips from the store**:
+   - Import `useTripStore` and select `trips`.
+   - New state: `const [tripId, setTripId] = useState<string>("none")` where `"none"` represents "No trip — exploratory session".
 
-2. **Timezone display (default PST)**:
-   - Add constant `DEFAULT_TZ = "America/Los_Angeles"` with display label `"PST"`.
-   - Show a small timezone chip in the modal header area, right-aligned in the DialogHeader row: e.g. `Globe` icon + `Times shown in PST (Los Angeles)`.
-   - Also show the TZ label inline next to the selected date in the time-slot column header: `Thu, Jun 4 · PST`.
-   - Keep it static for now (no picker); leave a `// TODO: detect via Intl.DateTimeFormat().resolvedOptions().timeZone` comment so it's easy to wire to real geolocation later.
-   - Include the TZ in the confirmation toast: `"Concierge session on Jun 4, 2026 at 10:30 AM PST."`
+2. **New "Trip Context" section** in Column 3 (Agenda), above the Textarea:
+   - Label: `Trip Context` (same uppercase-tracking style as the Agenda label).
+   - Use the existing shadcn `Select` component:
+     - First option: `No trip — exploratory ideation` (value `"none"`).
+     - Then one option per trip: `{trip.name}` with a secondary line showing `{destination} · {start–end dates}` formatted via `date-fns` if both dates exist.
+   - Below the select, render a tiny helper line:
+     - If `"none"`: `"The concierge will help you brainstorm from scratch."`
+     - If a trip is selected: `"Concierge will have live view-access to this trip during the call."` (Bronze accent text).
 
-3. **Calendar gating**:
-   - Replace `disabled={(d) => d < new Date()}` with a combined function that also disables dates not present in `AVAILABILITY`.
-   - Add `modifiers={{ available: [...] }}` + `modifiersClassNames` so available dates get a subtle Bronze Beige dot/underline.
+3. **Toast + reset**:
+   - Append trip context to the confirmation toast description:
+     - With trip: `"…at 10:30 AM PST · linked to {trip.name}."`
+     - Without: `"…at 10:30 AM PST · exploratory session."`
+   - Reset `tripId` back to `"none"` along with the existing state resets on confirm.
 
-4. **Time slot column**:
-   - Render only `AVAILABILITY[dateKey]` slots instead of the full list.
-   - Show "Limited availability" caption when ≤3 slots remain.
-   - Preserve the existing "Select a date" empty state.
-
-5. **Microcopy**:
-   - DialogDescription → "Book a 30-minute planning session. Availability updated hourly."
+4. **Layout polish**:
+   - Column 3 stays a single flex column; the new Trip Context block sits above Agenda with `gap-4`, matching the existing rhythm.
+   - No changes to columns 1 or 2.
 
 ## Out of scope
-- Real timezone detection / user-selectable picker
-- Persisting bookings to backend
-- Real consultant calendar integration
+- Persisting the appointment or trip link to the backend.
+- Granting the concierge real access to the trip data.
+- Filtering trips by status (all user trips are listed).

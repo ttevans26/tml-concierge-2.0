@@ -78,6 +78,7 @@ export default function SchedulingModal({ open, onOpenChange }: Props) {
   const [tripId, setTripId] = useState<string>("none");
   const trips = useTripStore((s) => s.trips);
   const selectedTrip = trips.find((t) => t.id === tripId) ?? null;
+  const addAppointment = useTripStore((s) => s.addAppointment);
 
   const dateKey = date ? format(date, "yyyy-MM-dd") : null;
   const slotsForDate = dateKey ? AVAILABILITY[dateKey] ?? [] : [];
@@ -86,6 +87,14 @@ export default function SchedulingModal({ open, onOpenChange }: Props) {
     const contextSuffix = selectedTrip
       ? ` · linked to ${selectedTrip.name}.`
       : ` · exploratory session.`;
+    addAppointment({
+      date: dateKey!,
+      slot: slot!,
+      timezone_label: TZ_LABEL,
+      trip_id: selectedTrip?.id ?? null,
+      trip_name: selectedTrip?.name ?? null,
+      agenda,
+    });
     toast({
       title: "Request Sent",
       description: `Concierge session on ${format(date!, "MMM d, yyyy")} at ${slot} ${TZ_LABEL}${contextSuffix}`,

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MapPin, Compass, RefreshCw, CheckCircle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
-import { supabase } from "@/integrations/supabase/client";
-import { loadGoogleMapsScript, geocodeAddress } from "@/lib/googleMaps";
+import { loadGoogleMapsScript, healItemCoordinates } from "@/lib/googleMaps";
 import { toast } from "sonner";
 
 const PIN_HEX: Record<string, string> = {
@@ -25,11 +24,12 @@ function getCoords(item: StudioItem): { lat: number; lng: number } | null {
 }
 
 export default function StudioMap() {
-  const { activeFolder } = useStudioStore();
+  const { activeFolder, fetchFolders } = useStudioStore();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
+  const healedIdsRef = useRef<Set<string>>(new Set());
 
   const allItems = activeFolder?.items || [];
   const pinnedItems = allItems.filter((i) => getCoords(i) !== null);
@@ -114,6 +114,42 @@ export default function StudioMap() {
       mapInstanceRef.current.fitBounds(bounds, 40);
     }
   }, [mapReady, pinnedItems.length, activeFolder?.id, allItems]);
+
+  // Background auto-heal: silently look up coords for any items missing them
+  useEffect(() => {
+    if (!mapReady || !activeFolder) return;
+    const missing = allItems.filter(
+      (i) => getCoords(i) === null && !healedIdsRef.current.has(i.id)
+    );
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      for (const item of missing) {
+        if (cancelled) return;
+        healedIdsRef.current.add(item.id);
+        try {
+          const result = await healItemCoordinates(item, activeFolder.location);
+          if (cancelled) return;
+          if (result) {
+            await fetchFolders();
+          }
+        } catch (err) {
+          console.warn("Auto-heal failed for", item.title, err);
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, activeFolder?.id, allItems.length]);
+
+  // Reset healed-set when switching folders so a new folder gets its own pass
+  useEffect(() => {
+    healedIdsRef.current = new Set();
+  }, [activeFolder?.id]);
 
   return (
     <div className="flex h-full flex-col bg-card">

@@ -1,54 +1,53 @@
-## Goal
-Persist scheduled concierge appointments and surface them in the Tools page so the user has one canonical "Upcoming Appointments" view alongside their other preparedness tools.
+## Profile Drawer Restructure
 
-## Why Tools (not Profile drawer)
-- Appointments are an operational planning artifact, not a profile/identity item — they sit naturally next to Preparedness & Travel Warnings.
-- Tools is a top-level tab with room to render rich cards (date, time, TZ, linked trip, agenda). The profile drawer is narrow (320px) and ephemeral.
-- The profile drawer will still get a small "Upcoming: 2" entry that links to Tools, so it's discoverable from anywhere.
+Reorganize the right-hand `ProfileDrawer` to lead with a personal identity block and add a new "Profile & Security" section above existing nav.
 
-## Changes
+### 1. Identity Header (top of drawer)
+Replace the current minimal `SheetHeader` (just "Profile" + email) with a richer identity card:
+- **Avatar placeholder** — 56px circular `Avatar` (shadcn) on the left. Falls back to user's initials in Playfair on a muted Bronze Beige tint. No upload wiring yet (placeholder only, non-interactive — clicking could be wired later).
+- **Full name** — Playfair, 16px semibold. Pulled from `profiles.full_name` (loaded alongside existing `preferences` fetch in `loadPrefs`). Fallback: derive from email local-part if not set.
+- **Email** — Inter, 11px muted, under the name.
 
-**1. `src/stores/useTripStore.ts` — appointments state (client-side, demo)**
-- Add type:
-  ```ts
-  export interface ConciergeAppointment {
-    id: string;
-    date: string;          // yyyy-MM-dd
-    slot: string;          // "10:30 AM"
-    timezone_label: string;// "PST"
-    trip_id: string | null;
-    trip_name: string | null;
-    agenda: string;
-    created_at: string;
-  }
-  ```
-- Add to store: `appointments: ConciergeAppointment[]`, `addAppointment(input)`, `cancelAppointment(id)`.
-- Seed with 1 dummy upcoming appointment so the demo isn't empty on first load.
+Layout: horizontal flex, avatar + stacked text. Replaces the current `SheetTitle`/`SheetDescription` block.
 
-**2. `src/components/SchedulingModal.tsx`**
-- On Confirm, call `addAppointment({ ... })` with the selected date, slot, TZ, trip, agenda.
-- Keep the existing toast.
+### 2. New "Profile & Security" Section
+Insert directly below the identity header, above the existing nav list (Travel Preferences, Concierge Sessions, Travel Network).
 
-**3. New: `src/components/tools/UpcomingAppointments.tsx`**
-- Reads `appointments` from the store, sorted by date+slot, filters to today-forward.
-- Empty state: small "No upcoming sessions" card with CTA button that opens the SchedulingModal.
-- Each appointment renders as a Quiet Luxury card:
-  - Left: date block (day-of-week, big day number, month) in Playfair.
-  - Right: time + TZ chip, agenda preview (line-clamp-2), and either `Linked to {trip_name}` (Bronze) or `Exploratory session` (muted).
-  - "Cancel" ghost button (calls `cancelAppointment`, toast confirmation).
-- Header row: "Concierge Sessions" + small "Schedule" button that opens the SchedulingModal locally.
+Implement as a new collapsible subheader that toggles open/closed (matches the existing `Travel Preferences` two-view pattern — pushes a new `view: "security"` into the existing view state machine, keeping the back-chevron pattern).
 
-**4. `src/pages/Tools.tsx`**
-- Add a new section above the existing trip-filtered grid:
-  ```
-  <UpcomingAppointments />
-  ```
-  Separated by a `border-thin border-foreground/15` divider. This section is trip-independent (lives outside the "Select a trip" gating).
+Subheader row in menu view:
+- Icon: `ShieldCheck` (lucide)
+- Label: "Profile & Security"
+- Chevron right
 
-**5. `src/components/ProfileDrawer.tsx`** (small addition)
-- In the nav block (between Travel Preferences and Travel Network), add a "Concierge Sessions" link with `CalendarClock` icon and a count badge showing upcoming appointment count. Clicking navigates to `/tools`.
+Inside the `security` sub-view (mirrors the existing `preferences` sub-view styling):
+- **Personal Details**
+  - Full Name (text input, saves to `profiles.full_name`)
+  - Display email (read-only, from `user.email`)
+- **Security**
+  - "Change Password" button → triggers Supabase `resetPasswordForEmail` to user's email and toasts confirmation (matches existing forgot-password flow in `src/pages/ForgotPassword.tsx`).
+  - "Sign out of all devices" ghost button → `supabase.auth.signOut({ scope: 'global' })`.
 
-## Out of scope
-- Persisting appointments to Supabase (client-side only for the demo).
-- Rescheduling / editing existing appointments.
-- Calendar invites / email confirmations.
+Save button at bottom (same pattern as Travel Preferences save).
+
+### 3. Order After Changes
+```
+[Avatar | Full Name / Email]
+─────────────────────────────
+Profile & Security      ›
+Travel Preferences      ›
+Concierge Sessions     [n]
+Travel Network
+─────────────────────────────
+Privacy (Public Profile toggle)
+─────────────────────────────
+Sign Out
+```
+
+### Files Touched
+- `src/components/ProfileDrawer.tsx` — identity header, new view state `"security"`, new sub-view, reorder nav. Extend `loadPrefs` to also select/store `full_name` from `profiles`.
+
+### Out of Scope
+- Avatar image upload / storage bucket wiring (placeholder only).
+- 2FA, session management beyond global sign-out.
+- Schema changes — `profiles.full_name` already exists in the schema; if it doesn't on inspection during build, I'll add a migration then.

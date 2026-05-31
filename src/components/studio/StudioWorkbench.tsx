@@ -16,6 +16,7 @@ import { useStudioStore, StudioCategory, StudioItem } from "@/stores/useStudioSt
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useGooglePlaces } from "@/hooks/useGooglePlaces";
+import { classifyPlace, CATEGORY_LABEL } from "@/lib/placeCategory";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -63,6 +64,137 @@ export default function StudioWorkbench() {
   const [scraping, setScraping] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [prefillTitle, setPrefillTitle] = useState<string>("");
+
+  /* Find-a-Place (Google Places autocomplete) state */
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [selectedPrediction, setSelectedPrediction] = useState<
+    null | { place_id: string; description: string; main_text: string; secondary_text: string }
+  >(null);
+  const [showPlaceResults, setShowPlaceResults] = useState(false);
+  const [categoryOverride, setCategoryOverride] = useState<"auto" | StudioCategory>("auto");
+  const [addingPlace, setAddingPlace] = useState(false);
+  const {
+    predictions: placePredictions,
+    search: searchPlaces,
+    getDetails: getPlaceDetails,
+  } = useGooglePlaces({ types: ["establishment"], enabled: !!activeFolder });
+
+  // Debounce + bias results toward the folder's location
+  useEffect(() => {
+    if (selectedPrediction) return; // don't keep searching after a pick
+    if (!placeQuery.trim()) return;
+    const folderHint = activeFolder?.location ? `, ${activeFolder.location}` : "";
+    const timer = setTimeout(
+      () => searchPlaces(`${placeQuery}${folderHint}`),
+      250
+    );
+    return () => clearTimeout(timer);
+  }, [placeQuery, selectedPrediction, activeFolder?.location, searchPlaces]);
+
+  const resetPlaceBar = () => {
+    setPlaceQuery("");
+    setSelectedPrediction(null);
+    setShowPlaceResults(false);
+    setCategoryOverride("auto");
+  };
+
+  const handleSelectPrediction = (p: typeof placePredictions[number]) => {
+    setSelectedPrediction({
+      place_id: p.place_id,
+      description: p.description,
+      main_text: p.structured_formatting.main_text,
+      secondary_text: p.structured_formatting.secondary_text,
+    });
+    setPlaceQuery(p.structured_formatting.main_text);
+    setShowPlaceResults(false);
+  };
+
+  const handleAddPlace = async () => {
+    if (!activeFolder) return;
+
+    // No selection → fall back to manual dialog with the typed text as prefill
+    if (!selectedPrediction) {
+      const raw = placeQuery.trim();
+      if (!raw) return;
+      setPrefillTitle(raw);
+      setAddCategory(categoryOverride === "auto" ? "activity" : categoryOverride);
+      setAddOpen(true);
+      resetPlaceBar();
+      return;
+    }
+
+    setAddingPlace(true);
+    try {
+      const details = await getPlaceDetails(selectedPrediction.place_id);
+
+      // Duplicate check
+      const dup = activeFolder.items.find(
+        (i) => i.google_place_id && i.google_place_id === selectedPrediction.place_id
+      );
+      if (dup) {
+        toast.info(`"${dup.title}" is already in ${activeFolder.name}.`);
+        resetPlaceBar();
+        return;
+      }
+
+      const finalCategory: StudioCategory =
+        categoryOverride !== "auto"
+          ? categoryOverride
+          : classifyPlace(details?.types ?? []);
+
+      if (!details) {
+        // Fallback insert with just the autocomplete data
+        await addItem(activeFolder.id, {
+          category: finalCategory,
+          title: selectedPrediction.main_text,
+          description: null,
+          address: selectedPrediction.secondary_text || null,
+          url: null,
+          lat: null,
+          lng: null,
+          cost: null,
+          google_place_id: selectedPrediction.place_id,
+          source_url: null,
+          api_metadata: {},
+        });
+        toast.success(
+          `Added "${selectedPrediction.main_text}" — categorized as ${CATEGORY_LABEL[finalCategory]}.`
+        );
+      } else {
+        await addItem(activeFolder.id, {
+          category: finalCategory,
+          title: details.name || selectedPrediction.main_text,
+          description: null,
+          address: details.address || selectedPrediction.secondary_text || null,
+          url: details.website,
+          lat: details.lat,
+          lng: details.lng,
+          cost: null,
+          google_place_id: details.placeId,
+          source_url: null,
+          api_metadata: {
+            lat: details.lat,
+            lng: details.lng,
+            phone: details.phone,
+            rating: details.rating,
+            user_ratings_total: details.userRatingsTotal,
+            photo_url: details.photoUrl,
+            hours: details.hours,
+            types: details.types,
+          },
+        });
+        toast.success(
+          `Added "${details.name || selectedPrediction.main_text}" — categorized as ${CATEGORY_LABEL[finalCategory]}.`
+        );
+      }
+    } catch (err: any) {
+      console.error("DEBUG: Find-a-Place error", err);
+      toast.error(err?.message || "Failed to add place.");
+    } finally {
+      setAddingPlace(false);
+      resetPlaceBar();
+    }
+  };
 
   /* ---- Google Maps URL parsing helpers ---- */
   const isGoogleMapsUrl = (url: string): boolean => {
@@ -339,15 +471,102 @@ export default function StudioWorkbench() {
               {sortByProximity ? "Proximity ✓" : "Sort by Proximity"}
             </Button>
           )}
+        </div>
+      </div>
+
+      {/* Find a Place — Google Places autocomplete */}
+      <div className="border-b border-border px-5 py-3">
+        <Label className="font-inter text-[10px] uppercase tracking-wider text-muted-foreground">
+          Find a Place
+        </Label>
+        <div className="mt-1.5 flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={placeQuery}
+              onChange={(e) => {
+                setPlaceQuery(e.target.value);
+                setSelectedPrediction(null);
+                setShowPlaceResults(true);
+              }}
+              onFocus={() => placeQuery && !selectedPrediction && setShowPlaceResults(true)}
+              onBlur={() => setTimeout(() => setShowPlaceResults(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddPlace();
+                } else if (e.key === "Escape") {
+                  resetPlaceBar();
+                }
+              }}
+              placeholder={`Search Google for hotels, restaurants, sights${activeFolder.location ? ` in ${activeFolder.location}` : ""}…`}
+              className="border-thin pl-8 font-inter text-xs h-8"
+            />
+            {showPlaceResults && placePredictions.length > 0 && !selectedPrediction && (
+              <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-sm border-thin border-border bg-card shadow-md">
+                {placePredictions.map((p) => (
+                  <button
+                    key={p.place_id}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelectPrediction(p);
+                    }}
+                    className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-secondary/40"
+                  >
+                    <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
+                    <div className="min-w-0">
+                      <p className="truncate font-inter text-xs font-medium text-foreground">
+                        {p.structured_formatting.main_text}
+                      </p>
+                      <p className="truncate font-inter text-[10px] text-muted-foreground">
+                        {p.structured_formatting.secondary_text}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedPrediction && (
+              <p className="mt-1 truncate pl-1 font-inter text-[10px] text-muted-foreground">
+                {selectedPrediction.secondary_text}
+              </p>
+            )}
+          </div>
           <Button
             variant="outline"
             size="sm"
-            className="border-thin font-inter text-xs"
-            onClick={() => setAddOpen(true)}
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={handleAddPlace}
+            disabled={addingPlace || !placeQuery.trim()}
+            title={selectedPrediction ? "Add this place" : "Open manual entry"}
           >
-            <Plus className="mr-1 h-3 w-3" />
-            Add Item
+            {addingPlace ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
           </Button>
+        </div>
+        {/* Category override pills */}
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <span className="font-inter text-[9px] uppercase tracking-wider text-muted-foreground/70">
+            Category
+          </span>
+          {(["auto", "stays", "dining", "activity", "sites"] as const).map((key) => {
+            const isActive = categoryOverride === key;
+            const label = key === "auto" ? "Auto" : CATEGORY_LABEL[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCategoryOverride(key)}
+                className={`rounded-sm border-thin px-1.5 py-0.5 font-inter text-[9px] transition-colors ${
+                  isActive
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

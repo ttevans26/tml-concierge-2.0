@@ -27,7 +27,18 @@ export function loadGoogleMapsScript(): Promise<void> {
     script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`;
     script.async = true;
     script.defer = true;
-    script.onload = () => {
+    script.onload = async () => {
+      try {
+        // With loading=async, google.maps.* is not ready at script.onload —
+        // must await importLibrary for each library before resolving.
+        const g = (window as any).google;
+        await Promise.all([
+          g.maps.importLibrary("maps"),
+          g.maps.importLibrary("places"),
+        ]);
+      } catch (err) {
+        console.error("Google Maps importLibrary failed", err);
+      }
       scriptLoaded = true;
       scriptLoading = false;
       resolve();

@@ -133,6 +133,17 @@ export interface NetworkTripItem {
   location_name: string | null;
 }
 
+export interface ConciergeAppointment {
+  id: string;
+  date: string;            // yyyy-MM-dd
+  slot: string;            // "10:30 AM"
+  timezone_label: string;  // "PST"
+  trip_id: string | null;
+  trip_name: string | null;
+  agenda: string;
+  created_at: string;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Store shape                                                       */
 /* ------------------------------------------------------------------ */
@@ -169,6 +180,11 @@ interface TripStore {
   requestAccess: (id: string) => void;
   networkUserTrips: Record<string, NetworkTripSummary[]>;
   networkTripItems: Record<string, NetworkTripItem[]>;
+
+  /* concierge appointments (client-side) */
+  appointments: ConciergeAppointment[];
+  addAppointment: (input: Omit<ConciergeAppointment, "id" | "created_at">) => void;
+  cancelAppointment: (id: string) => void;
 
   /* actions */
   fetchTrips: () => Promise<void>;
@@ -270,6 +286,34 @@ export const useTripStore = create<TripStore>((set, get) => ({
     }),
   networkUserTrips: MOCK_NETWORK_TRIPS,
   networkTripItems: MOCK_NETWORK_TRIP_ITEMS,
+
+  /* ---- Concierge Appointments (client-side demo) ---- */
+  appointments: [
+    {
+      id: "appt-seed-1",
+      date: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 4);
+        return d.toISOString().slice(0, 10);
+      })(),
+      slot: "10:30 AM",
+      timezone_label: "PST",
+      trip_id: null,
+      trip_name: null,
+      agenda: "Initial scoping for late-summer Japan itinerary — Tokyo + Kyoto split, ryokan recommendations.",
+      created_at: new Date().toISOString(),
+    },
+  ],
+  addAppointment: (input) => {
+    const appt: ConciergeAppointment = {
+      ...input,
+      id: `appt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      created_at: new Date().toISOString(),
+    };
+    set({ appointments: [...get().appointments, appt] });
+  },
+  cancelAppointment: (id) =>
+    set({ appointments: get().appointments.filter((a) => a.id !== id) }),
 
   /* ---- Fetch ---- */
 

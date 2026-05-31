@@ -1,4 +1,4 @@
-import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe } from "lucide-react";
+import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe, CalendarClock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useTripStore } from "@/stores/useTripStore";
@@ -75,6 +75,11 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const isPublic = useTripStore((s) => s.networkProfile.isPublic);
   const setProfileVisibility = useTripStore((s) => s.setProfileVisibility);
+  const appointments = useTripStore((s) => s.appointments);
+  const upcomingCount = (() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return appointments.filter((a) => a.date >= today).length;
+  })();
   const [view, setView] = useState<"menu" | "preferences">("menu");
   const [prefs, setPrefs] = useState<TravelPreferences>(DEFAULT_PREFS);
   const [saving, setSaving] = useState(false);
@@ -184,6 +189,23 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
               >
                 <Settings className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 Travel Preferences
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate("/tools");
+                }}
+                className="justify-start gap-2.5 font-inter text-sm text-foreground"
+              >
+                <CalendarClock className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                <span className="flex-1 text-left">Concierge Sessions</span>
+                {upcomingCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-sm bg-accent/15 text-accent font-inter text-[10px] font-medium">
+                    {upcomingCount}
+                  </span>
+                )}
               </Button>
 
               <Button

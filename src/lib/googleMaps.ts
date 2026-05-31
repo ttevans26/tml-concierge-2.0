@@ -118,7 +118,7 @@ export async function healItemCoordinates(
     service.findPlaceFromQuery(
       {
         query,
-        fields: ["place_id", "name", "geometry", "formatted_address", "rating", "user_ratings_total", "photos", "website"],
+        fields: ["place_id", "name", "geometry", "formatted_address", "rating", "user_ratings_total", "photos"],
       },
       (results: any[] | null, status: string) => {
         if (status === "OK" && results && results.length > 0) resolve(results[0]);

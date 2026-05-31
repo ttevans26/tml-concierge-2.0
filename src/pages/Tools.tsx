@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTripStore } from "@/stores/useTripStore";
 import PreparednessChecklist from "@/components/tools/PreparednessChecklist";
 import TravelWarningsFeed from "@/components/tools/TravelWarningsFeed";
+import UpcomingAppointments from "@/components/tools/UpcomingAppointments";
 import {
   Select,
   SelectContent,
@@ -79,6 +80,10 @@ export default function Tools() {
           </Select>
         </div>
       </header>
+
+      <UpcomingAppointments />
+
+      <div className="border-t-thin border-foreground/15 mb-10" />
 
       {!selectedTrip ? (
         <div className="border-thin border-foreground/40 rounded-sm p-10 text-center">

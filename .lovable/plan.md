@@ -1,34 +1,54 @@
 ## Goal
-Add a trip-association selector to the "Plan w/ Concierge" modal so users can optionally tie the appointment to one of their existing trips (for live collaboration) — or leave it unattached for preliminary ideation.
+Persist scheduled concierge appointments and surface them in the Tools page so the user has one canonical "Upcoming Appointments" view alongside their other preparedness tools.
+
+## Why Tools (not Profile drawer)
+- Appointments are an operational planning artifact, not a profile/identity item — they sit naturally next to Preparedness & Travel Warnings.
+- Tools is a top-level tab with room to render rich cards (date, time, TZ, linked trip, agenda). The profile drawer is narrow (320px) and ephemeral.
+- The profile drawer will still get a small "Upcoming: 2" entry that links to Tools, so it's discoverable from anywhere.
 
 ## Changes
 
-**File: `src/components/SchedulingModal.tsx`**
+**1. `src/stores/useTripStore.ts` — appointments state (client-side, demo)**
+- Add type:
+  ```ts
+  export interface ConciergeAppointment {
+    id: string;
+    date: string;          // yyyy-MM-dd
+    slot: string;          // "10:30 AM"
+    timezone_label: string;// "PST"
+    trip_id: string | null;
+    trip_name: string | null;
+    agenda: string;
+    created_at: string;
+  }
+  ```
+- Add to store: `appointments: ConciergeAppointment[]`, `addAppointment(input)`, `cancelAppointment(id)`.
+- Seed with 1 dummy upcoming appointment so the demo isn't empty on first load.
 
-1. **Pull trips from the store**:
-   - Import `useTripStore` and select `trips`.
-   - New state: `const [tripId, setTripId] = useState<string>("none")` where `"none"` represents "No trip — exploratory session".
+**2. `src/components/SchedulingModal.tsx`**
+- On Confirm, call `addAppointment({ ... })` with the selected date, slot, TZ, trip, agenda.
+- Keep the existing toast.
 
-2. **New "Trip Context" section** in Column 3 (Agenda), above the Textarea:
-   - Label: `Trip Context` (same uppercase-tracking style as the Agenda label).
-   - Use the existing shadcn `Select` component:
-     - First option: `No trip — exploratory ideation` (value `"none"`).
-     - Then one option per trip: `{trip.name}` with a secondary line showing `{destination} · {start–end dates}` formatted via `date-fns` if both dates exist.
-   - Below the select, render a tiny helper line:
-     - If `"none"`: `"The concierge will help you brainstorm from scratch."`
-     - If a trip is selected: `"Concierge will have live view-access to this trip during the call."` (Bronze accent text).
+**3. New: `src/components/tools/UpcomingAppointments.tsx`**
+- Reads `appointments` from the store, sorted by date+slot, filters to today-forward.
+- Empty state: small "No upcoming sessions" card with CTA button that opens the SchedulingModal.
+- Each appointment renders as a Quiet Luxury card:
+  - Left: date block (day-of-week, big day number, month) in Playfair.
+  - Right: time + TZ chip, agenda preview (line-clamp-2), and either `Linked to {trip_name}` (Bronze) or `Exploratory session` (muted).
+  - "Cancel" ghost button (calls `cancelAppointment`, toast confirmation).
+- Header row: "Concierge Sessions" + small "Schedule" button that opens the SchedulingModal locally.
 
-3. **Toast + reset**:
-   - Append trip context to the confirmation toast description:
-     - With trip: `"…at 10:30 AM PST · linked to {trip.name}."`
-     - Without: `"…at 10:30 AM PST · exploratory session."`
-   - Reset `tripId` back to `"none"` along with the existing state resets on confirm.
+**4. `src/pages/Tools.tsx`**
+- Add a new section above the existing trip-filtered grid:
+  ```
+  <UpcomingAppointments />
+  ```
+  Separated by a `border-thin border-foreground/15` divider. This section is trip-independent (lives outside the "Select a trip" gating).
 
-4. **Layout polish**:
-   - Column 3 stays a single flex column; the new Trip Context block sits above Agenda with `gap-4`, matching the existing rhythm.
-   - No changes to columns 1 or 2.
+**5. `src/components/ProfileDrawer.tsx`** (small addition)
+- In the nav block (between Travel Preferences and Travel Network), add a "Concierge Sessions" link with `CalendarClock` icon and a count badge showing upcoming appointment count. Clicking navigates to `/tools`.
 
 ## Out of scope
-- Persisting the appointment or trip link to the backend.
-- Granting the concierge real access to the trip data.
-- Filtering trips by status (all user trips are listed).
+- Persisting appointments to Supabase (client-side only for the demo).
+- Rescheduling / editing existing appointments.
+- Calendar invites / email confirmations.

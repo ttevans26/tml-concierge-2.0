@@ -133,6 +133,17 @@ export interface NetworkTripItem {
   location_name: string | null;
 }
 
+export interface ConciergeAppointment {
+  id: string;
+  date: string;            // yyyy-MM-dd
+  slot: string;            // "10:30 AM"
+  timezone_label: string;  // "PST"
+  trip_id: string | null;
+  trip_name: string | null;
+  agenda: string;
+  created_at: string;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Store shape                                                       */
 /* ------------------------------------------------------------------ */
@@ -169,6 +180,11 @@ interface TripStore {
   requestAccess: (id: string) => void;
   networkUserTrips: Record<string, NetworkTripSummary[]>;
   networkTripItems: Record<string, NetworkTripItem[]>;
+
+  /* concierge appointments (client-side) */
+  appointments: ConciergeAppointment[];
+  addAppointment: (input: Omit<ConciergeAppointment, "id" | "created_at">) => void;
+  cancelAppointment: (id: string) => void;
 
   /* actions */
   fetchTrips: () => Promise<void>;

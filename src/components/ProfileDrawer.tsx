@@ -1,4 +1,4 @@
-import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe, CalendarClock } from "lucide-react";
+import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe, CalendarClock, ShieldCheck, KeyRound, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useTripStore } from "@/stores/useTripStore";
@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -80,18 +83,24 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
     const today = new Date().toISOString().slice(0, 10);
     return appointments.filter((a) => a.date >= today).length;
   })();
-  const [view, setView] = useState<"menu" | "preferences">("menu");
+  const [view, setView] = useState<"menu" | "preferences" | "security">("menu");
   const [prefs, setPrefs] = useState<TravelPreferences>(DEFAULT_PREFS);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
 
   const loadPrefs = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from("profiles")
-      .select("preferences")
+      .select("preferences, display_name, avatar_url")
       .eq("user_id", user.id)
       .maybeSingle();
+    if (data?.display_name) setDisplayName(data.display_name);
+    if (data?.avatar_url) setAvatarUrl(data.avatar_url);
     if (data?.preferences && typeof data.preferences === "object") {
       const p = data.preferences as Record<string, unknown>;
       setPrefs({
@@ -165,30 +174,99 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
     onOpenChange(false);
   };
 
+  const saveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ display_name: displayName })
+      .eq("user_id", user.id);
+    setSavingProfile(false);
+    if (error) toast.error("Failed to save profile");
+    else toast.success("Profile updated");
+  };
+
+  const sendPasswordReset = async () => {
+    if (!user?.email) return;
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    if (error) toast.error("Could not send reset email");
+    else toast.success("Password reset email sent");
+  };
+
+  const signOutAllDevices = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) toast.error("Sign-out failed");
+    else {
+      toast.success("Signed out of all devices");
+      onOpenChange(false);
+    }
+  };
+
+  const initials = (() => {
+    const src = displayName || user?.email || "";
+    return src
+      .replace(/@.*$/, "")
+      .split(/[\s._-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase())
+      .join("") || "·";
+  })();
+
+  const headerName = displayName || user?.email?.split("@")[0] || "Traveler";
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-80 bg-background p-6 overflow-y-auto">
         {view === "menu" ? (
           <>
-            <SheetHeader className="text-left">
-              <SheetTitle className="font-playfair text-lg font-semibold text-foreground">
-                Profile
-              </SheetTitle>
-              <SheetDescription className="font-inter text-xs text-muted-foreground">
-                {user?.email ?? "—"}
-              </SheetDescription>
+            <SheetHeader className="sr-only">
+              <SheetTitle>Profile</SheetTitle>
+              <SheetDescription>{user?.email ?? ""}</SheetDescription>
             </SheetHeader>
+
+            <div className="flex items-center gap-3">
+              <Avatar className="h-14 w-14 rounded-full border-thin border-accent/40">
+                {avatarUrl ? <AvatarImage src={avatarUrl} alt={headerName} /> : null}
+                <AvatarFallback className="bg-accent/10 text-accent font-playfair text-base">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="font-playfair text-base font-semibold text-foreground truncate">
+                  {headerName}
+                </div>
+                <div className="font-inter text-[11px] text-muted-foreground truncate">
+                  {user?.email ?? "—"}
+                </div>
+              </div>
+            </div>
 
             <Separator className="my-5" />
 
             <nav className="flex flex-col gap-1">
               <Button
                 variant="ghost"
+                onClick={() => setView("security")}
+                className="justify-start gap-2.5 font-inter text-sm text-foreground"
+              >
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                <span className="flex-1 text-left">Profile & Security</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+              </Button>
+
+              <Button
+                variant="ghost"
                 onClick={() => setView("preferences")}
                 className="justify-start gap-2.5 font-inter text-sm text-foreground"
               >
                 <Settings className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                Travel Preferences
+                <span className="flex-1 text-left">Travel Preferences</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
               </Button>
 
               <Button
@@ -258,7 +336,7 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
               Sign Out
             </Button>
           </>
-        ) : (
+        ) : view === "preferences" ? (
           <>
             <div className="flex items-center gap-2 mb-4">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setView("menu")}>
@@ -420,6 +498,106 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                 Save Preferences
               </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-4">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setView("menu")}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <h2 className="font-playfair text-base font-semibold text-foreground">
+                Profile & Security
+              </h2>
+            </div>
+
+            <SheetHeader className="sr-only">
+              <SheetTitle>Profile & Security</SheetTitle>
+              <SheetDescription>Manage your personal details and account security</SheetDescription>
+            </SheetHeader>
+
+            <div className="space-y-5">
+              <section>
+                <h3 className="font-inter text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                  Personal Details
+                </h3>
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar className="h-14 w-14 rounded-full border-thin border-accent/40">
+                    {avatarUrl ? <AvatarImage src={avatarUrl} alt={headerName} /> : null}
+                    <AvatarFallback className="bg-accent/10 text-accent font-playfair text-base">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <p className="font-inter text-[11px] text-muted-foreground leading-relaxed">
+                    Avatar uploads coming soon.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="font-inter text-xs text-muted-foreground">Full Name</Label>
+                    <Input
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Your full name"
+                      className="h-9 text-sm border-border"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="font-inter text-xs text-muted-foreground">Email</Label>
+                    <Input
+                      value={user?.email ?? ""}
+                      readOnly
+                      disabled
+                      className="h-9 text-sm border-border bg-muted/30"
+                    />
+                  </div>
+                  <Button
+                    onClick={saveProfile}
+                    disabled={savingProfile}
+                    className="w-full h-9 font-inter text-sm bg-foreground text-background hover:bg-foreground/90"
+                  >
+                    {savingProfile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Profile
+                  </Button>
+                </div>
+              </section>
+
+              <Separator />
+
+              <section>
+                <h3 className="font-inter text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+                  Security
+                </h3>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    onClick={sendPasswordReset}
+                    disabled={sendingReset || !user?.email}
+                    className="w-full justify-start gap-2.5 h-9 font-inter text-sm border-border"
+                  >
+                    {sendingReset ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                    )}
+                    Change Password
+                  </Button>
+                  <p className="font-inter text-[11px] text-muted-foreground leading-relaxed px-1">
+                    We'll email you a secure link to set a new password.
+                  </p>
+                </div>
+
+                <div className="space-y-2 mt-4">
+                  <Button
+                    variant="ghost"
+                    onClick={signOutAllDevices}
+                    className="w-full justify-start gap-2.5 h-9 font-inter text-sm text-destructive hover:text-destructive"
+                  >
+                    <LogOut className="h-4 w-4" strokeWidth={1.5} />
+                    Sign Out of All Devices
+                  </Button>
+                </div>
+              </section>
             </div>
           </>
         )}

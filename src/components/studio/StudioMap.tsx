@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MapPin, Compass, RefreshCw, CheckCircle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
-import { supabase } from "@/integrations/supabase/client";
-import { loadGoogleMapsScript, geocodeAddress } from "@/lib/googleMaps";
+import { loadGoogleMapsScript, healItemCoordinates } from "@/lib/googleMaps";
 import { toast } from "sonner";
 
 const PIN_HEX: Record<string, string> = {
@@ -25,11 +24,12 @@ function getCoords(item: StudioItem): { lat: number; lng: number } | null {
 }
 
 export default function StudioMap() {
-  const { activeFolder } = useStudioStore();
+  const { activeFolder, fetchFolders } = useStudioStore();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
+  const healedIdsRef = useRef<Set<string>>(new Set());
 
   const allItems = activeFolder?.items || [];
   const pinnedItems = allItems.filter((i) => getCoords(i) !== null);
@@ -115,6 +115,42 @@ export default function StudioMap() {
     }
   }, [mapReady, pinnedItems.length, activeFolder?.id, allItems]);
 
+  // Background auto-heal: silently look up coords for any items missing them
+  useEffect(() => {
+    if (!mapReady || !activeFolder) return;
+    const missing = allItems.filter(
+      (i) => getCoords(i) === null && !healedIdsRef.current.has(i.id)
+    );
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      for (const item of missing) {
+        if (cancelled) return;
+        healedIdsRef.current.add(item.id);
+        try {
+          const result = await healItemCoordinates(item, activeFolder.location);
+          if (cancelled) return;
+          if (result) {
+            await fetchFolders();
+          }
+        } catch (err) {
+          console.warn("Auto-heal failed for", item.title, err);
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, activeFolder?.id, allItems.length]);
+
+  // Reset healed-set when switching folders so a new folder gets its own pass
+  useEffect(() => {
+    healedIdsRef.current = new Set();
+  }, [activeFolder?.id]);
+
   return (
     <div className="flex h-full flex-col bg-card">
       {/* Header */}
@@ -176,80 +212,17 @@ function ResyncRow({ item, folderLocation, mapInstance }: { item: StudioItem; fo
   const handleResync = useCallback(async () => {
     setSyncing(true);
     try {
-      await loadGoogleMapsScript();
-      const g = (window as any).google;
-      if (!g?.maps?.places) {
-        toast.error("Google Maps not loaded yet");
+      const result = await healItemCoordinates(item, folderLocation);
+      if (!result) {
+        toast.error(`No match found for "${item.title}"`);
         setSyncing(false);
         return;
       }
-
-      // 1) Try FindPlaceFromQuery (richer metadata)
-      const div = document.createElement("div");
-      const service = new g.maps.places.PlacesService(div);
-      const query = `${item.title}${folderLocation ? ", " + folderLocation : ""}${item.address ? ", " + item.address : ""}`;
-
-      const placeResult: any = await new Promise((resolve) => {
-        service.findPlaceFromQuery(
-          { query, fields: ["place_id", "name", "geometry", "formatted_address", "rating", "user_ratings_total", "photos", "website"] },
-          (results: any[] | null, status: string) => {
-            if (status === "OK" && results && results.length > 0) resolve(results[0]);
-            else resolve(null);
-          }
-        );
-      });
-
-      let lat: number | null = null;
-      let lng: number | null = null;
-      let placeId: string | null = null;
-      let formattedAddress: string | null = null;
-      let meta = { ...(item.api_metadata || {}) };
-
-      if (placeResult) {
-        lat = placeResult.geometry?.location?.lat() ?? null;
-        lng = placeResult.geometry?.location?.lng() ?? null;
-        placeId = placeResult.place_id || null;
-        formattedAddress = placeResult.formatted_address || null;
-        const firstPhoto = placeResult.photos?.[0];
-        const photoUrl = firstPhoto ? firstPhoto.getUrl({ maxWidth: 400, maxHeight: 300 }) : null;
-        meta = {
-          ...meta,
-          rating: placeResult.rating ?? null,
-          user_ratings_total: placeResult.user_ratings_total ?? null,
-          photo_url: photoUrl,
-        };
-      } else {
-        // 2) Fallback: plain Geocoder on address or title+location
-        const geocodeQuery = item.address || query;
-        const geo = await geocodeAddress(geocodeQuery);
-        if (!geo) {
-          toast.error(`No match found for "${item.title}"`);
-          setSyncing(false);
-          return;
-        }
-        lat = geo.lat;
-        lng = geo.lng;
-        placeId = geo.placeId;
-        formattedAddress = geo.formattedAddress;
-      }
-
-      await supabase
-        .from("studio_items")
-        .update({
-          google_place_id: placeId,
-          lat,
-          lng,
-          address: formattedAddress || item.address || null,
-          api_metadata: meta,
-        } as any)
-        .eq("id", item.id);
-
       await fetchFolders();
       setHealed(true);
       toast.success(`Pinned "${item.title}"`);
-
-      if (mapInstance && lat != null && lng != null) {
-        mapInstance.panTo({ lat, lng });
+      if (mapInstance) {
+        mapInstance.panTo({ lat: result.lat, lng: result.lng });
         mapInstance.setZoom(15);
       }
     } catch (err) {

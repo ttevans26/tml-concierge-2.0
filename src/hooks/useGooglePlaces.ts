@@ -13,6 +13,7 @@ export interface PlaceResult {
   hours: string[] | null;
   lat: number | null;
   lng: number | null;
+  types: string[];
 }
 
 export interface PlacePrediction {
@@ -94,6 +95,7 @@ export function useGooglePlaces(
               "photos",
               "opening_hours",
               "geometry",
+            "types",
             ],
           },
           (place: any, status: string) => {
@@ -114,6 +116,7 @@ export function useGooglePlaces(
                 hours: place.opening_hours?.weekday_text || null,
                 lat: place.geometry?.location?.lat() ?? null,
                 lng: place.geometry?.location?.lng() ?? null,
+                types: Array.isArray(place.types) ? place.types : [],
               });
             } else {
               resolve(null);

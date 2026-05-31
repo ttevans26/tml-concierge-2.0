@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useTripStore } from "@/stores/useTripStore";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const TIME_SLOTS = [
   "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM",
@@ -67,18 +75,25 @@ export default function SchedulingModal({ open, onOpenChange }: Props) {
   const [date, setDate] = useState<Date | undefined>();
   const [slot, setSlot] = useState<string | null>(null);
   const [agenda, setAgenda] = useState("");
+  const [tripId, setTripId] = useState<string>("none");
+  const trips = useTripStore((s) => s.trips);
+  const selectedTrip = trips.find((t) => t.id === tripId) ?? null;
 
   const dateKey = date ? format(date, "yyyy-MM-dd") : null;
   const slotsForDate = dateKey ? AVAILABILITY[dateKey] ?? [] : [];
 
   const handleConfirm = () => {
+    const contextSuffix = selectedTrip
+      ? ` · linked to ${selectedTrip.name}.`
+      : ` · exploratory session.`;
     toast({
       title: "Request Sent",
-      description: `Concierge session on ${format(date!, "MMM d, yyyy")} at ${slot} ${TZ_LABEL}.`,
+      description: `Concierge session on ${format(date!, "MMM d, yyyy")} at ${slot} ${TZ_LABEL}${contextSuffix}`,
     });
     setDate(undefined);
     setSlot(null);
     setAgenda("");
+    setTripId("none");
     onOpenChange(false);
   };
 
@@ -163,16 +178,62 @@ export default function SchedulingModal({ open, onOpenChange }: Props) {
 
           {/* Col 3 — Agenda */}
           <div className="flex flex-col justify-between p-4 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="font-inter text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Appointment Agenda
-              </label>
-              <Textarea
-                placeholder="What would you like to plan?"
-                value={agenda}
-                onChange={(e) => setAgenda(e.target.value)}
-                className="min-h-[140px] font-inter text-sm resize-none"
-              />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="font-inter text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Trip Context
+                </label>
+                <Select value={tripId} onValueChange={setTripId}>
+                  <SelectTrigger className="font-inter text-sm">
+                    <SelectValue placeholder="Select trip" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      <span className="font-inter text-sm">No trip — exploratory ideation</span>
+                    </SelectItem>
+                    {trips.map((t) => {
+                      const sub = [
+                        t.destination,
+                        t.start_date && t.end_date
+                          ? `${format(new Date(t.start_date), "MMM d")} – ${format(new Date(t.end_date), "MMM d")}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
+                      return (
+                        <SelectItem key={t.id} value={t.id}>
+                          <div className="flex flex-col">
+                            <span className="font-inter text-sm">{t.name}</span>
+                            {sub && (
+                              <span className="font-inter text-[10px] text-muted-foreground">{sub}</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className={cn(
+                  "font-inter text-[10px]",
+                  selectedTrip ? "text-accent" : "text-muted-foreground"
+                )}>
+                  {selectedTrip
+                    ? "Concierge will have live view-access to this trip during the call."
+                    : "The concierge will help you brainstorm from scratch."}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="font-inter text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Appointment Agenda
+                </label>
+                <Textarea
+                  placeholder="What would you like to plan?"
+                  value={agenda}
+                  onChange={(e) => setAgenda(e.target.value)}
+                  className="min-h-[100px] font-inter text-sm resize-none"
+                />
+              </div>
             </div>
 
             <Button

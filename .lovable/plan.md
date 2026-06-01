@@ -1,29 +1,24 @@
-## Tools Page Density Refinement
+## Header Visual Hierarchy Refinement
 
-### Goal
-Reduce excessive vertical scrolling on the Tools page by compressing spacing and downsizing headline fonts, so the key content (Preparedness Checklist + Travel Warnings) becomes visible without scrolling.
+Establish a clear 3-tier size hierarchy in `AppHeader.tsx` (and the Bell trigger in `NotificationsPopover.tsx`):
 
-### Changes
+**Tier 1 — Brand (largest)**: `TML Concierge`
+- Bump from `text-base sm:text-xl` → `text-xl sm:text-2xl`.
+- Increase seal padding slightly (`px-4 py-2 sm:px-5 sm:py-2.5`) and tracking for presence.
 
-**1. `src/pages/Tools.tsx` — Page-level tightening**
-- Reduce top padding from `py-8 md:py-12` to `py-4 md:py-6`.
-- Reduce `<header>` bottom margin from `mb-10 md:mb-12` to `mb-6 md:mb-8`.
-- Shrink headline: `text-3xl md:text-5xl` → `text-2xl md:text-4xl`.
-- Shrink subtitle: `text-sm md:text-base` → `text-xs md:text-sm`.
-- Reduce trip selector top margin from `mt-6` to `mt-4`.
-- Reduce section divider (`border-t-thin`) bottom margin from `mb-10` to `mb-6`.
+**Tier 2 — Primary Nav**: `Trips`, `Studio`, `Tools`
+- Bump from `text-sm sm:text-base` → `text-base sm:text-lg`, weight `font-semibold` when active, switch family to `font-playfair` to differentiate from utility actions and reinforce editorial feel. Increase horizontal padding `px-5 sm:px-6`.
 
-**2. `src/components/tools/UpcomingAppointments.tsx` — Section tightening**
-- Reduce internal padding/margins by ~30% (heading margins, list item gaps).
-- Keep the same information density but remove excess whitespace between rows.
+**Tier 3 — Utility Actions (smallest)**: `Travel Network`, `Plan w/ Concierge`, Bell, Profile
+- Keep text labels at `text-xs` (current) but reduce icon-button footprint from `h-10 w-10` → `h-9 w-9`, and icons from `h-4 w-4` → `h-3.5 w-3.5` so they read as clearly subordinate.
+- Reduce inline icon size next to text labels to `h-3 w-3`.
 
-**3. `src/components/tools/PreparednessChecklist.tsx` — Section tightening**
-- Compress header spacing and reduce checklist item vertical padding.
-- Tighten gap between checklist items.
+**Header bar**
+- Slightly increase header height to accommodate the larger brand and nav: `h-16 sm:h-20` → `h-18 sm:h-24` (using `h-[72px] sm:h-24`).
 
-**4. `src/components/tools/TravelWarningsFeed.tsx` — Section tightening**
-- Compress header spacing and reduce card/list item vertical padding.
-- Tighten gap between warning entries.
+### Files to edit
+- `src/components/AppHeader.tsx`
+- `src/components/NotificationsPopover.tsx` (Bell trigger sizing only)
 
-### Outcome
-The Tools page will feel more information-dense and utilitarian — more "dashboard," less "landing page." All content should fit within a single viewport on desktop, with minimal scroll on mobile.
+### Out of scope
+No behavior, routing, or color-token changes — purely visual hierarchy.

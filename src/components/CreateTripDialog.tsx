@@ -74,12 +74,13 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
             <Label htmlFor="destination" className="font-inter text-xs uppercase tracking-widest text-muted-foreground">
               Destination
             </Label>
-            <Input
+            <PlaceAutocomplete
               id="destination"
               value={destination}
-              onChange={(e) => setDestination(e.target.value)}
+              onChange={setDestination}
+              onSelect={(p) => setDestination(p.description)}
               placeholder="e.g. Tokyo, Japan"
-              className="border-thin border-border bg-background font-inter"
+              types="cities"
             />
           </div>
 

@@ -40,13 +40,13 @@ export default function UpcomingAppointments() {
 
   return (
     <>
-      <section className="mb-10">
-        <div className="mb-5 flex items-end justify-between gap-4">
+      <section className="mb-6">
+        <div className="mb-3 flex items-end justify-between gap-4">
           <div>
-            <p className="font-inter text-[11px] tracking-[0.22em] uppercase text-muted-foreground mb-2">
+            <p className="font-inter text-[10px] tracking-[0.22em] uppercase text-muted-foreground mb-1">
               Concierge
             </p>
-            <h2 className="font-playfair text-2xl md:text-3xl text-foreground">
+            <h2 className="font-playfair text-xl md:text-2xl text-foreground">
               Upcoming Sessions
             </h2>
           </div>
@@ -61,16 +61,17 @@ export default function UpcomingAppointments() {
         </div>
 
         {upcoming.length === 0 ? (
-          <div className="border-thin border-foreground/20 rounded-sm p-8 text-center">
-            <CalendarClock className="h-5 w-5 mx-auto mb-3 text-muted-foreground" strokeWidth={1.5} />
-            <p className="font-playfair italic text-foreground/70 mb-1">
+          <div className="border-thin border-foreground/20 rounded-sm p-5 text-center">
+            <CalendarClock className="h-5 w-5 mx-auto mb-2 text-muted-foreground" strokeWidth={1.5} />
+            <p className="font-playfair italic text-foreground/70 mb-1 text-sm">
               No upcoming sessions.
             </p>
-            <p className="font-inter text-xs text-muted-foreground mb-4">
+            <p className="font-inter text-xs text-muted-foreground mb-3">
               Book a 30-minute planning session with our travel concierge.
             </p>
             <Button
               onClick={() => setScheduleOpen(true)}
+              size="sm"
               className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90 font-inter text-xs"
             >
               <CalendarClock className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -78,7 +79,7 @@ export default function UpcomingAppointments() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {upcoming.map((appt) => {
               const d = parseISO(appt.date);
               return (

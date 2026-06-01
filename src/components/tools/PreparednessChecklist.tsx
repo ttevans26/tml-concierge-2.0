@@ -82,24 +82,24 @@ export default function PreparednessChecklist({ trip }: Props) {
   };
 
   return (
-    <section className="bg-card border-thin border-foreground/80 rounded-sm p-6 md:p-8">
-      <header className="mb-6">
-        <p className="font-inter text-[11px] tracking-[0.22em] text-muted-foreground uppercase mb-2">
+    <section className="bg-card border-thin border-foreground/80 rounded-sm p-4 md:p-6">
+      <header className="mb-4">
+        <p className="font-inter text-[10px] tracking-[0.22em] text-muted-foreground uppercase mb-1">
           Pre-Travel Preparedness
         </p>
-        <h2 className="font-playfair text-2xl text-foreground">Checklist</h2>
-        <p className="font-inter text-sm text-muted-foreground mt-2 max-w-prose">
+        <h2 className="font-playfair text-xl text-foreground">Checklist</h2>
+        <p className="font-inter text-xs text-muted-foreground mt-1.5 max-w-prose">
           A working list of personal tasks, augmented by logistics insights drawn from your itinerary.
         </p>
       </header>
 
       {/* Add input */}
-      <form onSubmit={handleAdd} className="flex items-center gap-2 mb-6">
+      <form onSubmit={handleAdd} className="flex items-center gap-2 mb-4">
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Add a task — e.g. Pack formal evening attire"
-          className="rounded-sm border-thin border-foreground/40 bg-background font-inter text-sm h-11"
+          className="rounded-sm border-thin border-foreground/40 bg-background font-inter text-sm h-10"
           disabled={!trip}
         />
         <Button
@@ -107,14 +107,14 @@ export default function PreparednessChecklist({ trip }: Props) {
           variant="outline"
           size="sm"
           disabled={!trip || !draft.trim()}
-          className="rounded-sm border-thin border-foreground/60 h-11 px-4 font-inter"
+          className="rounded-sm border-thin border-foreground/60 h-10 px-4 font-inter"
         >
           <Plus className="h-4 w-4 mr-1" /> Add
         </Button>
       </form>
 
       {/* Track A: manual */}
-      <div className="space-y-2 mb-8">
+      <div className="space-y-1 mb-5">
         {manual.length === 0 ? (
           <p className="font-playfair italic text-foreground/50 text-sm">
             No personal tasks yet.
@@ -134,18 +134,18 @@ export default function PreparednessChecklist({ trip }: Props) {
 
       {/* Track B: AI suggestions */}
       {ai.length > 0 && (
-        <div className="pt-6 border-t-thin border-foreground/20">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="pt-4 border-t-thin border-foreground/20">
+          <div className="flex items-center gap-2 mb-3">
             <Sparkles className="h-3.5 w-3.5 text-accent" />
-            <p className="font-inter text-[11px] tracking-[0.22em] text-muted-foreground uppercase">
+            <p className="font-inter text-[10px] tracking-[0.22em] text-muted-foreground uppercase">
               Suggested Logistics Insights
             </p>
           </div>
-          <ul className="space-y-4">
+          <ul className="space-y-3">
             {ai.map((t) => (
               <li
                 key={t.id}
-                className="border-l-2 border-accent/70 pl-4 py-1 flex items-start gap-3"
+                className="border-l-2 border-accent/70 pl-3 py-0.5 flex items-start gap-3"
               >
                 <button
                   type="button"
@@ -159,18 +159,18 @@ export default function PreparednessChecklist({ trip }: Props) {
                 </button>
                 <div className="flex-1 min-w-0">
                   <p
-                    className={`font-playfair text-base text-foreground leading-snug ${
+                    className={`font-playfair text-sm text-foreground leading-snug ${
                       t.is_completed ? "line-through text-foreground/50" : ""
                     }`}
                   >
                     {t.task_text}
                   </p>
                   {t.detail && (
-                    <p className="font-inter text-xs text-foreground/65 mt-1.5 leading-relaxed italic">
+                    <p className="font-inter text-xs text-foreground/65 mt-1 leading-relaxed italic">
                       {t.detail}
                     </p>
                   )}
-                  <div className="flex items-center gap-3 mt-2">
+                  <div className="flex items-center gap-3 mt-1.5">
                     <button
                       type="button"
                       onClick={() => persistAiAccept(t)}

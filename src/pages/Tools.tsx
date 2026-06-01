@@ -43,24 +43,24 @@ export default function Tools() {
   }, [tripId, fetchItineraryItems]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-      <header className="mb-10 md:mb-12">
-        <p className="font-inter text-[11px] tracking-[0.24em] text-muted-foreground uppercase mb-3">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 md:py-6">
+      <header className="mb-6 md:mb-8">
+        <p className="font-inter text-[10px] tracking-[0.24em] text-muted-foreground uppercase mb-2">
           Concierge Tools
         </p>
-        <h1 className="font-playfair text-3xl md:text-5xl text-foreground mb-3">
+        <h1 className="font-playfair text-2xl md:text-4xl text-foreground mb-2">
           Preparedness &amp; Advisories
         </h1>
-        <p className="font-inter text-sm md:text-base text-muted-foreground max-w-2xl">
+        <p className="font-inter text-xs md:text-sm text-muted-foreground max-w-2xl">
           Pre-departure logistics and real-time intelligence, filtered against your active itinerary.
         </p>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-4 flex items-center gap-3">
           <span className="font-inter text-[11px] tracking-[0.22em] uppercase text-muted-foreground">
             Trip
           </span>
           <Select value={tripId} onValueChange={setTripId}>
-            <SelectTrigger className="w-[280px] max-w-full rounded-sm border-thin border-foreground/60 bg-background h-11 font-inter">
+            <SelectTrigger className="w-[280px] max-w-full rounded-sm border-thin border-foreground/60 bg-background h-10 font-inter text-sm">
               <SelectValue placeholder="Select a trip" />
             </SelectTrigger>
             <SelectContent>
@@ -83,16 +83,16 @@ export default function Tools() {
 
       <UpcomingAppointments />
 
-      <div className="border-t-thin border-foreground/15 mb-10" />
+      <div className="border-t-thin border-foreground/15 mb-6" />
 
       {!selectedTrip ? (
-        <div className="border-thin border-foreground/40 rounded-sm p-10 text-center">
+        <div className="border-thin border-foreground/40 rounded-sm p-6 text-center">
           <p className="font-playfair italic text-foreground/70">
             Select a trip to surface tailored preparedness and advisories.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 md:gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-6">
           <div className="md:col-span-3">
             <PreparednessChecklist trip={selectedTrip} />
           </div>

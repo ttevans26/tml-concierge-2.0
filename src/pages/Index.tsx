@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MapPin, Calendar, Wallet } from "lucide-react";
+import { Plus, MapPin, Calendar, Wallet, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore, Trip } from "@/stores/useTripStore";
@@ -87,6 +87,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         : null;
 
   const [waypoints, setWaypoints] = useState<Waypoint[] | null>(null);
+  const [mapOpen, setMapOpen] = useState<boolean>(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,11 +149,32 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         <CountdownPanel startDate={trip.start_date} endDate={trip.end_date} />
       </div>
 
-      <TripRouteMap
-        waypoints={waypoints ?? []}
-        fallbackQuery={waypoints && waypoints.length === 0 ? trip.destination : null}
-        height={420}
-      />
+      {/* Collapse / expand bar */}
+      <button
+        type="button"
+        onClick={() => setMapOpen((v) => !v)}
+        className="flex items-center justify-between gap-2 border-t-thin border-border bg-secondary/40 px-5 py-2 text-left font-inter text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground hover:bg-secondary"
+        aria-expanded={mapOpen}
+      >
+        <span className="flex items-center gap-2">
+          <MapPin className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
+          Route map
+        </span>
+        {mapOpen ? (
+          <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
+        ) : (
+          <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
+        )}
+      </button>
+
+      {mapOpen && (
+        <TripRouteMap
+          waypoints={waypoints ?? []}
+          fallbackQuery={waypoints && waypoints.length === 0 ? trip.destination : null}
+          isLoading={waypoints === null}
+          height={420}
+        />
+      )}
     </div>
   );
 }

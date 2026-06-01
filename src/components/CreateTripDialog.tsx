@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTripStore } from "@/stores/useTripStore";
+import PlaceAutocomplete from "@/components/ui/PlaceAutocomplete";
 
 interface CreateTripDialogProps {
   open: boolean;

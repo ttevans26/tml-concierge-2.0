@@ -41,10 +41,16 @@ export default function StudioMap() {
     ensureMapsScript().then(() => {
       if (cancelled || !mapRef.current) return;
       const g = (window as any).google;
-      if (!g?.maps) return;
+      if (!g?.maps?.Map) {
+        console.error(
+          "Google Maps failed to initialize — check the Google Maps connection / API key referrer restrictions."
+        );
+        return;
+      }
 
       if (!mapInstanceRef.current) {
-        mapInstanceRef.current = new g.maps.Map(mapRef.current, {
+        try {
+          mapInstanceRef.current = new g.maps.Map(mapRef.current, {
           zoom: 13,
           center: { lat: 43.58, lng: 7.12 }, // default Antibes
           mapTypeControl: false,
@@ -56,7 +62,11 @@ export default function StudioMap() {
             { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9dce6" }] },
             { featureType: "road", elementType: "geometry", stylers: [{ color: "#e8e0d4" }] },
           ],
-        });
+          });
+        } catch (err) {
+          console.error("Google Maps init failed", err);
+          return;
+        }
       }
       setMapReady(true);
     });

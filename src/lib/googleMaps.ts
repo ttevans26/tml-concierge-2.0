@@ -1,57 +1,84 @@
 // Centralized Google Maps configuration & utilities.
-// Reads from VITE_GOOGLE_MAPS_API_KEY when available; falls back to the project key.
+// Prefers the Lovable-managed Google Maps connector key (referrer-restricted
+// to *.lovable.app / *.lovableproject.com), then a user-supplied
+// VITE_GOOGLE_MAPS_API_KEY, then a last-ditch hardcoded fallback.
 export const GOOGLE_MAPS_API_KEY: string =
+  (import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined) ||
   (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
   "AIzaSyBYwYMCsW5bFK0xZxPV2H1GxdnNcwXDWRU";
 
-let scriptLoaded = false;
-let scriptLoading = false;
-const callbacks: (() => void)[] = [];
+const GOOGLE_MAPS_CHANNEL: string | undefined = import.meta.env
+  .VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID as string | undefined;
 
-/** Loads the Google Maps JS API (with Places library) exactly once. */
+let loadPromise: Promise<void> | null = null;
+
+/** Loads the Google Maps JS API (with Places library) exactly once,
+ *  using the documented async + callback pattern. */
 export function loadGoogleMapsScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
   const g = (window as any).google;
-  if (scriptLoaded && g?.maps?.places) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (scriptLoading) {
-      callbacks.push(resolve);
-      return;
-    }
-    if (g?.maps?.places) {
-      scriptLoaded = true;
-      resolve();
-      return;
-    }
-    scriptLoading = true;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`;
-    script.async = true;
-    script.defer = true;
-    script.onload = async () => {
+  if (g?.maps?.Map && g?.maps?.places) return Promise.resolve();
+  if (loadPromise) return loadPromise;
+
+  loadPromise = new Promise((resolve) => {
+    const CALLBACK_NAME = "__tmlGmapsInit";
+
+    const finish = async () => {
       try {
-        // With loading=async, google.maps.* is not ready at script.onload —
-        // must await importLibrary for each library before resolving.
         const g = (window as any).google;
-        await Promise.all([
-          g.maps.importLibrary("maps"),
-          g.maps.importLibrary("places"),
-        ]);
+        if (g?.maps?.importLibrary) {
+          await Promise.all([
+            g.maps.importLibrary("maps"),
+            g.maps.importLibrary("places"),
+          ]);
+        }
       } catch (err) {
         console.error("Google Maps importLibrary failed", err);
       }
-      scriptLoaded = true;
-      scriptLoading = false;
       resolve();
-      callbacks.forEach((cb) => cb());
-      callbacks.length = 0;
     };
+
+    (window as any)[CALLBACK_NAME] = finish;
+
+    // De-dupe: if another caller already injected the loader, just wait for it.
+    const existing = document.querySelector<HTMLScriptElement>(
+      "script[data-gmaps-loader]"
+    );
+    if (existing) {
+      existing.addEventListener("load", finish, { once: true });
+      existing.addEventListener(
+        "error",
+        () => {
+          console.error("Failed to load Google Maps JS API");
+          resolve();
+        },
+        { once: true }
+      );
+      return;
+    }
+
+    const params = new URLSearchParams({
+      key: GOOGLE_MAPS_API_KEY,
+      libraries: "places",
+      loading: "async",
+      callback: CALLBACK_NAME,
+    });
+    if (GOOGLE_MAPS_CHANNEL) params.set("channel", GOOGLE_MAPS_CHANNEL);
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
+    script.async = true;
+    script.defer = true;
+    script.dataset.gmapsLoader = "true";
     script.onerror = () => {
-      scriptLoading = false;
       console.error("Failed to load Google Maps JS API");
+      loadPromise = null;
       resolve();
     };
     document.head.appendChild(script);
   });
+
+  return loadPromise;
 }
 
 export interface GeocodeResult {

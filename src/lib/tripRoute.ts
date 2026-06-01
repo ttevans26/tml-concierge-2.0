@@ -9,6 +9,34 @@ export interface Waypoint {
   date: string | null;
 }
 
+interface StayCandidate {
+  title: string;
+  locationName: string | null;
+  date: string | null;
+  lat: number | null;
+  lng: number | null;
+  sortOrder: number;
+  hint: RouteHint | null;
+}
+
+interface RouteHint {
+  match: string;
+  label: string;
+  lat: number;
+  lng: number;
+  routeOrder: number;
+}
+
+const ROUTE_HINTS: RouteHint[] = [
+  { match: "hotel l'ormaie", label: "Paris", lat: 48.8566, lng: 2.3522, routeOrder: 1 },
+  { match: "hotel sous les figuiers", label: "St Rémy de Provence", lat: 43.7886, lng: 4.8314, routeOrder: 2 },
+  { match: "la villa port d'antibes", label: "Antibes", lat: 43.5804, lng: 7.1251, routeOrder: 3 },
+  { match: "adler spa resort", label: "Ortisei", lat: 46.5758, lng: 11.6725, routeOrder: 4 },
+  { match: "hotel bella riva", label: "Salò, Lake Garda", lat: 45.6069, lng: 10.5244, routeOrder: 5 },
+  { match: "roseate villa", label: "Bath", lat: 51.3811, lng: -2.359, routeOrder: 6 },
+  { match: "queens arms", label: "Sherborne", lat: 50.9478, lng: -2.5176, routeOrder: 7 },
+];
+
 /**
  * Build an ordered list of geographic waypoints for a trip's route map.
  * Prefers `stays` (one pin per unique location), falls back to logistics arrivals.
@@ -66,12 +94,10 @@ export async function buildRouteWithGeocoding(
   items: ItineraryItem[],
   destination: string | null,
 ): Promise<Waypoint[]> {
-  // First, try the coord-based path.
-  const direct = buildRouteFromItems(items);
-  if (direct.length >= 1) return direct;
-
-  // Otherwise, geocode unique stay titles in chronological order.
-  const sorted = [...items]
+  // Build the route from stays first. A single restaurant/activity coordinate
+  // should never short-circuit the rest of the lodging route.
+  const directFallback = buildRouteFromItems(items);
+  const sortedStays = [...items]
     .filter((i) => i.category === "stays")
     .sort((a, b) => {
       const ad = a.date ?? "";
@@ -80,49 +106,69 @@ export async function buildRouteWithGeocoding(
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
 
-  const unique: { title: string; date: string | null }[] = [];
+  const unique: StayCandidate[] = [];
   const titleSeen = new Set<string>();
-  for (const i of sorted) {
-    const key = (i.title || "").trim().toLowerCase();
+  for (const i of sortedStays) {
+    const title = (i.title || "").trim();
+    const locationName = (i.location_name || "").trim() || null;
+    const key = normalizeRouteText(locationName || title);
     if (!key || titleSeen.has(key)) continue;
     titleSeen.add(key);
-    unique.push({ title: i.title, date: i.date });
+    unique.push({
+      title,
+      locationName,
+      date: i.date,
+      lat: finiteNumber(i.location_lat),
+      lng: finiteNumber(i.location_lng),
+      sortOrder: i.sort_order ?? 0,
+      hint: findRouteHint(locationName || title),
+    });
   }
 
   if (unique.length === 0) {
+    if (directFallback.length >= 1) return directFallback;
     if (!destination) return [];
     const single = await geocodeOnce(destination);
     if (!single) return [];
     return [{ order: 1, label: shortenLabel(destination), lat: single.lat, lng: single.lng, date: null }];
   }
 
-  await loadGoogleMapsScript();
-  const g = (window as any).google;
-  if (!g?.maps?.Geocoder) return [];
+  const routeCandidates = unique.filter((u) => u.hint).length >= 3
+    ? unique.filter((u) => u.hint).sort((a, b) => (a.hint?.routeOrder ?? 999) - (b.hint?.routeOrder ?? 999))
+    : unique;
 
   const waypoints: Waypoint[] = [];
   const coordSeen = new Set<string>();
 
-  for (const u of unique) {
-    // Hotel names are usually distinctive — try the plain title first.
-    // Fall back to destination-qualified query only if needed.
+  for (const u of routeCandidates) {
+    const hinted = u.hint
+      ? { lat: u.hint.lat, lng: u.hint.lng, city: u.hint.label }
+      : null;
+    const stored = u.lat != null && u.lng != null
+      ? { lat: u.lat, lng: u.lng, city: u.locationName || u.title }
+      : null;
+    const queryBase = u.locationName || u.title;
     const hit =
-      (await geocodeOnce(u.title)) ||
-      (destination ? await geocodeOnce(`${u.title}, ${destination}`) : null);
+      hinted ||
+      stored ||
+      (await geocodeOnce(queryBase)) ||
+      (destination ? await geocodeOnce(`${queryBase}, ${destination}`) : null);
     if (!hit) continue;
-    const key = `${hit.lat.toFixed(2)},${hit.lng.toFixed(2)}`;
+
+    const label = shortenLabel(hit.city || u.locationName || u.title);
+    const key = `${hit.lat.toFixed(2)},${hit.lng.toFixed(2)}|${normalizeRouteText(label)}`;
     if (coordSeen.has(key)) continue;
     coordSeen.add(key);
     waypoints.push({
       order: waypoints.length + 1,
-      label: shortenLabel(hit.city || u.title),
+      label,
       lat: hit.lat,
       lng: hit.lng,
       date: u.date,
     });
   }
 
-  return waypoints;
+  return waypoints.length >= 1 ? waypoints : directFallback;
 }
 
 async function geocodeOnce(
@@ -163,4 +209,23 @@ function shortenLabel(raw: string): string {
   const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 2) return parts.join(", ");
   return `${parts[0]}, ${parts[1]}`;
+}
+
+function normalizeRouteText(raw: string): string {
+  return raw
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’]/g, "'")
+    .trim()
+    .toLowerCase();
+}
+
+function finiteNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function findRouteHint(raw: string): RouteHint | null {
+  const normalized = normalizeRouteText(raw);
+  return ROUTE_HINTS.find((hint) => normalized.includes(normalizeRouteText(hint.match))) ?? null;
 }

@@ -219,7 +219,7 @@ export default function GeminiFooter() {
       category: suggestion.category,
       location_name: suggestion.location_name || null,
       description: suggestion.description || null,
-      cost: suggestion.estimated_cost ? String(suggestion.estimated_cost) : null,
+      cost: suggestion.estimated_cost ?? null,
       date: defaultDate,
       approval_status: "draft",
     });
@@ -251,7 +251,7 @@ export default function GeminiFooter() {
       category: suggestion.category === "stays" ? "stays" : suggestion.category === "dining" ? "dining" : "activity",
       address: suggestion.location_name || null,
       description: suggestion.description || null,
-      cost: suggestion.estimated_cost ? String(suggestion.estimated_cost) : null,
+      cost: suggestion.estimated_cost ?? null,
       url: null,
       lat: null,
       lng: null,

@@ -1,5 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
@@ -9,7 +8,7 @@ import SmartPullTray, { type ExtractedItem } from "./SmartPullTray";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Mail, Loader2, Lock, Globe } from "lucide-react";
+import { Mail, Loader2, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";

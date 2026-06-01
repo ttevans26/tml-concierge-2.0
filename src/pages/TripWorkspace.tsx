@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
@@ -13,6 +13,18 @@ export default function TripWorkspace() {
   const navigate = useNavigate();
   const { trips, activeTrip, loading, fetchTrips, fetchItineraryItems, setActiveTrip } =
     useTripStore();
+
+  const [studioOpen, setStudioOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("tml-studio-open") !== "false";
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("tml-studio-open", String(studioOpen));
+    } catch {
+      /* ignore */
+    }
+  }, [studioOpen]);
 
   /* Hydrate trip + itinerary */
   useEffect(() => {
@@ -74,13 +86,33 @@ export default function TripWorkspace() {
 
       {/* 3-column layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left — Ideas Vault 20% */}
-        <div className="hidden w-[20%] shrink-0 lg:block">
-          <StudioSidebar />
-        </div>
+        {/* Left — Studio Folders (collapsible) */}
+        {studioOpen ? (
+          <div className="hidden w-[20%] min-w-[220px] shrink-0 lg:block">
+            <StudioSidebar onCollapse={() => setStudioOpen(false)} />
+          </div>
+        ) : (
+          <div className="hidden w-10 shrink-0 border-r border-border bg-card lg:flex flex-col items-center py-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              onClick={() => setStudioOpen(true)}
+              title="Expand Studio Folders"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span
+              className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground"
+              style={{ writingMode: "vertical-rl" }}
+            >
+              Studio
+            </span>
+          </div>
+        )}
 
-        {/* Center — Matrix Grid 60% */}
-        <div className="flex-1 lg:w-[60%]">
+        {/* Center — Matrix Grid */}
+        <div className="flex-1 min-w-0">
           <MatrixGrid />
         </div>
 

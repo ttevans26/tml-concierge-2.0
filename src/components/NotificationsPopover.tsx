@@ -112,14 +112,14 @@ export default function NotificationsPopover() {
           size="icon"
           aria-label={`Notifications${unread ? ` — ${unread} unread` : ""}`}
           className={cn(
-            "relative h-10 w-10",
+            "relative h-9 w-9",
             unread > 0
               ? "text-accent hover:text-accent"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
           <Bell
-            className="h-4 w-4"
+            className="h-3.5 w-3.5"
             strokeWidth={unread > 0 ? 2 : 1.5}
             fill={unread > 0 ? "currentColor" : "none"}
           />

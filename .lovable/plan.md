@@ -1,63 +1,64 @@
 ## Goal
 
-Replace the plain text inputs for **New Collection → "General Location"** (`src/components/studio/StudioVault.tsx`) and **New Journey → "Destination"** (`src/components/CreateTripDialog.tsx`) with a real Google-style place autocomplete: type → see predictions → click one to fill the field.
+Transform the placeholder `GeminiFooter` bubble into a working chat that streams responses from Lovable AI (Gemini), grounded in the user's active trip context (destination, dates, itinerary, preferences). Single-session for MVP — no persistence.
 
-## Approach
+## Scope
 
-Build one reusable component, `src/components/ui/PlaceAutocomplete.tsx`, and use it in both dialogs. Keeps behavior identical and means future location fields can drop it in.
+**In:**
+- New streaming edge function `concierge-chat` (Lovable AI Gateway, Gemini 2.5 Flash)
+- Expanded chat UI in `GeminiFooter.tsx` (wider panel, message thread, input, streaming render, markdown)
+- Trip + profile context injected as system prompt
+- Quick-prompt chips (e.g. "Suggest a dinner near my hotel", "What am I missing?")
+- 429 / 402 error toasts
 
-### Component contract
+**Out (future phases):**
+- Persisting conversations to DB
+- Tool calling to actually create itinerary items from chat (suggest only, with copy/add buttons later)
+- Multi-trip / cross-session memory
+- Voice input
 
-```ts
-<PlaceAutocomplete
-  value={string}
-  onChange={(v: string) => void}            // raw text changes (typing)
-  onSelect={(p: PlacePick) => void}         // user picked a suggestion
-  placeholder?: string
-  types?: "cities" | "regions" | "establishment" | undefined  // bias
-  id?: string
-/>
+## Architecture
 
-interface PlacePick {
-  description: string;   // e.g. "Provence, France"
-  placeId: string;
-  mainText: string;      // "Provence"
-  secondaryText: string; // "France"
-}
+```text
+GeminiFooter (client)
+  └─ POST /functions/v1/concierge-chat  (SSE stream)
+       └─ Lovable AI Gateway → google/gemini-3-flash-preview
+            ├─ system: TML voice + active trip context + user prefs
+            └─ messages: full thread history (client-sent)
 ```
 
-### Implementation
+Context built client-side from `useTripStore`:
+- `activeTrip` (name, destination, dates, budgets)
+- `itineraryItems` (compact summary: category, title, date)
+- `profile.preferences` (quality bars, loyalty, amenities)
+- `activeAnchor` (if set — anchor stay for proximity questions)
 
-- Reuse the existing `loadGoogleMapsScript()` from `src/lib/googleMaps.ts` (already includes the `places` library and uses the connector's referrer-allowed key).
-- Use **Places API (New)** as required by the connector knowledge — not legacy `Autocomplete`:
-  ```ts
-  const { AutocompleteSuggestion, AutocompleteSessionToken } =
-    await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
-  const sessionToken = new AutocompleteSessionToken();
-  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-    input, sessionToken, includedPrimaryTypes: [...], // when types prop set
-  });
-  ```
-- Debounce input ~200ms; require min 2 chars.
-- Rotate a single `AutocompleteSessionToken` per "edit session" (reset on select) for billing correctness.
-- Render a popover/list below the input using the existing shadcn `Command`/`Popover` pattern already used elsewhere — quiet-luxury styling (cream bg, onyx text, bronze hover, 2px radii, 0.5px borders).
-- Keyboard: ↑/↓ to move, Enter to pick, Esc to close. Click-outside to close.
-- Mobile: 44px min touch target per memory rule.
-- Free-text fallback: if the user keeps typing and hits Enter without picking a suggestion, the parent still gets the raw string via `onChange` — no forced selection. This preserves the current "manual" flow as a safety net.
+## Files
 
-### Wire-up
+**New**
+- `supabase/functions/concierge-chat/index.ts` — SSE proxy to Lovable AI, CORS, 429/402 handling, no auth required (public, stateless)
 
-1. **`CreateTripDialog.tsx`** (Destination field): swap the `<Input>` for `<PlaceAutocomplete value={destination} onChange={setDestination} onSelect={(p) => setDestination(p.description)} types="cities" placeholder="e.g., Mexico City" />`. No DB schema change — still stores the description string in `trips.destination`.
-2. **`StudioVault.tsx`** (General Location field): same swap, but `types="regions"` so users get regions/cities ("Provence", "South of France") instead of restaurants. Stores description string in `studio_folders.location`.
+**Modified**
+- `src/components/GeminiFooter.tsx` — replace placeholder with full chat: message list, streaming render, input, send/clear, quick prompts. Add `react-markdown` for assistant messages.
+- `package.json` — add `react-markdown` if not present
 
-### Out of scope
+## UI Behavior
 
-- No DB changes. We're not persisting `place_id`/lat/lng on the folder or trip in this pass (can be a follow-up if useful for the Proximity Map default center).
-- No changes to other location inputs (FIND A PLACE, item creation forms). They already use their own search flows.
-- No styling overhaul of either dialog beyond the input swap.
+- Bubble expands from ~288px → ~380px wide × ~520px tall when active
+- Empty state: 3–4 quick-prompt chips tailored to active trip (or generic if no trip)
+- Streaming tokens render live into the last assistant bubble
+- Cream/Onyx/Bronze palette, 0.5px borders, 2px radii (per design system)
+- Mobile: full-width sheet from bottom
 
-## Files touched
+## System Prompt (sketch)
 
-- **Add** `src/components/ui/PlaceAutocomplete.tsx` — reusable component.
-- **Edit** `src/components/CreateTripDialog.tsx` — swap Destination input.
-- **Edit** `src/components/studio/StudioVault.tsx` — swap General Location input.
+> You are the TML Concierge — a discreet, points-savvy luxury travel advisor. Voice: editorial, concise, never sycophantic. Always cite *why* (proximity, points multiplier, fit with stated preferences). When the traveler has an active trip, ground answers in their itinerary, budget, and anchor stay. Never invent confirmation codes or prices.
+>
+> [ACTIVE TRIP] {name} · {destination} · {dates} · budget {…}
+> [ANCHOR] {stay name or "none"}
+> [ITINERARY] {compact list}
+> [PREFERENCES] {prefs block}
+
+## Open question
+
+Should the concierge be able to **suggest items the user can one-click add to their itinerary** in this first pass (via tool-calling, similar to `get-concierge-suggestions`), or keep MVP as chat-only with copy/paste? Recommendation: chat-only now; add "Add to itinerary" buttons in a follow-up.

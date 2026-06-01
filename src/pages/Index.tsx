@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MapPin, Calendar, Wallet, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, MapPin, Calendar, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore, Trip } from "@/stores/useTripStore";
@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import CreateTripDialog from "@/components/CreateTripDialog";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { buildRouteFromItems, type Waypoint } from "@/lib/tripRoute";
+import { buildRouteWithGeocoding, type Waypoint } from "@/lib/tripRoute";
 import TripRouteMap from "@/components/trips/TripRouteMap";
 
 /* ------------------------------------------------------------------ */
@@ -78,17 +78,7 @@ function CountdownPanel({ startDate, endDate }: { startDate?: string | null; end
 /*  Trip Card                                                          */
 /* ------------------------------------------------------------------ */
 
-function TripCard({
-  trip,
-  onClick,
-  expanded,
-  onToggleExpand,
-}: {
-  trip: Trip;
-  onClick: () => void;
-  expanded: boolean;
-  onToggleExpand: () => void;
-}) {
+function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   const dateRange =
     trip.start_date && trip.end_date
       ? `${format(new Date(trip.start_date), "MMM d")} — ${format(new Date(trip.end_date), "MMM d, yyyy")}`
@@ -99,7 +89,6 @@ function TripCard({
   const [waypoints, setWaypoints] = useState<Waypoint[] | null>(null);
 
   useEffect(() => {
-    if (!expanded || waypoints !== null) return;
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
@@ -112,45 +101,25 @@ function TripCard({
         setWaypoints([]);
         return;
       }
-      setWaypoints(buildRouteFromItems(data as any));
+      const wps = await buildRouteWithGeocoding(data as any, trip.destination);
+      if (!cancelled) setWaypoints(wps);
     })();
     return () => {
       cancelled = true;
     };
-  }, [expanded, waypoints, trip.id]);
+  }, [trip.id, trip.destination]);
 
   return (
-    <div
-      className={`group flex ${expanded ? "sm:col-span-2 lg:col-span-3" : ""} flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md`}
-    >
+    <div className="group flex flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md">
       <div className="flex">
-        {/* Left — Trip Info (clickable to open workspace) */}
         <div
           onClick={onClick}
           className="flex min-w-0 flex-1 cursor-pointer flex-col justify-between p-5 sm:p-6"
         >
         <div className="min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
-              {trip.name}
-            </h3>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleExpand();
-              }}
-              className="-mt-1 -mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
-              aria-label={expanded ? "Hide route map" : "Show route map"}
-              title={expanded ? "Hide route map" : "Show route map"}
-            >
-              {expanded ? (
-                <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
-              ) : (
-                <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
-              )}
-            </button>
-          </div>
+          <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
+            {trip.name}
+          </h3>
 
           {trip.destination && (
             <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
@@ -179,13 +148,11 @@ function TripCard({
         <CountdownPanel startDate={trip.start_date} endDate={trip.end_date} />
       </div>
 
-      {expanded && (
-        <TripRouteMap
-          waypoints={waypoints ?? []}
-          fallbackQuery={waypoints && waypoints.length === 0 ? trip.destination : null}
-          height={360}
-        />
-      )}
+      <TripRouteMap
+        waypoints={waypoints ?? []}
+        fallbackQuery={waypoints && waypoints.length === 0 ? trip.destination : null}
+        height={420}
+      />
     </div>
   );
 }
@@ -226,7 +193,6 @@ export default function Index() {
   const navigate = useNavigate();
   const { trips, loading, fetchTrips } = useTripStore();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -255,26 +221,28 @@ export default function Index() {
 
       {/* Content */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex flex-col gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 rounded-sm" />
+            <Skeleton key={i} className="h-[480px] rounded-sm" />
           ))}
         </div>
       ) : trips.length === 0 ? (
         <EmptyState onNew={() => setDialogOpen(true)} />
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {trips.map((trip) => (
-            <TripCard
-              key={trip.id}
-              trip={trip}
-              onClick={() => navigate(`/trip/${trip.id}`)}
-              expanded={expandedTripId === trip.id}
-              onToggleExpand={() =>
-                setExpandedTripId((cur) => (cur === trip.id ? null : trip.id))
-              }
-            />
-          ))}
+        <div className="mx-auto flex max-w-4xl flex-col gap-8">
+          {[...trips]
+            .sort((a, b) => {
+              const ad = a.start_date ?? "9999-12-31";
+              const bd = b.start_date ?? "9999-12-31";
+              return ad.localeCompare(bd);
+            })
+            .map((trip) => (
+              <TripCard
+                key={trip.id}
+                trip={trip}
+                onClick={() => navigate(`/trip/${trip.id}`)}
+              />
+            ))}
         </div>
       )}
 

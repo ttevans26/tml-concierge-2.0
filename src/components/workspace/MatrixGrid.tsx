@@ -503,7 +503,17 @@ export default function MatrixGrid() {
       {viewMode === "calendar" ? (
         <CalendarStaysView />
       ) : (
-      <ScrollArea className="flex-1">
+      <div
+        ref={scrollRef}
+        onMouseDown={onPanMouseDown}
+        onMouseMove={onPanMouseMove}
+        onMouseUp={endPan}
+        onMouseLeave={endPan}
+        onWheel={onWheel}
+        className={`flex-1 overflow-auto select-none ${
+          dragState.current.active ? "cursor-grabbing" : "cursor-grab"
+        }`}
+      >
         <div className="flex min-w-max">
           {/* Category labels column — sticky left */}
           <div className="sticky left-0 z-20 w-24 shrink-0 border-r border-border bg-card">
@@ -577,8 +587,7 @@ export default function MatrixGrid() {
             );
           })}
         </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+      </div>
       )}
 
       {activeTrip && (

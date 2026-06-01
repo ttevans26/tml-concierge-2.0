@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import {
   Hotel, UtensilsCrossed, Compass, Landmark, FolderOpen,
-  GripVertical, ChevronDown, Archive, Filter, Sparkles, RefreshCw, Loader2,
+  GripVertical, ChevronDown, Archive, Filter, Sparkles, RefreshCw, Loader2, ChevronLeft,
 } from "lucide-react";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
@@ -58,7 +58,7 @@ function DraggableStudioItem({ item, isConcierge }: { item: StudioItem; isConcie
     <div
       draggable
       onDragStart={handleDragStart}
-      className={`group flex cursor-grab items-start gap-2 rounded-sm border px-2.5 py-2 transition-shadow active:cursor-grabbing hover:shadow-sm ${
+      className={`group flex w-full min-w-0 cursor-grab items-start gap-2 rounded-sm border px-2.5 py-2 transition-shadow active:cursor-grabbing hover:shadow-sm ${
         isConcierge
           ? "border-accent/30 bg-accent/5"
           : "border-border bg-card"
@@ -71,17 +71,17 @@ function DraggableStudioItem({ item, isConcierge }: { item: StudioItem; isConcie
         <Icon className="mt-0.5 h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate font-inter text-[11px] font-medium text-foreground">
+        <p className="break-words font-inter text-[11px] font-medium text-foreground leading-snug">
           {item.title}
         </p>
         {item.description && (
-          <p className="mt-0.5 line-clamp-2 font-inter text-[10px] text-muted-foreground italic">
+          <p className="mt-0.5 line-clamp-3 break-words font-inter text-[10px] text-muted-foreground italic">
             {item.description}
           </p>
         )}
       </div>
       {item.cost != null && (
-        <Badge variant="outline" className="shrink-0 font-inter text-[9px]">
+        <Badge variant="outline" className="shrink-0 max-w-[64px] truncate font-inter text-[9px]">
           ${Number(item.cost).toLocaleString()}
         </Badge>
       )}
@@ -106,7 +106,7 @@ function FolderSection({ folder, defaultOpen }: { folder: StudioFolder; defaultO
         </div>
       </AccordionTrigger>
       <AccordionContent className="px-4 pb-2">
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           {folder.items.length === 0 ? (
             <p className="font-inter text-[10px] text-muted-foreground italic">
               No items yet
@@ -173,30 +173,30 @@ function ConciergeInspirationSection() {
   if (!activeTrip?.destination) return null;
 
   return (
-    <div className="border-t border-accent/20">
+    <div className="border-t border-accent/20 min-w-0">
       {/* Header with gradient accent */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between px-4 py-3 hover:bg-accent/5 transition-colors"
+        className="flex w-full min-w-0 items-center justify-between gap-2 px-4 py-3 hover:bg-accent/5 transition-colors"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-accent/20 to-accent/5 border border-accent/30">
             <Sparkles className="h-3 w-3 text-accent" strokeWidth={2} />
           </div>
-          <span className="font-inter text-[11px] font-semibold text-accent">
+          <span className="truncate font-inter text-[11px] font-semibold text-accent">
             Concierge Inspiration
           </span>
           {suggestions.length > 0 && (
-            <Badge className="bg-accent/15 text-accent border-accent/30 font-inter text-[9px]">
+            <Badge className="shrink-0 bg-accent/15 text-accent border-accent/30 font-inter text-[9px]">
               {suggestions.length}
             </Badge>
           )}
         </div>
-        <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-3 min-w-0">
           {/* Refresh button */}
           <Button
             variant="outline"
@@ -214,7 +214,7 @@ function ConciergeInspirationSection() {
           </Button>
 
           {/* Suggestion items */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 min-w-0">
             {suggestions.length === 0 && !loadingSuggestions && (
               <p className="font-inter text-[10px] text-muted-foreground italic text-center py-2">
                 Click refresh to get AI-powered suggestions for your trip.
@@ -232,7 +232,7 @@ function ConciergeInspirationSection() {
 
 /* ---- Main sidebar ---- */
 
-export default function StudioSidebar() {
+export default function StudioSidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
   const { folders, loading, fetchFolders } = useStudioStore();
   const activeTrip = useTripStore((s) => s.activeTrip);
   const isMobile = useIsMobile();
@@ -263,12 +263,23 @@ export default function StudioSidebar() {
   }, [folders, destination]);
 
   const sidebarContent = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 w-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-4">
-        <h2 className="font-playfair text-sm font-semibold text-foreground">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-4">
+        <h2 className="truncate font-playfair text-sm font-semibold text-foreground">
           Studio Folders
         </h2>
+        {onCollapse && !isMobile && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            onClick={onCollapse}
+            title="Collapse"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
@@ -353,7 +364,7 @@ export default function StudioSidebar() {
   }
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-card">
+    <div className="flex h-full w-full min-w-0 flex-col border-r border-border bg-card overflow-hidden">
       {sidebarContent}
     </div>
   );

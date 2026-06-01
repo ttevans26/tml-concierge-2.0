@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { MapPin, Compass, RefreshCw, CheckCircle } from "lucide-react";
+import { MapPin, Compass, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
-import { loadGoogleMapsScript, healItemCoordinates } from "@/lib/googleMaps";
+import {
+  loadGoogleMapsScript,
+  healItemCoordinates,
+  subscribeGoogleMapsDiagnostics,
+  type GoogleMapsDiagnostics,
+} from "@/lib/googleMaps";
 import { toast } from "sonner";
 
 const PIN_HEX: Record<string, string> = {
@@ -30,6 +35,9 @@ export default function StudioMap() {
   const markersRef = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const healedIdsRef = useRef<Set<string>>(new Set());
+  const [diag, setDiag] = useState<GoogleMapsDiagnostics | null>(null);
+
+  useEffect(() => subscribeGoogleMapsDiagnostics(setDiag), []);
 
   const allItems = activeFolder?.items || [];
   const pinnedItems = allItems.filter((i) => getCoords(i) !== null);

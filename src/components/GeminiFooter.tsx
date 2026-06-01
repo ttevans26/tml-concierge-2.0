@@ -1,20 +1,66 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, X, Send, Loader2, RotateCcw } from "lucide-react";
+import { Sparkles, X, Send, Loader2, RotateCcw, Plus, Bookmark, CalendarDays } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTripStore } from "@/stores/useTripStore";
+import { useStudioStore } from "@/stores/useStudioStore";
 import { toast } from "@/hooks/use-toast";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+interface Suggestion {
+  title: string;
+  category: "stays" | "dining" | "activity" | "logistics";
+  location_name?: string;
+  description?: string;
+  estimated_cost?: number;
+  target: "studio" | "itinerary";
+}
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/concierge-chat`;
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                           */
+/* ------------------------------------------------------------------ */
+
+function parseSuggestions(content: string): { text: string; suggestions: Suggestion[] } {
+  const regex = /```suggestions\s*([\s\S]*?)\s*```/;
+  const match = content.match(regex);
+  if (!match) return { text: content, suggestions: [] };
+
+  const text = content.replace(match[0], "").trim();
+  let suggestions: Suggestion[] = [];
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    if (Array.isArray(parsed)) {
+      suggestions = parsed.filter(
+        (s): s is Suggestion =>
+          typeof s.title === "string" &&
+          ["stays", "dining", "activity", "logistics"].includes(s.category) &&
+          ["studio", "itinerary"].includes(s.target)
+      );
+    }
+  } catch {
+    /* ignore malformed JSON */
+  }
+  return { text, suggestions };
+}
+
+function stripTrailingRule(text: string): string {
+  return text.replace(/---\s*$/, "").trim();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
 
 export default function GeminiFooter() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -22,6 +68,12 @@ export default function GeminiFooter() {
   const itineraryItems = useTripStore((s) => s.itineraryItems);
   const profile = useTripStore((s) => s.profile);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
+  const createItineraryItem = useTripStore((s) => s.createItineraryItem);
+  const fetchItineraryItems = useTripStore((s) => s.fetchItineraryItems);
+
+  const activeFolder = useStudioStore((s) => s.activeFolder);
+  const addStudioItem = useStudioStore((s) => s.addItem);
+  const fetchFolders = useStudioStore((s) => s.fetchFolders);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -150,6 +202,82 @@ export default function GeminiFooter() {
     setStreaming(false);
   }
 
+  /* ---- Actions ---- */
+
+  async function handleAddToItinerary(suggestion: Suggestion, msgIndex: number) {
+    if (!activeTrip) {
+      toast({ title: "No active trip", description: "Open a trip workspace first.", variant: "destructive" });
+      return;
+    }
+    const key = `${msgIndex}-${suggestion.title}`;
+    setAddingIds((prev) => new Set(prev).add(key));
+
+    const defaultDate = activeTrip.start_date || new Date().toISOString().slice(0, 10);
+    const item = await createItineraryItem({
+      trip_id: activeTrip.id,
+      title: suggestion.title,
+      category: suggestion.category,
+      location_name: suggestion.location_name || null,
+      description: suggestion.description || null,
+      cost: suggestion.estimated_cost ? String(suggestion.estimated_cost) : null,
+      date: defaultDate,
+      approval_status: "draft",
+    });
+
+    setAddingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+    if (item) {
+      toast({ title: "Added to itinerary", description: suggestion.title });
+      fetchItineraryItems(activeTrip.id);
+    } else {
+      toast({ title: "Failed to add", description: "Please try again.", variant: "destructive" });
+    }
+  }
+
+  async function handleAddToStudio(suggestion: Suggestion, msgIndex: number) {
+    if (!activeFolder) {
+      toast({ title: "No folder selected", description: "Open a collection in the Studio first.", variant: "destructive" });
+      return;
+    }
+    const key = `${msgIndex}-${suggestion.title}`;
+    setAddingIds((prev) => new Set(prev).add(key));
+
+    const item = await addStudioItem(activeFolder.id, {
+      title: suggestion.title,
+      category: suggestion.category === "stays" ? "stays" : suggestion.category === "dining" ? "dining" : "activity",
+      address: suggestion.location_name || null,
+      description: suggestion.description || null,
+      cost: suggestion.estimated_cost ? String(suggestion.estimated_cost) : null,
+      url: null,
+      lat: null,
+      lng: null,
+      google_place_id: null,
+      source_url: null,
+      api_metadata: {},
+    });
+
+    setAddingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+    if (item) {
+      toast({ title: "Saved to Studio", description: `${suggestion.title} → ${activeFolder.name}` });
+      fetchFolders();
+    } else {
+      toast({ title: "Failed to save", description: "Please try again.", variant: "destructive" });
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Render                                                           */
+  /* ---------------------------------------------------------------- */
+
   return (
     <>
       {/* Sticky Footer */}
@@ -224,32 +352,126 @@ export default function GeminiFooter() {
               </div>
             </div>
           ) : (
-            messages.map((m, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "font-inter text-xs leading-relaxed",
-                  m.role === "user" ? "flex justify-end" : "flex justify-start"
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-[2px] px-3 py-2",
-                    m.role === "user"
-                      ? "bg-accent text-accent-foreground"
-                      : "bg-muted text-foreground"
-                  )}
-                >
-                  {m.role === "assistant" ? (
-                    <div className="prose prose-xs max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-strong:text-foreground">
-                      <ReactMarkdown>{m.content || "…"}</ReactMarkdown>
+            messages.map((m, i) => {
+              if (m.role === "user") {
+                return (
+                  <div key={i} className="flex justify-end">
+                    <div className="max-w-[85%] rounded-[2px] px-3 py-2 bg-accent text-accent-foreground font-inter text-xs leading-relaxed">
+                      <p className="whitespace-pre-wrap">{m.content}</p>
                     </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{m.content}</p>
-                  )}
+                  </div>
+                );
+              }
+
+              const { text, suggestions } = parseSuggestions(m.content);
+              const displayText = stripTrailingRule(text);
+
+              return (
+                <div key={i} className="flex justify-start">
+                  <div className="w-full max-w-[92%] space-y-2">
+                    {/* Markdown text */}
+                    <div className="rounded-[2px] bg-muted px-3 py-2 text-foreground">
+                      <div className="prose prose-xs max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-strong:text-foreground">
+                        <ReactMarkdown>{displayText || "…"}</ReactMarkdown>
+                      </div>
+                    </div>
+
+                    {/* Suggestion cards */}
+                    {suggestions.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="font-inter text-[10px] uppercase tracking-wider text-muted-foreground px-0.5">
+                          Suggested items
+                        </p>
+                        {suggestions.map((s, si) => {
+                          const key = `${i}-${s.title}`;
+                          const isAdding = addingIds.has(key);
+                          return (
+                            <div
+                              key={si}
+                              className="rounded-[2px] border border-border bg-background p-2.5 space-y-2"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-inter text-xs font-medium text-foreground truncate">
+                                    {s.title}
+                                  </p>
+                                  {s.location_name && (
+                                    <p className="font-inter text-[10px] text-muted-foreground truncate">
+                                      {s.location_name}
+                                    </p>
+                                  )}
+                                  {s.description && (
+                                    <p className="font-inter text-[10px] text-muted-foreground line-clamp-2 mt-0.5">
+                                      {s.description}
+                                    </p>
+                                  )}
+                                  {s.estimated_cost && (
+                                    <p className="font-inter text-[10px] text-accent mt-0.5">
+                                      Est. ${s.estimated_cost}
+                                    </p>
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    "shrink-0 rounded-[2px] px-1.5 py-0.5 font-inter text-[10px] uppercase tracking-wider",
+                                    s.category === "stays" && "bg-emerald-50 text-emerald-700",
+                                    s.category === "dining" && "bg-amber-50 text-amber-700",
+                                    s.category === "activity" && "bg-sky-50 text-sky-700",
+                                    s.category === "logistics" && "bg-slate-50 text-slate-700"
+                                  )}
+                                >
+                                  {s.category}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleAddToItinerary(s, i)}
+                                  disabled={isAdding || !activeTrip}
+                                  className={cn(
+                                    "flex items-center gap-1 rounded-[2px] px-2 py-1 font-inter text-[10px] transition-colors",
+                                    activeTrip
+                                      ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                                  )}
+                                >
+                                  {isAdding ? (
+                                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                  ) : (
+                                    <CalendarDays className="h-2.5 w-2.5" />
+                                  )}
+                                  Add to Itinerary
+                                </button>
+                                <button
+                                  onClick={() => handleAddToStudio(s, i)}
+                                  disabled={isAdding}
+                                  className={cn(
+                                    "flex items-center gap-1 rounded-[2px] px-2 py-1 font-inter text-[10px] transition-colors border",
+                                    activeFolder
+                                      ? "border-border bg-background text-foreground hover:bg-muted"
+                                      : "border-border bg-muted text-muted-foreground cursor-not-allowed"
+                                  )}
+                                >
+                                  {isAdding ? (
+                                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                  ) : (
+                                    <Bookmark className="h-2.5 w-2.5" />
+                                  )}
+                                  Save to Studio
+                                  {activeFolder && (
+                                    <span className="text-muted-foreground">· {activeFolder.name}</span>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
           {streaming && messages[messages.length - 1]?.role === "user" && (
             <div className="flex justify-start">

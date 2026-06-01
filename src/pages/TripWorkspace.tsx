@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, ChevronLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
 import StudioSidebar from "@/components/workspace/StudioSidebar";
 import MatrixGrid from "@/components/workspace/MatrixGrid";
 import BudgetSidebar from "@/components/workspace/BudgetSidebar";
+import ConciergePanel from "@/components/workspace/ConciergePanel";
+import TripHealthBar from "@/components/workspace/TripHealthBar";
+import { cn } from "@/lib/utils";
 
 export default function TripWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +40,15 @@ export default function TripWorkspace() {
       /* ignore */
     }
   }, [budgetOpen]);
+
+  const [rightTab, setRightTab] = useState<"budget" | "concierge">("budget");
+  const askConcierge = useTripStore((s) => s.askConcierge);
+
+  const handleAskConcierge = (prompt: string) => {
+    setBudgetOpen(true);
+    setRightTab("concierge");
+    askConcierge(prompt);
+  };
 
   /* Hydrate trip + itinerary */
   useEffect(() => {
@@ -96,6 +108,9 @@ export default function TripWorkspace() {
         </div>
       </header>
 
+      {/* Trip Health Bar */}
+      <TripHealthBar onAskConcierge={handleAskConcierge} />
+
       {/* 3-column layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left — Studio Folders (collapsible) */}
@@ -130,8 +145,48 @@ export default function TripWorkspace() {
 
         {/* Right — Budget Sidebar 20% */}
         {budgetOpen ? (
-          <div className="hidden w-[20%] min-w-[220px] shrink-0 lg:block">
-            <BudgetSidebar onCollapse={() => setBudgetOpen(false)} />
+          <div className="hidden w-[22%] min-w-[260px] shrink-0 lg:flex flex-col border-l border-border bg-card">
+            {/* Tabs */}
+            <div className="flex shrink-0 border-b border-border">
+              <button
+                onClick={() => setRightTab("budget")}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
+                  rightTab === "budget"
+                    ? "border-b-2 border-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Wallet className="h-3 w-3" />
+                Budget
+              </button>
+              <button
+                onClick={() => setRightTab("concierge")}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
+                  rightTab === "concierge"
+                    ? "border-b-2 border-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Sparkles className="h-3 w-3" />
+                Concierge
+              </button>
+              <button
+                onClick={() => setBudgetOpen(false)}
+                className="flex items-center justify-center px-2 text-muted-foreground hover:text-foreground"
+                title="Collapse panel"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {rightTab === "budget" ? (
+                <BudgetSidebar embedded onCollapse={() => setBudgetOpen(false)} />
+              ) : (
+                <ConciergePanel />
+              )}
+            </div>
           </div>
         ) : (
           <div className="hidden w-10 shrink-0 border-l border-border bg-card lg:flex flex-col items-center py-3">
@@ -148,7 +203,7 @@ export default function TripWorkspace() {
               className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground"
               style={{ writingMode: "vertical-rl" }}
             >
-              Budget
+              Budget · Concierge
             </span>
           </div>
         )}

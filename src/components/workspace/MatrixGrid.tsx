@@ -4,24 +4,15 @@ import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
 import TripSettingsModal from "./TripSettingsModal";
-import SmartPullTray, { type ExtractedItem } from "./SmartPullTray";
+import SmartPullInbox from "./SmartPullInbox";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Mail, Loader2, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { Inbox, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
 import CalendarStaysView from "./CalendarStaysView";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -165,10 +156,6 @@ export default function MatrixGrid() {
 
   // Smart Pull state
   const [smartPullOpen, setSmartPullOpen] = useState(false);
-  const [emailText, setEmailText] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [pendingItems, setPendingItems] = useState<ExtractedItem[]>([]);
-  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
   // View mode: matrix grid vs. calendar month view (persisted)
   const [viewMode, setViewMode] = useState<"matrix" | "calendar">(() => {

@@ -2,10 +2,86 @@
 // Prefers the Lovable-managed Google Maps connector key (referrer-restricted
 // to *.lovable.app / *.lovableproject.com), then a user-supplied
 // VITE_GOOGLE_MAPS_API_KEY, then a last-ditch hardcoded fallback.
-export const GOOGLE_MAPS_API_KEY: string =
-  (import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as string | undefined) ||
-  (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
-  "AIzaSyBYwYMCsW5bFK0xZxPV2H1GxdnNcwXDWRU";
+const CONNECTOR_KEY = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as
+  | string
+  | undefined;
+const USER_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+const FALLBACK_KEY = "AIzaSyBYwYMCsW5bFK0xZxPV2H1GxdnNcwXDWRU";
+
+export type GoogleMapsKeySource = "connector" | "user-env" | "hardcoded-fallback";
+
+export const GOOGLE_MAPS_KEY_SOURCE: GoogleMapsKeySource = CONNECTOR_KEY
+  ? "connector"
+  : USER_KEY
+    ? "user-env"
+    : "hardcoded-fallback";
+
+export const GOOGLE_MAPS_API_KEY: string = CONNECTOR_KEY || USER_KEY || FALLBACK_KEY;
+
+/** Live status of the Maps JS API load, surfaced to UI for self-diagnosis. */
+export type GoogleMapsStatus =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "referer-not-allowed"
+  | "invalid-key"
+  | "script-error"
+  | "init-failed";
+
+export interface GoogleMapsDiagnostics {
+  keySource: GoogleMapsKeySource;
+  keyMasked: string;
+  channel: string | undefined;
+  origin: string;
+  status: GoogleMapsStatus;
+  lastError: string | null;
+}
+
+let status: GoogleMapsStatus = "idle";
+let lastError: string | null = null;
+const listeners = new Set<(d: GoogleMapsDiagnostics) => void>();
+
+function maskKey(k: string): string {
+  if (!k) return "(none)";
+  if (k.length <= 10) return k;
+  return `${k.slice(0, 6)}…${k.slice(-4)}`;
+}
+
+function setStatus(next: GoogleMapsStatus, err?: string) {
+  status = next;
+  if (err !== undefined) lastError = err;
+  const snap = getGoogleMapsDiagnostics();
+  listeners.forEach((cb) => cb(snap));
+}
+
+export function getGoogleMapsDiagnostics(): GoogleMapsDiagnostics {
+  return {
+    keySource: GOOGLE_MAPS_KEY_SOURCE,
+    keyMasked: maskKey(GOOGLE_MAPS_API_KEY),
+    channel: GOOGLE_MAPS_CHANNEL,
+    origin: typeof window !== "undefined" ? window.location.origin : "",
+    status,
+    lastError,
+  };
+}
+
+export function subscribeGoogleMapsDiagnostics(
+  cb: (d: GoogleMapsDiagnostics) => void
+): () => void {
+  listeners.add(cb);
+  cb(getGoogleMapsDiagnostics());
+  return () => listeners.delete(cb);
+}
+
+// Google calls this global when the script loads but the key/referer is rejected.
+if (typeof window !== "undefined") {
+  (window as any).gm_authFailure = () => {
+    setStatus(
+      "referer-not-allowed",
+      `Origin ${window.location.origin} is not in this key's HTTP-referrer allowlist (or the key is invalid).`
+    );
+  };
+}
 
 const GOOGLE_MAPS_CHANNEL: string | undefined = import.meta.env
   .VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_TRACKING_ID as string | undefined;
@@ -22,6 +98,7 @@ export function loadGoogleMapsScript(): Promise<void> {
 
   loadPromise = new Promise((resolve) => {
     const CALLBACK_NAME = "__tmlGmapsInit";
+    setStatus("loading", null);
 
     const finish = async () => {
       try {
@@ -34,7 +111,14 @@ export function loadGoogleMapsScript(): Promise<void> {
         }
       } catch (err) {
         console.error("Google Maps importLibrary failed", err);
+        setStatus("init-failed", (err as Error)?.message || String(err));
+        resolve();
+        return;
       }
+      const g = (window as any).google;
+      if (g?.maps?.Map) setStatus("ready", null);
+      else if (status !== "referer-not-allowed")
+        setStatus("init-failed", "google.maps.Map unavailable after load");
       resolve();
     };
 
@@ -50,6 +134,7 @@ export function loadGoogleMapsScript(): Promise<void> {
         "error",
         () => {
           console.error("Failed to load Google Maps JS API");
+          setStatus("script-error", "Script tag failed to load (network or CSP).");
           resolve();
         },
         { once: true }
@@ -72,6 +157,7 @@ export function loadGoogleMapsScript(): Promise<void> {
     script.dataset.gmapsLoader = "true";
     script.onerror = () => {
       console.error("Failed to load Google Maps JS API");
+      setStatus("script-error", "Script tag failed to load (network or CSP).");
       loadPromise = null;
       resolve();
     };

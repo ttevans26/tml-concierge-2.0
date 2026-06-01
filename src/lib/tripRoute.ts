@@ -104,10 +104,11 @@ export async function buildRouteWithGeocoding(
   const coordSeen = new Set<string>();
 
   for (const u of unique) {
-    const query = destination ? `${u.title}, ${destination}` : u.title;
+    // Hotel names are usually distinctive — try the plain title first.
+    // Fall back to destination-qualified query only if needed.
     const hit =
-      (await geocodeOnce(query)) ||
-      (await geocodeOnce(u.title));
+      (await geocodeOnce(u.title)) ||
+      (destination ? await geocodeOnce(`${u.title}, ${destination}`) : null);
     if (!hit) continue;
     const key = `${hit.lat.toFixed(2)},${hit.lng.toFixed(2)}`;
     if (coordSeen.has(key)) continue;

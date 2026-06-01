@@ -7,6 +7,7 @@ interface Props {
   waypoints: Waypoint[];
   fallbackQuery?: string | null;
   height?: number;
+  isLoading?: boolean;
 }
 
 /** Quiet-luxury map styling — muted greens/creams, no POIs. */
@@ -37,12 +38,17 @@ function numberedMarkerIcon(n: number): any {
   };
 }
 
-export default function TripRouteMap({ waypoints, fallbackQuery, height = 320 }: Props) {
+export default function TripRouteMap({ waypoints, fallbackQuery, height = 320, isLoading = false }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
 
   useEffect(() => {
+    if (isLoading) {
+      setStatus("loading");
+      return;
+    }
     let cancelled = false;
+    setStatus("loading");
 
     (async () => {
       await loadGoogleMapsScript();
@@ -157,30 +163,28 @@ export default function TripRouteMap({ waypoints, fallbackQuery, height = 320 }:
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(waypoints), fallbackQuery]);
-
-  if (status === "empty") {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 border-t-thin border-border bg-secondary/40 text-muted-foreground"
-        style={{ height }}
-      >
-        <MapPin className="h-5 w-5 text-accent" strokeWidth={1.5} />
-        <p className="font-inter text-xs">
-          Add stays with locations to see your route.
-        </p>
-      </div>
-    );
-  }
+  }, [JSON.stringify(waypoints), fallbackQuery, isLoading]);
 
   return (
     <div className="relative w-full overflow-hidden border-t-thin border-border" style={{ height }}>
+      {/* Container is ALWAYS mounted so the ref stays valid across prop changes. */}
       <div ref={containerRef} className="absolute inset-0" />
       {status === "loading" && (
         <div className="absolute inset-0 flex items-center justify-center bg-secondary/40">
           <span className="font-inter text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Drawing route…
           </span>
+        </div>
+      )}
+      {status === "empty" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-secondary/60 text-muted-foreground">
+          <MapPin className="h-5 w-5 text-accent" strokeWidth={1.5} />
+          <p className="font-inter text-xs">Add stays with locations to see your route.</p>
+        </div>
+      )}
+      {status === "error" && (
+        <div className="absolute inset-0 flex items-center justify-center bg-secondary/60 text-muted-foreground">
+          <p className="font-inter text-xs">Map unavailable.</p>
         </div>
       )}
     </div>

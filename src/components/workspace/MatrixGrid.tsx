@@ -75,6 +75,88 @@ export default function MatrixGrid() {
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
   const updateTrip = useTripStore((s) => s.updateTrip);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ active: boolean; startX: number; startLeft: number; moved: boolean }>({
+    active: false,
+    startX: 0,
+    startLeft: 0,
+    moved: false,
+  });
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+
+  const updateEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setAtStart(el.scrollLeft <= 1);
+    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateEdges();
+    el.addEventListener("scroll", updateEdges, { passive: true });
+    const ro = new ResizeObserver(updateEdges);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateEdges);
+      ro.disconnect();
+    };
+  }, [updateEdges]);
+
+  const COL_WIDTH = 176; // matches w-44
+
+  const scrollByCols = (cols: number) => {
+    scrollRef.current?.scrollBy({ left: cols * COL_WIDTH, behavior: "smooth" });
+  };
+  const scrollToStart = () => {
+    scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+  };
+
+  const isInteractive = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return !!target.closest(
+      'button, a, input, textarea, select, [draggable="true"], [role="button"], [data-no-pan]'
+    );
+  };
+
+  const onPanMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (isInteractive(e.target)) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    dragState.current = {
+      active: true,
+      startX: e.clientX,
+      startLeft: el.scrollLeft,
+      moved: false,
+    };
+  };
+  const onPanMouseMove = (e: React.MouseEvent) => {
+    if (!dragState.current.active) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const dx = e.clientX - dragState.current.startX;
+    if (Math.abs(dx) > 3) dragState.current.moved = true;
+    el.scrollLeft = dragState.current.startLeft - dx;
+  };
+  const endPan = () => {
+    dragState.current.active = false;
+    setTimeout(() => {
+      dragState.current.moved = false;
+    }, 0);
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // If user scrolls vertically without shift, redirect to horizontal pan.
+    if (e.shiftKey) return;
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    el.scrollLeft += e.deltaY;
+  };
+
   const [dialogState, setDialogState] = useState<{
     open: boolean;
     date: string;

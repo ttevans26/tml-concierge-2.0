@@ -186,6 +186,11 @@ interface TripStore {
   addAppointment: (input: Omit<ConciergeAppointment, "id" | "created_at">) => void;
   cancelAppointment: (id: string) => void;
 
+  /* concierge panel cross-component messaging */
+  pendingConciergePrompt: string | null;
+  askConcierge: (prompt: string) => void;
+  consumeConciergePrompt: () => string | null;
+
   /* actions */
   fetchTrips: () => Promise<void>;
   fetchItineraryItems: (tripId: string) => Promise<void>;
@@ -314,6 +319,15 @@ export const useTripStore = create<TripStore>((set, get) => ({
   },
   cancelAppointment: (id) =>
     set({ appointments: get().appointments.filter((a) => a.id !== id) }),
+
+  /* ---- Concierge cross-component bus ---- */
+  pendingConciergePrompt: null,
+  askConcierge: (prompt) => set({ pendingConciergePrompt: prompt }),
+  consumeConciergePrompt: () => {
+    const p = get().pendingConciergePrompt;
+    if (p) set({ pendingConciergePrompt: null });
+    return p;
+  },
 
   /* ---- Fetch ---- */
 

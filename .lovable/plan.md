@@ -1,47 +1,63 @@
-## Diagnosis
+## Goal
 
-Console shows the root cause:
+Replace the plain text inputs for **New Collection → "General Location"** (`src/components/studio/StudioVault.tsx`) and **New Journey → "Destination"** (`src/components/CreateTripDialog.tsx`) with a real Google-style place autocomplete: type → see predictions → click one to fill the field.
 
+## Approach
+
+Build one reusable component, `src/components/ui/PlaceAutocomplete.tsx`, and use it in both dialogs. Keeps behavior identical and means future location fields can drop it in.
+
+### Component contract
+
+```ts
+<PlaceAutocomplete
+  value={string}
+  onChange={(v: string) => void}            // raw text changes (typing)
+  onSelect={(p: PlacePick) => void}         // user picked a suggestion
+  placeholder?: string
+  types?: "cities" | "regions" | "establishment" | undefined  // bias
+  id?: string
+/>
+
+interface PlacePick {
+  description: string;   // e.g. "Provence, France"
+  placeId: string;
+  mainText: string;      // "Provence"
+  secondaryText: string; // "France"
+}
 ```
-Google Maps JavaScript API error: RefererNotAllowedMapError
-Your site URL to be authorized: https://id-preview--693f38f0-…lovable.app/studio
-```
 
-The hardcoded fallback key in `src/lib/googleMaps.ts` (`AIzaSyBYwYMC…`) is **not authorized** for the `id-preview--*.lovable.app` host. Because the script tag still loads (just in error mode), `google.maps.importLibrary` is never installed → `importLibrary is not a function` → `google.maps.Map is not a constructor` → `StudioMap` throws and the panel goes white.
+### Implementation
 
-## Fix
-
-### 1. Connect the Lovable-managed Google Maps connector
-
-The managed connector exposes `VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY`, a referrer-restricted browser key already authorized for `*.lovable.app` and `*.lovableproject.com` — so previews and published Lovable URLs both work without any Google Cloud setup. I'll trigger `standard_connectors--connect` for `google_maps`.
-
-### 2. Refactor `src/lib/googleMaps.ts`
-
-- Prefer the connector key, then `VITE_GOOGLE_MAPS_API_KEY`, then the old hardcoded fallback (kept only as a last-ditch dev fallback).
-- Switch the script URL to the documented async pattern with a `callback` and `channel`:
+- Reuse the existing `loadGoogleMapsScript()` from `src/lib/googleMaps.ts` (already includes the `places` library and uses the connector's referrer-allowed key).
+- Use **Places API (New)** as required by the connector knowledge — not legacy `Autocomplete`:
+  ```ts
+  const { AutocompleteSuggestion, AutocompleteSessionToken } =
+    await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
+  const sessionToken = new AutocompleteSessionToken();
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+    input, sessionToken, includedPrimaryTypes: [...], // when types prop set
+  });
   ```
-  https://maps.googleapis.com/maps/api/js?key=…&loading=async&libraries=places&callback=__tmlGmapsInit&channel=…
-  ```
-  Use the global callback to resolve `loadGoogleMapsScript()` (and as a safety net, still `await importLibrary("maps")` and `"places"` inside the callback before resolving). This eliminates the race that the previous patch tried to fix.
-- Add an in-flight script de-dupe check (`document.querySelector('script[data-gmaps-loader]')`) so HMR / multiple components calling `loadGoogleMapsScript()` don't inject the script twice.
+- Debounce input ~200ms; require min 2 chars.
+- Rotate a single `AutocompleteSessionToken` per "edit session" (reset on select) for billing correctness.
+- Render a popover/list below the input using the existing shadcn `Command`/`Popover` pattern already used elsewhere — quiet-luxury styling (cream bg, onyx text, bronze hover, 2px radii, 0.5px borders).
+- Keyboard: ↑/↓ to move, Enter to pick, Esc to close. Click-outside to close.
+- Mobile: 44px min touch target per memory rule.
+- Free-text fallback: if the user keeps typing and hits Enter without picking a suggestion, the parent still gets the raw string via `onChange` — no forced selection. This preserves the current "manual" flow as a safety net.
 
-### 3. Make `StudioMap` degrade gracefully
+### Wire-up
 
-In `src/components/studio/StudioMap.tsx`, wrap the `new g.maps.Map(...)` call in a guard: if `g?.maps?.Map` is undefined after `loadGoogleMapsScript()` resolves, render the existing "Oops" empty-state with a one-line hint ("Map unavailable — check Google Maps connection") instead of throwing an unhandled promise rejection. This keeps the rest of the Studio usable if the key is ever wrong again.
+1. **`CreateTripDialog.tsx`** (Destination field): swap the `<Input>` for `<PlaceAutocomplete value={destination} onChange={setDestination} onSelect={(p) => setDestination(p.description)} types="cities" placeholder="e.g., Mexico City" />`. No DB schema change — still stores the description string in `trips.destination`.
+2. **`StudioVault.tsx`** (General Location field): same swap, but `types="regions"` so users get regions/cities ("Provence", "South of France") instead of restaurants. Stores description string in `studio_folders.location`.
 
-### 4. Replace the deprecated marker class
+### Out of scope
 
-Console also flags `google.maps.Marker` deprecation. Per project guidance we must **not** switch to `AdvancedMarkerElement` (it requires a `mapId`). Keep `google.maps.Marker` for now — the deprecation is a warning, not the cause of the white screen. No change here; calling it out so we don't get distracted.
-
-## Out of scope
-
-- No DB changes.
-- No changes to the Antibes / Lake Garda seed data.
-- No changes to Studio data fetching, drag-and-drop, or proximity-ranking logic.
-- Not touching `MatrixGrid` or `BudgetSidebar`.
+- No DB changes. We're not persisting `place_id`/lat/lng on the folder or trip in this pass (can be a follow-up if useful for the Proximity Map default center).
+- No changes to other location inputs (FIND A PLACE, item creation forms). They already use their own search flows.
+- No styling overhaul of either dialog beyond the input swap.
 
 ## Files touched
 
-- `src/lib/googleMaps.ts` — loader rewrite (callback-based, connector key first).
-- `src/components/studio/StudioMap.tsx` — defensive guard around `new g.maps.Map(...)`.
-- Connector linkage (`standard_connectors--connect google_maps`) — no file edit, just enables the env var.
+- **Add** `src/components/ui/PlaceAutocomplete.tsx` — reusable component.
+- **Edit** `src/components/CreateTripDialog.tsx` — swap Destination input.
+- **Edit** `src/components/studio/StudioVault.tsx` — swap General Location input.

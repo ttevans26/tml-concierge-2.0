@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import PlaceAutocomplete from "@/components/ui/PlaceAutocomplete";
 
 export default function StudioVault() {
   const { folders, activeFolder, setActiveFolder, addFolder, deleteFolder, fetchFolders } = useStudioStore();
@@ -63,11 +64,13 @@ export default function StudioVault() {
               </div>
               <div>
                 <Label className="font-inter text-xs">General Location</Label>
-                <Input
+                <PlaceAutocomplete
                   value={folderLocation}
-                  onChange={(e) => setFolderLocation(e.target.value)}
+                  onChange={setFolderLocation}
+                  onSelect={(p) => setFolderLocation(p.description)}
                   placeholder="e.g., Provence, France"
-                  className="mt-1 border-thin font-inter text-sm"
+                  types="regions"
+                  className="mt-1"
                 />
               </div>
               <Button onClick={handleCreateFolder} className="w-full font-inter text-xs" size="sm">

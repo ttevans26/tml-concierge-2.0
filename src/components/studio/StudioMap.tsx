@@ -203,6 +203,32 @@ export default function StudioMap() {
             {/* Google Map container */}
             <div ref={mapRef} className="flex-1 min-h-0" />
 
+            {/* Self-diagnostic banner (only when Maps failed to initialize) */}
+            {diag && diag.status !== "idle" && diag.status !== "loading" && diag.status !== "ready" && (
+              <div className="border-t border-border bg-amber-50/80 px-3 py-2 text-[10px] font-inter text-amber-900">
+                <div className="flex items-start gap-1.5">
+                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" strokeWidth={2} />
+                  <div className="flex-1 leading-snug">
+                    <div className="font-semibold uppercase tracking-wider text-[9px]">
+                      Google Maps — {diag.status.replace(/-/g, " ")}
+                    </div>
+                    {diag.lastError && <div className="mt-0.5">{diag.lastError}</div>}
+                    <div className="mt-1 text-amber-800/80">
+                      Key: <span className="font-mono">{diag.keyMasked}</span> · Source:{" "}
+                      <span className="font-mono">{diag.keySource}</span> · Origin:{" "}
+                      <span className="font-mono">{diag.origin}</span>
+                    </div>
+                    {diag.status === "referer-not-allowed" && (
+                      <div className="mt-1 text-amber-800/80">
+                        Add <span className="font-mono">{diag.origin}/*</span> to this key's HTTP-referrer
+                        allowlist in Google Cloud Console, or reconnect the managed Google Maps integration.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Unpinned items list */}
             {allItems.filter((i) => !getCoords(i)).length > 0 && (
               <div className="border-t border-border bg-background px-3 py-2 max-h-28 overflow-y-auto">

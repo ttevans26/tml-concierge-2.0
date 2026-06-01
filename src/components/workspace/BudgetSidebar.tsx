@@ -1,8 +1,9 @@
-import { Wallet, TrendingUp } from "lucide-react";
+import { Wallet, TrendingUp, ChevronRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { useTripStore, selectTotalReservedCost, selectRemainingBudget } from "@/stores/useTripStore";
 
-export default function BudgetSidebar() {
+export default function BudgetSidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
   const totalSpent = useTripStore(selectTotalReservedCost);
@@ -12,12 +13,23 @@ export default function BudgetSidebar() {
   const pct = budget > 0 ? Math.min((totalSpent / budget) * 100, 100) : 0;
 
   return (
-    <div className="flex h-full flex-col border-l border-border bg-card">
+    <div className="flex h-full w-full min-w-0 flex-col border-l border-border bg-card overflow-hidden">
       {/* Header */}
-      <div className="border-b border-border px-4 py-4">
-        <h2 className="font-playfair text-sm font-semibold text-foreground">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-4">
+        <h2 className="truncate font-playfair text-sm font-semibold text-foreground">
           Budget Reserve
         </h2>
+        {onCollapse && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            onClick={onCollapse}
+            title="Collapse"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Remaining budget hero */}

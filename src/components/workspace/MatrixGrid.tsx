@@ -1,5 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
@@ -9,7 +8,7 @@ import SmartPullTray, { type ExtractedItem } from "./SmartPullTray";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Mail, Loader2, Lock, Globe } from "lucide-react";
+import { Mail, Loader2, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
@@ -75,6 +74,88 @@ export default function MatrixGrid() {
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
   const updateTrip = useTripStore((s) => s.updateTrip);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ active: boolean; startX: number; startLeft: number; moved: boolean }>({
+    active: false,
+    startX: 0,
+    startLeft: 0,
+    moved: false,
+  });
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+
+  const updateEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setAtStart(el.scrollLeft <= 1);
+    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateEdges();
+    el.addEventListener("scroll", updateEdges, { passive: true });
+    const ro = new ResizeObserver(updateEdges);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateEdges);
+      ro.disconnect();
+    };
+  }, [updateEdges]);
+
+  const COL_WIDTH = 176; // matches w-44
+
+  const scrollByCols = (cols: number) => {
+    scrollRef.current?.scrollBy({ left: cols * COL_WIDTH, behavior: "smooth" });
+  };
+  const scrollToStart = () => {
+    scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
+  };
+
+  const isInteractive = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return !!target.closest(
+      'button, a, input, textarea, select, [draggable="true"], [role="button"], [data-no-pan]'
+    );
+  };
+
+  const onPanMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (isInteractive(e.target)) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    dragState.current = {
+      active: true,
+      startX: e.clientX,
+      startLeft: el.scrollLeft,
+      moved: false,
+    };
+  };
+  const onPanMouseMove = (e: React.MouseEvent) => {
+    if (!dragState.current.active) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const dx = e.clientX - dragState.current.startX;
+    if (Math.abs(dx) > 3) dragState.current.moved = true;
+    el.scrollLeft = dragState.current.startLeft - dx;
+  };
+  const endPan = () => {
+    dragState.current.active = false;
+    setTimeout(() => {
+      dragState.current.moved = false;
+    }, 0);
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // If user scrolls vertically without shift, redirect to horizontal pan.
+    if (e.shiftKey) return;
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    el.scrollLeft += e.deltaY;
+  };
 
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -357,6 +438,43 @@ export default function MatrixGrid() {
             <TripSettingsModal />
           </div>
         </div>
+        {viewMode === "matrix" && (
+          <div className="mt-2 hidden sm:flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => scrollByCols(-1)}
+              disabled={atStart}
+              title="Previous day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 font-inter text-[11px]"
+              onClick={scrollToStart}
+              disabled={atStart}
+              title="Jump to start"
+            >
+              Start
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => scrollByCols(1)}
+              disabled={atEnd}
+              title="Next day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="ml-2 font-inter text-[10px] text-muted-foreground/70">
+              Drag, scroll, or use arrows to pan
+            </span>
+          </div>
+        )}
         {activeTrip && (
           <div className="mt-2 flex items-center gap-2">
             <button
@@ -422,7 +540,17 @@ export default function MatrixGrid() {
       {viewMode === "calendar" ? (
         <CalendarStaysView />
       ) : (
-      <ScrollArea className="flex-1">
+      <div
+        ref={scrollRef}
+        onMouseDown={onPanMouseDown}
+        onMouseMove={onPanMouseMove}
+        onMouseUp={endPan}
+        onMouseLeave={endPan}
+        onWheel={onWheel}
+        className={`flex-1 overflow-auto select-none ${
+          dragState.current.active ? "cursor-grabbing" : "cursor-grab"
+        }`}
+      >
         <div className="flex min-w-max">
           {/* Category labels column — sticky left */}
           <div className="sticky left-0 z-20 w-24 shrink-0 border-r border-border bg-card">
@@ -496,8 +624,7 @@ export default function MatrixGrid() {
             );
           })}
         </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+      </div>
       )}
 
       {activeTrip && (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
@@ -25,6 +25,18 @@ export default function TripWorkspace() {
       /* ignore */
     }
   }, [studioOpen]);
+
+  const [budgetOpen, setBudgetOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("tml-budget-open") !== "false";
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("tml-budget-open", String(budgetOpen));
+    } catch {
+      /* ignore */
+    }
+  }, [budgetOpen]);
 
   /* Hydrate trip + itinerary */
   useEffect(() => {
@@ -117,9 +129,29 @@ export default function TripWorkspace() {
         </div>
 
         {/* Right — Budget Sidebar 20% */}
-        <div className="hidden w-[20%] shrink-0 lg:block">
-          <BudgetSidebar />
-        </div>
+        {budgetOpen ? (
+          <div className="hidden w-[20%] min-w-[220px] shrink-0 lg:block">
+            <BudgetSidebar onCollapse={() => setBudgetOpen(false)} />
+          </div>
+        ) : (
+          <div className="hidden w-10 shrink-0 border-l border-border bg-card lg:flex flex-col items-center py-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              onClick={() => setBudgetOpen(true)}
+              title="Expand Budget Reserve"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span
+              className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground"
+              style={{ writingMode: "vertical-rl" }}
+            >
+              Budget
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -36,6 +36,13 @@ const PRIMARY_TYPES: Record<NonNullable<Props["types"]>, string[]> = {
   establishment: ["establishment"],
 };
 
+// Legacy AutocompleteService `types` parameter values.
+const LEGACY_TYPES: Record<NonNullable<Props["types"]>, string[]> = {
+  cities: ["(cities)"],
+  regions: ["(regions)"],
+  establishment: ["establishment"],
+};
+
 export default function PlaceAutocomplete({
   value,
   onChange,
@@ -69,10 +76,9 @@ export default function PlaceAutocomplete({
     if (sessionTokenRef.current) return sessionTokenRef.current;
     await loadGoogleMapsScript();
     const g = (window as any).google;
-    if (!g?.maps?.importLibrary) return null;
+    if (!g?.maps?.places) return null;
     try {
-      const places: any = await g.maps.importLibrary("places");
-      sessionTokenRef.current = new places.AutocompleteSessionToken();
+      sessionTokenRef.current = new g.maps.places.AutocompleteSessionToken();
     } catch (err) {
       console.error("PlaceAutocomplete: failed to init session token", err);
       return null;
@@ -87,32 +93,34 @@ export default function PlaceAutocomplete({
       try {
         await loadGoogleMapsScript();
         const g = (window as any).google;
-        if (!g?.maps?.importLibrary) {
+        if (!g?.maps?.places?.AutocompleteService) {
           if (myReq === reqIdRef.current) setSuggestions([]);
           return;
         }
-        const places: any = await g.maps.importLibrary("places");
         const sessionToken = await ensureSessionToken();
-        const req: any = { input, sessionToken };
-        if (types) req.includedPrimaryTypes = PRIMARY_TYPES[types];
+        const service = new g.maps.places.AutocompleteService();
+        const req: any = { input };
+        if (sessionToken) req.sessionToken = sessionToken;
+        if (types) req.types = LEGACY_TYPES[types];
 
-        const { suggestions: raw } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
+        const raw: any[] = await new Promise((resolve) => {
+          service.getPlacePredictions(req, (results: any[] | null, status: string) => {
+            if (status === "OK" && results) resolve(results);
+            else resolve([]);
+          });
+        });
         if (myReq !== reqIdRef.current) return;
 
-        const mapped: Suggestion[] = (raw || [])
-          .map((s: any) => {
-            const p = s.placePrediction;
-            if (!p) return null;
-            const main = p.mainText?.text || p.text?.text || "";
-            const secondary = p.secondaryText?.text || "";
-            return {
-              placeId: p.placeId,
-              mainText: main,
-              secondaryText: secondary,
-              description: secondary ? `${main}, ${secondary}` : main,
-            } as Suggestion;
-          })
-          .filter(Boolean) as Suggestion[];
+        const mapped: Suggestion[] = raw.map((p: any) => {
+          const main = p.structured_formatting?.main_text || p.description || "";
+          const secondary = p.structured_formatting?.secondary_text || "";
+          return {
+            placeId: p.place_id,
+            mainText: main,
+            secondaryText: secondary,
+            description: p.description || (secondary ? `${main}, ${secondary}` : main),
+          } as Suggestion;
+        });
 
         setSuggestions(mapped);
         setHighlight(0);

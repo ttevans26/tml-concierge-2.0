@@ -438,6 +438,43 @@ export default function MatrixGrid() {
             <TripSettingsModal />
           </div>
         </div>
+        {viewMode === "matrix" && (
+          <div className="mt-2 hidden sm:flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => scrollByCols(-1)}
+              disabled={atStart}
+              title="Previous day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 font-inter text-[11px]"
+              onClick={scrollToStart}
+              disabled={atStart}
+              title="Jump to start"
+            >
+              Start
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => scrollByCols(1)}
+              disabled={atEnd}
+              title="Next day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="ml-2 font-inter text-[10px] text-muted-foreground/70">
+              Drag, scroll, or use arrows to pan
+            </span>
+          </div>
+        )}
         {activeTrip && (
           <div className="mt-2 flex items-center gap-2">
             <button

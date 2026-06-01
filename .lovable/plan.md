@@ -1,26 +1,47 @@
-## Goal
-Seed the existing Antibes Studio folder (`4e83194e-37f1-41cd-9e92-c3d1bbcfb099`, owner `7eb8a562-…`) with 5 new `studio_items`. Each will include `lat`/`lng` so the Proximity Map renders pins immediately.
+## Diagnosis
 
-## Items to insert
+Console shows the root cause:
 
-| Title | Category | Approx. Address | Lat / Lng |
-|---|---|---|---|
-| Le Fricot | dining | 12 Rue des Bains, 06600 Antibes | 43.5810, 7.1255 |
-| Azul Café | dining | 14 Cours Masséna, 06600 Antibes | 43.5807, 7.1259 |
-| La Torref de Fersen | dining | Place du Révely, 06600 Antibes | 43.5809, 7.1247 |
-| Bistrot du Coin | dining | 5 Rue Frédéric Isnard, 06600 Antibes | 43.5803, 7.1250 |
-| Le Sentier du Littoral, Cap d'Antibes | activity | Cap d'Antibes, 06160 | 43.5556, 7.1297 |
+```
+Google Maps JavaScript API error: RefererNotAllowedMapError
+Your site URL to be authorized: https://id-preview--693f38f0-…lovable.app/studio
+```
 
-Notes:
-- All cafés/restaurants map to the `dining` category (matches `CATEGORY_META` in `StudioSidebar.tsx` and `classifyPlace()`).
-- The coastal trail maps to `activity`.
-- `google_place_id` left null; users can later trigger Places validation in Studio to enrich `api_metadata`. Coordinates are best-effort so the Proximity Map and distance ranking work right away.
+The hardcoded fallback key in `src/lib/googleMaps.ts` (`AIzaSyBYwYMC…`) is **not authorized** for the `id-preview--*.lovable.app` host. Because the script tag still loads (just in error mode), `google.maps.importLibrary` is never installed → `importLibrary is not a function` → `google.maps.Map is not a constructor` → `StudioMap` throws and the panel goes white.
 
-## Execution (build mode)
+## Fix
 
-Single `INSERT` via the supabase insert tool into `public.studio_items`, populating `folder_id`, `user_id`, `category`, `title`, `address`, `lat`, `lng`, and a short `description`. No schema migration, no code changes.
+### 1. Connect the Lovable-managed Google Maps connector
+
+The managed connector exposes `VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY`, a referrer-restricted browser key already authorized for `*.lovable.app` and `*.lovableproject.com` — so previews and published Lovable URLs both work without any Google Cloud setup. I'll trigger `standard_connectors--connect` for `google_maps`.
+
+### 2. Refactor `src/lib/googleMaps.ts`
+
+- Prefer the connector key, then `VITE_GOOGLE_MAPS_API_KEY`, then the old hardcoded fallback (kept only as a last-ditch dev fallback).
+- Switch the script URL to the documented async pattern with a `callback` and `channel`:
+  ```
+  https://maps.googleapis.com/maps/api/js?key=…&loading=async&libraries=places&callback=__tmlGmapsInit&channel=…
+  ```
+  Use the global callback to resolve `loadGoogleMapsScript()` (and as a safety net, still `await importLibrary("maps")` and `"places"` inside the callback before resolving). This eliminates the race that the previous patch tried to fix.
+- Add an in-flight script de-dupe check (`document.querySelector('script[data-gmaps-loader]')`) so HMR / multiple components calling `loadGoogleMapsScript()` don't inject the script twice.
+
+### 3. Make `StudioMap` degrade gracefully
+
+In `src/components/studio/StudioMap.tsx`, wrap the `new g.maps.Map(...)` call in a guard: if `g?.maps?.Map` is undefined after `loadGoogleMapsScript()` resolves, render the existing "Oops" empty-state with a one-line hint ("Map unavailable — check Google Maps connection") instead of throwing an unhandled promise rejection. This keeps the rest of the Studio usable if the key is ever wrong again.
+
+### 4. Replace the deprecated marker class
+
+Console also flags `google.maps.Marker` deprecation. Per project guidance we must **not** switch to `AdvancedMarkerElement` (it requires a `mapId`). Keep `google.maps.Marker` for now — the deprecation is a warning, not the cause of the white screen. No change here; calling it out so we don't get distracted.
 
 ## Out of scope
-- No new components or UI changes.
-- No Google Places API calls (can be done later via existing Studio entity-validation flow).
-- No changes to the proximity logic — items rendering on the map relies only on the existing `lat`/`lng` fields, which this insert provides.
+
+- No DB changes.
+- No changes to the Antibes / Lake Garda seed data.
+- No changes to Studio data fetching, drag-and-drop, or proximity-ranking logic.
+- Not touching `MatrixGrid` or `BudgetSidebar`.
+
+## Files touched
+
+- `src/lib/googleMaps.ts` — loader rewrite (callback-based, connector key first).
+- `src/components/studio/StudioMap.tsx` — defensive guard around `new g.maps.Map(...)`.
+- Connector linkage (`standard_connectors--connect google_maps`) — no file edit, just enables the env var.

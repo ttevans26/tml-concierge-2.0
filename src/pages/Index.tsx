@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MapPin, Calendar, Wallet } from "lucide-react";
+import { Plus, MapPin, Calendar, Wallet, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore, Trip } from "@/stores/useTripStore";
 import { useAuth } from "@/hooks/useAuth";
 import CreateTripDialog from "@/components/CreateTripDialog";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { buildRouteFromItems, type Waypoint } from "@/lib/tripRoute";
+import TripRouteMap from "@/components/trips/TripRouteMap";
 
 /* ------------------------------------------------------------------ */
 /*  Countdown Widget                                                   */
@@ -75,7 +78,17 @@ function CountdownPanel({ startDate, endDate }: { startDate?: string | null; end
 /*  Trip Card                                                          */
 /* ------------------------------------------------------------------ */
 
-function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
+function TripCard({
+  trip,
+  onClick,
+  expanded,
+  onToggleExpand,
+}: {
+  trip: Trip;
+  onClick: () => void;
+  expanded: boolean;
+  onToggleExpand: () => void;
+}) {
   const dateRange =
     trip.start_date && trip.end_date
       ? `${format(new Date(trip.start_date), "MMM d")} — ${format(new Date(trip.end_date), "MMM d, yyyy")}`
@@ -83,17 +96,61 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         ? `From ${format(new Date(trip.start_date), "MMM d, yyyy")}`
         : null;
 
+  const [waypoints, setWaypoints] = useState<Waypoint[] | null>(null);
+
+  useEffect(() => {
+    if (!expanded || waypoints !== null) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("itinerary_items")
+        .select("*")
+        .eq("trip_id", trip.id)
+        .order("sort_order");
+      if (cancelled) return;
+      if (error || !data) {
+        setWaypoints([]);
+        return;
+      }
+      setWaypoints(buildRouteFromItems(data as any));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, waypoints, trip.id]);
+
   return (
     <div
-      onClick={onClick}
-      className="group flex cursor-pointer overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md"
+      className={`group flex ${expanded ? "sm:col-span-2 lg:col-span-3" : ""} flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md`}
     >
-      {/* Left — Trip Info */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between p-5 sm:p-6">
+      <div className="flex">
+        {/* Left — Trip Info (clickable to open workspace) */}
+        <div
+          onClick={onClick}
+          className="flex min-w-0 flex-1 cursor-pointer flex-col justify-between p-5 sm:p-6"
+        >
         <div className="min-w-0">
-          <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
-            {trip.name}
-          </h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
+              {trip.name}
+            </h3>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand();
+              }}
+              className="-mt-1 -mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+              aria-label={expanded ? "Hide route map" : "Show route map"}
+              title={expanded ? "Hide route map" : "Show route map"}
+            >
+              {expanded ? (
+                <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
+              ) : (
+                <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
+              )}
+            </button>
+          </div>
 
           {trip.destination && (
             <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
@@ -116,10 +173,19 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
             ${Number(trip.total_trip_budget).toLocaleString()}
           </p>
         )}
+        </div>
+
+        {/* Right — Countdown Hero Panel */}
+        <CountdownPanel startDate={trip.start_date} endDate={trip.end_date} />
       </div>
 
-      {/* Right — Countdown Hero Panel */}
-      <CountdownPanel startDate={trip.start_date} endDate={trip.end_date} />
+      {expanded && (
+        <TripRouteMap
+          waypoints={waypoints ?? []}
+          fallbackQuery={waypoints && waypoints.length === 0 ? trip.destination : null}
+          height={360}
+        />
+      )}
     </div>
   );
 }
@@ -160,6 +226,7 @@ export default function Index() {
   const navigate = useNavigate();
   const { trips, loading, fetchTrips } = useTripStore();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -198,7 +265,15 @@ export default function Index() {
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
-            <TripCard key={trip.id} trip={trip} onClick={() => navigate(`/trip/${trip.id}`)} />
+            <TripCard
+              key={trip.id}
+              trip={trip}
+              onClick={() => navigate(`/trip/${trip.id}`)}
+              expanded={expandedTripId === trip.id}
+              onToggleExpand={() =>
+                setExpandedTripId((cur) => (cur === trip.id ? null : trip.id))
+              }
+            />
           ))}
         </div>
       )}

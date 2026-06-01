@@ -3,7 +3,10 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useTripStore, selectTotalReservedCost, selectRemainingBudget } from "@/stores/useTripStore";
 
-export default function BudgetSidebar({ onCollapse }: { onCollapse?: () => void } = {}) {
+export default function BudgetSidebar({
+  onCollapse,
+  embedded = false,
+}: { onCollapse?: () => void; embedded?: boolean } = {}) {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
   const totalSpent = useTripStore(selectTotalReservedCost);
@@ -13,8 +16,13 @@ export default function BudgetSidebar({ onCollapse }: { onCollapse?: () => void 
   const pct = budget > 0 ? Math.min((totalSpent / budget) * 100, 100) : 0;
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col border-l border-border bg-card overflow-hidden">
+    <div
+      className={`flex h-full w-full min-w-0 flex-col bg-card overflow-hidden ${
+        embedded ? "" : "border-l border-border"
+      }`}
+    >
       {/* Header */}
+      {!embedded && (
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-4">
         <h2 className="truncate font-playfair text-sm font-semibold text-foreground">
           Budget Reserve
@@ -31,6 +39,7 @@ export default function BudgetSidebar({ onCollapse }: { onCollapse?: () => void 
           </Button>
         )}
       </div>
+      )}
 
       {/* Remaining budget hero */}
       <div className="border-b border-border bg-secondary/20 px-4 py-5 text-center">

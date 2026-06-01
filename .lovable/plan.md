@@ -1,29 +1,26 @@
-## Goals
+## Goal
+Seed the existing Antibes Studio folder (`4e83194e-37f1-41cd-9e92-c3d1bbcfb099`, owner `7eb8a562-…`) with 5 new `studio_items`. Each will include `lat`/`lng` so the Proximity Map renders pins immediately.
 
-1. Make the Matrix Grid easy to pan across all day columns without relying on the thin Radix scrollbar.
-2. Let the user collapse the right-hand Budget Reserve sidebar to reclaim horizontal space (mirroring the Studio sidebar collapse already in place).
+## Items to insert
 
-## 1. Better horizontal pan in MatrixGrid
+| Title | Category | Approx. Address | Lat / Lng |
+|---|---|---|---|
+| Le Fricot | dining | 12 Rue des Bains, 06600 Antibes | 43.5810, 7.1255 |
+| Azul Café | dining | 14 Cours Masséna, 06600 Antibes | 43.5807, 7.1259 |
+| La Torref de Fersen | dining | Place du Révely, 06600 Antibes | 43.5809, 7.1247 |
+| Bistrot du Coin | dining | 5 Rue Frédéric Isnard, 06600 Antibes | 43.5803, 7.1250 |
+| Le Sentier du Littoral, Cap d'Antibes | activity | Cap d'Antibes, 06160 | 43.5556, 7.1297 |
 
-File: `src/components/workspace/MatrixGrid.tsx`
+Notes:
+- All cafés/restaurants map to the `dining` category (matches `CATEGORY_META` in `StudioSidebar.tsx` and `classifyPlace()`).
+- The coastal trail maps to `activity`.
+- `google_place_id` left null; users can later trigger Places validation in Studio to enrich `api_metadata`. Coordinates are best-effort so the Proximity Map and distance ranking work right away.
 
-- Replace the Radix `ScrollArea` wrapper around the matrix with a plain native scroll container (`overflow-auto`). This gives the browser's normal scrollbar plus full gesture support (trackpad two-finger, shift+wheel, touch swipe).
-- Add **click-and-drag panning** on the scroll container via a ref + mouse handlers: on mousedown record `startX` / `scrollLeft`, on mousemove update `scrollLeft = startX - e.clientX`, release on mouseup/leave. Skip drag-pan when the pointer starts on an interactive element (`button`, `a`, `input`, `[draggable="true"]` itinerary card, or `[data-no-pan]`) so card drag-and-drop and clicks still work. Cursor flips to `grab` / `grabbing`.
-- Convert vertical mouse-wheel scrolling over the grid into horizontal scroll when the user isn't holding Shift — typical horizontal-timeline UX.
-- Add a small **day-navigation strip** pinned in the existing grid header (right side, next to the view toggle): `‹` previous day, `Today`/`Jump to start`, `›` next day. Buttons call `scrollBy({ left: ±176, behavior: "smooth" })` (matching the `w-44` day column width). Disabled at the ends.
-- Keep the sticky left category column and sticky day-header row working — native scroll respects `position: sticky` the same way.
+## Execution (build mode)
 
-## 2. Collapsible Budget Reserve sidebar
-
-Files: `src/pages/TripWorkspace.tsx`, `src/components/workspace/BudgetSidebar.tsx`
-
-- In `TripWorkspace`, add `const [budgetOpen, setBudgetOpen] = useState(true)` persisted to `localStorage` under `tml-budget-open` (mirrors `tml-studio-open`).
-- When `budgetOpen` is true, render the existing `<BudgetSidebar onCollapse={...} />` in its current `w-[20%]` column. When false, render a thin `w-10` rail with a vertical "Budget" label and a chevron-left button to expand.
-- Add an `onCollapse?: () => void` prop to `BudgetSidebar`. Render a small chevron-right icon button in its header (next to "Budget Reserve") that calls it.
-- The center matrix column already uses `flex-1 min-w-0`, so it grows automatically when the sidebar collapses — no width math needed.
-- Mobile (`lg:hidden`) behavior unchanged.
+Single `INSERT` via the supabase insert tool into `public.studio_items`, populating `folder_id`, `user_id`, `category`, `title`, `address`, `lat`, `lng`, and a short `description`. No schema migration, no code changes.
 
 ## Out of scope
-
-- No changes to data fetching, the Zustand store, drag-and-drop logic, or visual design tokens.
-- Calendar view (`CalendarStaysView`) is unchanged.
+- No new components or UI changes.
+- No Google Places API calls (can be done later via existing Studio entity-validation flow).
+- No changes to the proximity logic — items rendering on the map relies only on the existing `lat`/`lng` fields, which this insert provides.

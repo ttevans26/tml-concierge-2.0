@@ -13,6 +13,12 @@ export interface Gap {
   detail: string;
   /** Suggested prompt seed for the concierge. */
   prompt: string;
+  /** Seed payload to one-tap create a draft itinerary item from this gap. */
+  seed: {
+    category: ItineraryItem["category"];
+    title: string;
+    location_name?: string | null;
+  };
 }
 
 function toMin(t: string | null): number | null {
@@ -66,6 +72,7 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
         label: "No accommodation",
         detail: `No stay booked for the night of ${friendly}.`,
         prompt: `Suggest 3 well-rated hotels for the night of ${friendly}.`,
+        seed: { category: "stays", title: `Stay — ${friendly}` },
       });
     }
 
@@ -79,6 +86,11 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
         label: "No dining planned",
         detail: `Nothing booked for meals on ${friendly}.`,
         prompt: `Suggest 3 dinner spots for ${friendly}${stays[0]?.location_name ? ` near ${stays[0].location_name}` : ""}.`,
+        seed: {
+          category: "dining",
+          title: `Dinner — ${friendly}`,
+          location_name: stays[0]?.location_name ?? null,
+        },
       });
     }
 
@@ -98,6 +110,11 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
           label: `${Math.round(gapMin / 60)}h free`,
           detail: `Open block on ${friendly} between scheduled items.`,
           prompt: `Suggest 2 activities for a ${Math.round(gapMin / 60)}-hour window on ${friendly}.`,
+          seed: {
+            category: "activity",
+            title: `Activity — ${friendly}`,
+            location_name: stays[0]?.location_name ?? null,
+          },
         });
       }
     }
@@ -113,6 +130,11 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
         label: "Missing transit",
         detail: `Moving ${prevStayCity} → ${todayCity} on ${friendly} with no logistics booked.`,
         prompt: `Suggest transit options from ${prevStayCity} to ${todayCity} on ${friendly}.`,
+        seed: {
+          category: "logistics",
+          title: `${prevStayCity} → ${todayCity}`,
+          location_name: todayCity,
+        },
       });
     }
     if (todayCity) prevStayCity = todayCity;

@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
 import { useTripStore } from "@/stores/useTripStore";
 import { detectGaps, computeHealthScore, type Gap } from "@/lib/gapDetection";
-import { AlertCircle, Sparkles, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Sparkles, ChevronDown, ChevronUp, CheckCircle2, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, parseISO } from "date-fns";
+import EditItemDialog from "@/components/workspace/EditItemDialog";
+import type { ItineraryItem } from "@/stores/useTripStore";
+import { toast } from "@/hooks/use-toast";
 
 interface TripHealthBarProps {
   onAskConcierge?: (prompt: string) => void;
@@ -18,7 +21,10 @@ const SEVERITY_TONE: Record<Gap["severity"], string> = {
 export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const items = useTripStore((s) => s.itineraryItems);
+  const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const [open, setOpen] = useState(false);
+  const [creatingId, setCreatingId] = useState<string | null>(null);
+  const [editItem, setEditItem] = useState<ItineraryItem | null>(null);
 
   const { score, gaps } = useMemo(() => {
     return {
@@ -28,6 +34,24 @@ export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
   }, [activeTrip, items]);
 
   if (!activeTrip?.start_date) return null;
+
+  const handleCreateFromGap = async (g: Gap) => {
+    if (!activeTrip) return;
+    setCreatingId(g.id);
+    const created = await createItineraryItem({
+      trip_id: activeTrip.id,
+      title: g.seed.title,
+      category: g.seed.category,
+      date: g.date,
+      location_name: g.seed.location_name ?? null,
+      approval_status: "draft",
+    });
+    setCreatingId(null);
+    if (created) {
+      toast({ title: "Draft added", description: g.seed.title });
+      setEditItem(created);
+    }
+  };
 
   const gapCount = gaps.length;
   const allGood = gapCount === 0;
@@ -95,6 +119,23 @@ export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
                     Ask concierge
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`${onAskConcierge ? "" : "ml-auto"} h-7 gap-1 px-2 font-inter text-[11px]`}
+                  disabled={creatingId === g.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCreateFromGap(g);
+                  }}
+                >
+                  {creatingId === g.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Plus className="h-3 w-3" />
+                  )}
+                  Create draft
+                </Button>
               </li>
             ))}
             {gaps.length > 8 && (
@@ -104,6 +145,13 @@ export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
             )}
           </ul>
         </div>
+      )}
+      {editItem && (
+        <EditItemDialog
+          open={!!editItem}
+          onOpenChange={(o) => !o && setEditItem(null)}
+          item={editItem}
+        />
       )}
     </div>
   );

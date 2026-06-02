@@ -8,7 +8,7 @@ export default function OfflineIndicator() {
   return (
     <div
       role="status"
-      className="flex items-center gap-1 rounded-sm border-thin border-[hsl(var(--accent-bronze)/0.4)] bg-[hsl(var(--accent-bronze)/0.08)] px-1.5 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider text-[hsl(var(--accent-bronze))]"
+      className="flex items-center gap-1 rounded-sm border-thin border-accent/40 bg-accent/10 px-1.5 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider text-accent"
       title="Showing locally cached data"
     >
       <CloudOff className="h-3 w-3" strokeWidth={1.5} />

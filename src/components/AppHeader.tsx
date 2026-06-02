@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import SchedulingModal from "@/components/SchedulingModal";
 import NotificationsPopover from "@/components/NotificationsPopover";
+import OfflineIndicator from "@/components/OfflineIndicator";
 
 const navItems = [
   { label: "Trips", path: "/" },
@@ -58,6 +59,7 @@ export default function AppHeader() {
 
         {/* Right — Actions */}
         <div className="flex items-center gap-1.5">
+          <OfflineIndicator />
           <Button
             variant="ghost"
             size="sm"

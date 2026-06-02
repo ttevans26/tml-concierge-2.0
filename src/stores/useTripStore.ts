@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { nativeStorage } from "@/lib/persistStorage";
 import { supabase } from "@/integrations/supabase/client";
 import { MOCK_NETWORK_USERS } from "@/data/mockNetworkUsers";
 import { MOCK_NETWORK_TRIPS, MOCK_NETWORK_TRIP_ITEMS } from "@/data/mockNetworkTrips";
@@ -223,7 +225,9 @@ export const selectRemainingBudget = (state: TripStore) => {
 /*  Store implementation                                              */
 /* ------------------------------------------------------------------ */
 
-export const useTripStore = create<TripStore>((set, get) => ({
+export const useTripStore = create<TripStore>()(
+  persist(
+    (set, get) => ({
   trips: [],
   activeTrip: null,
   itineraryItems: [],
@@ -445,4 +449,21 @@ export const useTripStore = create<TripStore>((set, get) => ({
       set({ itineraryItems: get().itineraryItems.filter((i) => i.id !== id) });
     }
   },
-}));
+}),
+    {
+      name: "tml-trip-store-v1",
+      storage: createJSONStorage(() => nativeStorage),
+      // Only persist data slices — never persist `loading` or action functions.
+      partialize: (s) => ({
+        trips: s.trips,
+        activeTrip: s.activeTrip,
+        itineraryItems: s.itineraryItems,
+        flights: s.flights,
+        profile: s.profile,
+        checklistTasks: s.checklistTasks,
+        appointments: s.appointments,
+        networkProfile: s.networkProfile,
+      }),
+    },
+  ),
+);

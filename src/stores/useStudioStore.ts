@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { nativeStorage } from "@/lib/persistStorage";
 import { supabase } from "@/integrations/supabase/client";
 
 export type StudioCategory = "stays" | "dining" | "activity" | "sites";
@@ -48,7 +50,9 @@ interface StudioStore {
   setAnchorItem: (itemId: string | null) => void;
 }
 
-export const useStudioStore = create<StudioStore>((set, get) => ({
+export const useStudioStore = create<StudioStore>()(
+  persist(
+    (set, get) => ({
   folders: [],
   activeFolder: null,
   loading: false,
@@ -177,4 +181,14 @@ export const useStudioStore = create<StudioStore>((set, get) => ({
   },
 
   setAnchorItem: (itemId) => set({ anchorItemId: itemId }),
-}));
+}),
+    {
+      name: "tml-studio-store-v1",
+      storage: createJSONStorage(() => nativeStorage),
+      partialize: (s) => ({
+        folders: s.folders,
+        anchorItemId: s.anchorItemId,
+      }),
+    },
+  ),
+);

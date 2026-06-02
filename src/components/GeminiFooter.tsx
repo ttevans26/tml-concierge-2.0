@@ -281,7 +281,7 @@ export default function GeminiFooter() {
   return (
     <>
       {/* Sticky Footer */}
-      <footer className="sticky bottom-0 z-30 flex h-10 items-center justify-between border-t border-border bg-background/95 px-6 backdrop-blur-sm">
+      <footer className="sticky bottom-0 z-30 hidden h-10 items-center justify-between border-t border-border bg-background/95 px-6 backdrop-blur-sm sm:flex">
         <p className="font-inter text-[10px] text-muted-foreground tracking-wide">
           © {new Date().getFullYear()} TML Network
         </p>
@@ -301,7 +301,7 @@ export default function GeminiFooter() {
         className={cn(
           "fixed z-50 flex flex-col rounded-[2px] border border-border bg-card shadow-xl transition-all duration-200",
           "bottom-14 right-6 w-[380px] h-[560px] max-h-[calc(100vh-5rem)]",
-          "max-sm:left-2 max-sm:right-2 max-sm:bottom-12 max-sm:w-auto max-sm:h-[70vh]",
+          "max-sm:left-2 max-sm:right-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+72px)] max-sm:w-auto max-sm:h-[65vh]",
           open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         )}
       >

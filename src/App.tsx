@@ -14,6 +14,7 @@ import ResetPassword from "./pages/ResetPassword";
 import TripWorkspace from "./pages/TripWorkspace";
 import Studio from "./pages/Studio";
 import Tools from "./pages/Tools";
+import Today from "./pages/Today";
 import Network from "./pages/Network";
 import NetworkUserProfile from "./pages/NetworkUserProfile";
 import NetworkUserTrip from "./pages/NetworkUserTrip";
@@ -43,6 +44,7 @@ const App = () => (
               }
             >
               <Route path="/" element={<Index />} />
+              <Route path="/today" element={<Today />} />
               <Route path="/studio" element={<Studio />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/network" element={<Network />} />

@@ -4,24 +4,14 @@ import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
 import TripSettingsModal from "./TripSettingsModal";
-import SmartPullTray, { type ExtractedItem } from "./SmartPullTray";
+import SmartPullInbox from "./SmartPullInbox";
 import type { ItineraryItem } from "@/stores/useTripStore";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Mail, Loader2, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { Inbox, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
 import CalendarStaysView from "./CalendarStaysView";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -165,10 +155,6 @@ export default function MatrixGrid() {
 
   // Smart Pull state
   const [smartPullOpen, setSmartPullOpen] = useState(false);
-  const [emailText, setEmailText] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [pendingItems, setPendingItems] = useState<ExtractedItem[]>([]);
-  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
   // View mode: matrix grid vs. calendar month view (persisted)
   const [viewMode, setViewMode] = useState<"matrix" | "calendar">(() => {
@@ -212,116 +198,7 @@ export default function MatrixGrid() {
 
   /* ---- Smart Pull handlers ---- */
 
-  const handleExtract = useCallback(async () => {
-    if (!emailText.trim()) return;
-    setExtracting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("smart-pull", {
-        body: { email_text: emailText.trim() },
-      });
-
-      if (error) {
-        toast.error(error.message || "Smart Pull failed");
-        return;
-      }
-
-      if (data?.error) {
-        toast.error(data.error);
-        return;
-      }
-
-      const items: ExtractedItem[] = (data?.items || []).map(
-        (item: any, idx: number) => ({
-          ...item,
-          id: `sp-${Date.now()}-${idx}`,
-        })
-      );
-
-      if (items.length === 0) {
-        toast.info("No travel items found in this text.");
-        return;
-      }
-
-      setPendingItems((prev) => [...prev, ...items]);
-      setSmartPullOpen(false);
-      setEmailText("");
-      toast.success(`Extracted ${items.length} item${items.length !== 1 ? "s" : ""}`);
-    } catch (e: any) {
-      toast.error(e?.message || "Smart Pull failed");
-    } finally {
-      setExtracting(false);
-    }
-  }, [emailText]);
-
-  const handleAccept = useCallback(
-    async (item: ExtractedItem) => {
-      if (!activeTrip) return;
-      setAcceptingIds((prev) => new Set(prev).add(item.id));
-
-      try {
-        const newItem = await createItineraryItem({
-          trip_id: activeTrip.id,
-          category: item.category,
-          title: item.title,
-          description: item.description || null,
-          date: item.date || null,
-          start_time: item.start_time || null,
-          end_time: item.end_time || null,
-          cost: item.estimated_cost ?? null,
-          currency: item.currency || "USD",
-          confirmation_code: item.confirmation_code || null,
-          location_name: item.location_name || null,
-          approval_status: "draft",
-          api_metadata: {
-            smart_pull: true,
-            flight_number: item.flight_number || null,
-            departure_airport: item.departure_airport || null,
-            arrival_airport: item.arrival_airport || null,
-          },
-        });
-
-        setPendingItems((prev) => prev.filter((p) => p.id !== item.id));
-        toast.success(`Added "${item.title}" to itinerary`);
-
-        // Background Aviationstack enrichment for flights
-        if (newItem && item.flight_number) {
-          supabase.functions
-            .invoke("aviationstack-lookup", {
-              body: { flight_iata: item.flight_number },
-            })
-            .then(({ data: flightData }) => {
-              if (flightData?.gate || flightData?.terminal) {
-                updateItineraryItem(newItem.id, {
-                  api_metadata: {
-                    ...((newItem.api_metadata as Record<string, unknown>) || {}),
-                    gate: flightData.gate,
-                    terminal: flightData.terminal,
-                    flight_status: flightData.status,
-                  },
-                });
-                toast.info(`Gate/terminal info added for ${item.flight_number}`);
-              }
-            })
-            .catch(() => {
-              toast.info("Gate info unavailable — flight data preserved.");
-            });
-        }
-      } catch {
-        toast.error("Failed to add item");
-      } finally {
-        setAcceptingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(item.id);
-          return next;
-        });
-      }
-    },
-    [activeTrip, createItineraryItem, updateItineraryItem]
-  );
-
-  const handleDismiss = useCallback((itemId: string) => {
-    setPendingItems((prev) => prev.filter((p) => p.id !== itemId));
-  }, []);
+  // Smart Pull logic is encapsulated in <SmartPullInbox /> below.
 
   /* ---- Drag-and-drop from Studio sidebar ---- */
 
@@ -431,7 +308,7 @@ export default function MatrixGrid() {
               className="min-h-[44px] gap-1.5 touch-manipulation"
               onClick={() => setSmartPullOpen(true)}
             >
-              <Mail className="h-4 w-4" />
+              <Inbox className="h-4 w-4" />
               <span className="font-inter text-xs">Smart Pull</span>
             </Button>
             <ShareControls />
@@ -527,14 +404,6 @@ export default function MatrixGrid() {
           {days.length} day{days.length !== 1 ? "s" : ""} · {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")}
         </p>
       </div>
-
-      {/* Smart Pull review tray */}
-      <SmartPullTray
-        items={pendingItems}
-        onAccept={handleAccept}
-        onDismiss={handleDismiss}
-        acceptingIds={acceptingIds}
-      />
 
       {/* Scrollable matrix */}
       {viewMode === "calendar" ? (
@@ -637,40 +506,8 @@ export default function MatrixGrid() {
         />
       )}
 
-      {/* Smart Pull paste dialog */}
-      <Dialog open={smartPullOpen} onOpenChange={setSmartPullOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-playfair">Smart Pull</DialogTitle>
-            <DialogDescription className="font-inter text-xs">
-              Paste a booking confirmation email and AI will extract the travel details.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            placeholder="Paste your confirmation email text here…"
-            className="min-h-[160px] font-inter text-xs"
-            value={emailText}
-            onChange={(e) => setEmailText(e.target.value)}
-            disabled={extracting}
-          />
-          <DialogFooter>
-            <Button
-              onClick={handleExtract}
-              disabled={extracting || emailText.trim().length < 10}
-              className="min-h-[44px] touch-manipulation"
-            >
-              {extracting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing confirmation…
-                </>
-              ) : (
-                "Extract"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Smart Pull Inbox: paste · review · history · diff · batch */}
+      <SmartPullInbox open={smartPullOpen} onOpenChange={setSmartPullOpen} />
     </div>
   );
 }

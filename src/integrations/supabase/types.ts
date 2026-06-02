@@ -77,6 +77,13 @@ export type Database = {
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "flight_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       itinerary_items: {
@@ -170,6 +177,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itinerary_items_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_public"
             referencedColumns: ["id"]
           },
         ]
@@ -377,6 +391,13 @@ export type Database = {
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "trip_access_requests_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       trips: {
@@ -526,7 +547,47 @@ export type Database = {
             referencedRelation: "trips"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "itinerary_items_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips_public"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      trips_public: {
+        Row: {
+          cover_image_url: string | null
+          destination: string | null
+          end_date: string | null
+          id: string | null
+          is_published: boolean | null
+          name: string | null
+          share_token: string | null
+          start_date: string | null
+        }
+        Insert: {
+          cover_image_url?: string | null
+          destination?: string | null
+          end_date?: string | null
+          id?: string | null
+          is_published?: boolean | null
+          name?: string | null
+          share_token?: string | null
+          start_date?: string | null
+        }
+        Update: {
+          cover_image_url?: string | null
+          destination?: string | null
+          end_date?: string | null
+          id?: string | null
+          is_published?: boolean | null
+          name?: string | null
+          share_token?: string | null
+          start_date?: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {

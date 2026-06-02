@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { format, parseISO, isToday, isTomorrow, isWithinInterval, addDays, startOfDay } from "date-fns";
+import { format, parseISO, isWithinInterval, addDays, startOfDay } from "date-fns";
 import { Calendar, Clock, MapPin, Plane, Hotel, UtensilsCrossed, Sparkles } from "lucide-react";
 import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { useAuth } from "@/hooks/useAuth";
@@ -174,6 +174,3 @@ export default function Today() {
     </div>
   );
 }
-
-// (unused import guards — keep tree-shaker happy in some bundlers)
-export const __TODAY_DATE_HELPERS__ = { isToday, isTomorrow };

@@ -64,7 +64,7 @@ export default function PublicTripView() {
       setLoading(false);
       return;
     }
-    setTrip(tripData as PublicTrip);
+    setTrip(tripData as unknown as PublicTrip);
 
     // Fetch public items (view strips cost/confirmation)
     const { data: itemsData } = await supabase

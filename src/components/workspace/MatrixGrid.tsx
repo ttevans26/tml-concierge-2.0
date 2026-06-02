@@ -138,14 +138,67 @@ export default function MatrixGrid() {
     }, 0);
   };
 
-  const onWheel = (e: React.WheelEvent) => {
+  /**
+   * Smooth wheel → horizontal pan.
+   * Vertical wheel deltas are accumulated and eased toward a target scrollLeft
+   * inside a requestAnimationFrame loop so trackpad/mouse wheel feels fluid
+   * while the page continues to scroll vertically as normal.
+   */
+  useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // If user scrolls vertically without shift, redirect to horizontal pan.
-    if (e.shiftKey) return;
-    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-    el.scrollLeft += e.deltaY;
-  };
+
+    let targetLeft = el.scrollLeft;
+    let rafId: number | null = null;
+    let lastTs = 0;
+
+    const tick = (ts: number) => {
+      if (!lastTs) lastTs = ts;
+      const dt = Math.min(64, ts - lastTs);
+      lastTs = ts;
+      const current = el.scrollLeft;
+      const diff = targetLeft - current;
+      if (Math.abs(diff) < 0.5) {
+        el.scrollLeft = targetLeft;
+        rafId = null;
+        lastTs = 0;
+        return;
+      }
+      // Exponential ease: ~18% of remaining distance per 16ms frame.
+      const ease = 1 - Math.pow(1 - 0.18, dt / 16);
+      el.scrollLeft = current + diff * ease;
+      rafId = requestAnimationFrame(tick);
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.shiftKey) return;
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+
+      const maxLeft = el.scrollWidth - el.clientWidth;
+      // Snap target to current scroll if user reversed direction mid-animation.
+      if (rafId === null) targetLeft = el.scrollLeft;
+      const next = Math.max(0, Math.min(maxLeft, targetLeft + e.deltaY));
+
+      // Only consume the wheel event if we can actually pan horizontally;
+      // otherwise let the page scroll vertically uninterrupted.
+      const canPan =
+        (e.deltaY > 0 && targetLeft < maxLeft) || (e.deltaY < 0 && targetLeft > 0);
+      if (!canPan) return;
+
+      targetLeft = next;
+      if (rafId === null) {
+        lastTs = 0;
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    // passive: true — we don't preventDefault, page still scrolls vertically.
+    el.addEventListener("wheel", handleWheel, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -415,7 +468,6 @@ export default function MatrixGrid() {
         onMouseMove={onPanMouseMove}
         onMouseUp={endPan}
         onMouseLeave={endPan}
-        onWheel={onWheel}
         className={`flex-1 overflow-auto select-none ${
           dragState.current.active ? "cursor-grabbing" : "cursor-grab"
         }`}

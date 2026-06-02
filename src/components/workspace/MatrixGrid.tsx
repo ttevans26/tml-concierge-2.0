@@ -309,7 +309,7 @@ export default function MatrixGrid() {
               className="min-h-[44px] gap-1.5 touch-manipulation"
               onClick={() => setSmartPullOpen(true)}
             >
-              <Mail className="h-4 w-4" />
+              <Inbox className="h-4 w-4" />
               <span className="font-inter text-xs">Smart Pull</span>
             </Button>
             <ShareControls />
@@ -405,14 +405,6 @@ export default function MatrixGrid() {
           {days.length} day{days.length !== 1 ? "s" : ""} · {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")}
         </p>
       </div>
-
-      {/* Smart Pull review tray */}
-      <SmartPullTray
-        items={pendingItems}
-        onAccept={handleAccept}
-        onDismiss={handleDismiss}
-        acceptingIds={acceptingIds}
-      />
 
       {/* Scrollable matrix */}
       {viewMode === "calendar" ? (
@@ -515,40 +507,8 @@ export default function MatrixGrid() {
         />
       )}
 
-      {/* Smart Pull paste dialog */}
-      <Dialog open={smartPullOpen} onOpenChange={setSmartPullOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-playfair">Smart Pull</DialogTitle>
-            <DialogDescription className="font-inter text-xs">
-              Paste a booking confirmation email and AI will extract the travel details.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            placeholder="Paste your confirmation email text here…"
-            className="min-h-[160px] font-inter text-xs"
-            value={emailText}
-            onChange={(e) => setEmailText(e.target.value)}
-            disabled={extracting}
-          />
-          <DialogFooter>
-            <Button
-              onClick={handleExtract}
-              disabled={extracting || emailText.trim().length < 10}
-              className="min-h-[44px] touch-manipulation"
-            >
-              {extracting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing confirmation…
-                </>
-              ) : (
-                "Extract"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Smart Pull Inbox: paste · review · history · diff · batch */}
+      <SmartPullInbox open={smartPullOpen} onOpenChange={setSmartPullOpen} />
     </div>
   );
 }

@@ -53,7 +53,7 @@ export default function PublicTripView() {
   const fetchData = async (shareToken: string) => {
     // Lookup trip by share_token
     const { data: tripData, error: tripErr } = await supabase
-      .from("trips")
+      .from("trips_public" as any)
       .select("id, name, destination, start_date, end_date, is_published, share_token")
       .eq("share_token", shareToken)
       .eq("is_published", true)

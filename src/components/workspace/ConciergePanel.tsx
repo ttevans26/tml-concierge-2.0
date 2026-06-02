@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Loader2, RotateCcw, Plus } from "lucide-react";
+import { Sparkles, Send, Loader2, RotateCcw, Plus, Pencil } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useTripStore } from "@/stores/useTripStore";
+import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
+import EditItemDialog from "@/components/workspace/EditItemDialog";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -46,6 +47,7 @@ export default function ConciergePanel() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [editItem, setEditItem] = useState<ItineraryItem | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -186,7 +188,7 @@ export default function ConciergePanel() {
     setStreaming(false);
   }
 
-  async function handleAddToItinerary(suggestion: Suggestion, msgIndex: number) {
+  async function handleAddToItinerary(suggestion: Suggestion, msgIndex: number, openEditor = false) {
     if (!activeTrip) return;
     const key = `${msgIndex}-${suggestion.title}`;
     setAddingIds((prev) => new Set(prev).add(key));
@@ -209,6 +211,7 @@ export default function ConciergePanel() {
     if (item) {
       toast({ title: "Added to itinerary", description: suggestion.title });
       fetchItineraryItems(activeTrip.id);
+      if (openEditor) setEditItem(item);
     }
   }
 
@@ -305,20 +308,33 @@ export default function ConciergePanel() {
                               {s.location_name}
                             </p>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isAdding || !activeTrip}
-                            onClick={() => handleAddToItinerary(s, i)}
-                            className="h-6 w-full gap-1 rounded-[2px] font-inter text-[10px]"
-                          >
-                            {isAdding ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Plus className="h-3 w-3" />
-                            )}
-                            Add to itinerary
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isAdding || !activeTrip}
+                              onClick={() => handleAddToItinerary(s, i, false)}
+                              className="h-6 flex-1 gap-1 rounded-[2px] font-inter text-[10px]"
+                            >
+                              {isAdding ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Plus className="h-3 w-3" />
+                              )}
+                              Add
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isAdding || !activeTrip}
+                              onClick={() => handleAddToItinerary(s, i, true)}
+                              className="h-6 flex-1 gap-1 rounded-[2px] font-inter text-[10px]"
+                              title="Add and open editor"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              Add & edit
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -360,6 +376,13 @@ export default function ConciergePanel() {
           <Send className="h-3 w-3" />
         </Button>
       </form>
+      {editItem && (
+        <EditItemDialog
+          open={!!editItem}
+          onOpenChange={(o) => !o && setEditItem(null)}
+          item={editItem}
+        />
+      )}
     </div>
   );
 }

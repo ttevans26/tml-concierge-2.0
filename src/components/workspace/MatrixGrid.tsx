@@ -468,7 +468,6 @@ export default function MatrixGrid() {
         onMouseMove={onPanMouseMove}
         onMouseUp={endPan}
         onMouseLeave={endPan}
-        onWheel={onWheel}
         className={`flex-1 overflow-auto select-none ${
           dragState.current.active ? "cursor-grabbing" : "cursor-grab"
         }`}

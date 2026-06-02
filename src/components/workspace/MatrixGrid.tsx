@@ -6,7 +6,6 @@ import AddItemDialog from "./AddItemDialog";
 import TripSettingsModal from "./TripSettingsModal";
 import SmartPullInbox from "./SmartPullInbox";
 import type { ItineraryItem } from "@/stores/useTripStore";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Inbox, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";

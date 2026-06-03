@@ -191,9 +191,11 @@ interface RowProps {
   total: number;
   preview: { start: string; end: string } | null;
   onMove: (dir: -1 | 1) => void;
+  items: ItineraryItem[];
+  onRename: (label: string) => Promise<void> | void;
 }
 
-function ReshuffleRow({ segment, index, total, preview, onMove }: RowProps) {
+function ReshuffleRow({ segment, index, total, preview, onMove, items, onRename }: RowProps) {
   const disabled = segment.isUnassigned;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: segment.id,
@@ -205,6 +207,24 @@ function ReshuffleRow({ segment, index, total, preview, onMove }: RowProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  // Derive the current city/location label from the underlying stays.
+  // Prefer location_name (city/state/country) over the hotel title.
+  const currentLabel = useMemo(() => {
+    const stays = items.filter(
+      (it) =>
+        it.category === "stays" &&
+        it.date &&
+        it.date >= segment.startDate &&
+        it.date <= segment.endDate,
+    );
+    const named = stays.find((s) => s.location_name && s.location_name.trim());
+    return named?.location_name?.trim() ?? "";
+  }, [items, segment.startDate, segment.endDate]);
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(currentLabel);
+  useMemo(() => setDraft(currentLabel), [currentLabel]);
+
   const fmt = (iso: string) => format(parseISO(iso), "MMM d");
   const newStart = preview?.start ?? segment.startDate;
   const newEnd = preview?.end ?? segment.endDate;
@@ -213,6 +233,13 @@ function ReshuffleRow({ segment, index, total, preview, onMove }: RowProps) {
       ? `${fmt(newStart)} · 1 night`
       : `${fmt(newStart)} → ${fmt(newEnd)} · ${segment.nights} nights`;
   const shifted = preview && preview.start !== segment.startDate;
+
+  const commit = async () => {
+    setEditing(false);
+    if (draft.trim() && draft.trim() !== currentLabel) {
+      await onRename(draft);
+    }
+  };
 
   return (
     <li
@@ -236,10 +263,42 @@ function ReshuffleRow({ segment, index, total, preview, onMove }: RowProps) {
       <div className="flex-1 px-2 py-2 min-w-0">
         <div className="flex items-center gap-1.5">
           <MapPin className="h-3 w-3 text-accent shrink-0" />
-          <span className="truncate font-playfair text-sm text-foreground">
-            {segment.location}
-          </span>
+          {editing ? (
+            <Input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commit();
+                if (e.key === "Escape") {
+                  setDraft(currentLabel);
+                  setEditing(false);
+                }
+              }}
+              placeholder="City, State, Country"
+              className="h-6 px-1.5 py-0 font-playfair text-sm"
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setEditing(true)}
+              className="group flex min-w-0 items-center gap-1 truncate text-left font-playfair text-sm text-foreground hover:text-accent disabled:cursor-default"
+              title="Click to edit city / location"
+            >
+              <span className={`truncate ${!currentLabel ? "italic text-muted-foreground" : ""}`}>
+                {currentLabel || "Set city, state, country"}
+              </span>
+              <Pencil className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover:opacity-60" />
+            </button>
+          )}
         </div>
+        {currentLabel && (
+          <div className="ml-4 truncate font-inter text-[9px] uppercase tracking-wide text-muted-foreground/70">
+            {segment.location}
+          </div>
+        )}
         <div className="mt-0.5 font-inter text-[10px] text-muted-foreground">
           {dateLine}
           {shifted && (

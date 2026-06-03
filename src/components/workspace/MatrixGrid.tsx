@@ -34,7 +34,11 @@ import {
   type StayPill,
   type LocationLeg,
 } from "@/lib/locationLegs";
-import { MapPin, Sparkles, Bed } from "lucide-react";
+import { MapPin, Sparkles, Bed, CalendarIcon, GripVertical } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { buildSegments, computeReorderPatches } from "@/lib/segments";
+import { differenceInCalendarDays, addDays } from "date-fns";
 const EditItemDialog = lazy(() => import("./EditItemDialog"));
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
@@ -75,12 +79,16 @@ const CATEGORIES = [
   { key: "activity" as const, label: "Activity" },
 ];
 
-const CELL_BG: Record<string, string> = {
-  stays: "bg-[hsl(var(--cell-stays))]",
-  logistics: "bg-[hsl(var(--cell-logistics))]",
-  dining: "bg-[hsl(var(--cell-dining))]",
-  activity: "bg-[hsl(var(--cell-activity))]",
-};
+/** 7-stop rainbow palette token names; cycles for >7 legs. */
+const LEG_TOKENS = [
+  "--leg-1",
+  "--leg-2",
+  "--leg-3",
+  "--leg-4",
+  "--leg-5",
+  "--leg-6",
+  "--leg-7",
+];
 
 export default function MatrixGrid() {
   const activeTrip = useTripStore((s) => s.activeTrip);
@@ -89,6 +97,8 @@ export default function MatrixGrid() {
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
   const updateTrip = useTripStore((s) => s.updateTrip);
   const moveItineraryItem = useTripStore((s) => s.moveItineraryItem);
+  const shiftTripDates = useTripStore((s) => s.shiftTripDates);
+  const bulkUpdateItemDates = useTripStore((s) => s.bulkUpdateItemDates);
   const undo = useTripStore((s) => s.undo);
   const redo = useTripStore((s) => s.redo);
   const canUndo = useTripStore((s) => s.canUndo());
@@ -441,6 +451,75 @@ export default function MatrixGrid() {
   );
   const displayedLegs: LocationLeg[] = legs.length > 0 ? legs : ghostLegs;
 
+  /* ---- Per-day leg color (vertical rainbow bands) ---- */
+  const dayLegColor = useMemo(() => {
+    const map = new Map<string, string>(); // dateStr -> hsl token name
+    const sorted = displayedLegs.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    sorted.forEach((leg, idx) => {
+      const token = LEG_TOKENS[idx % LEG_TOKENS.length];
+      const start = parseISO(leg.startDate);
+      const end = parseISO(leg.endDate);
+      const span = Math.max(1, differenceInCalendarDays(end, start) + 1);
+      for (let i = 0; i < span; i++) {
+        map.set(format(addDays(start, i), "yyyy-MM-dd"), token);
+      }
+    });
+    return map;
+  }, [displayedLegs]);
+
+  const legTokenById = useMemo(() => {
+    const m = new Map<string, string>();
+    const sorted = displayedLegs.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    sorted.forEach((leg, idx) => m.set(leg.id, LEG_TOKENS[idx % LEG_TOKENS.length]));
+    return m;
+  }, [displayedLegs]);
+
+  /** Tailwind-arbitrary inline style for a day column cell tint. */
+  const cellStyleFor = (dateStr: string): React.CSSProperties => {
+    const token = dayLegColor.get(dateStr);
+    if (!token) return {};
+    return { backgroundColor: `hsl(var(${token}) / 0.10)` };
+  };
+
+  /* ---- Drag-to-reorder location legs (swap on drop) ---- */
+  const [draggingLegId, setDraggingLegId] = useState<string | null>(null);
+
+  const handleLegReorderSwap = useCallback(
+    async (sourceId: string, targetId: string) => {
+      if (!activeTrip || sourceId === targetId) return;
+      const segs = buildSegments(activeTrip, itineraryItems);
+      if (segs.length < 2) {
+        toast.error("Need at least two segments to reorder.");
+        return;
+      }
+      // Match leg → segment by date overlap (legs and segments share startDate windows).
+      const findSegIdxForLeg = (legId: string) => {
+        const leg = displayedLegs.find((l) => l.id === legId);
+        if (!leg) return -1;
+        return segs.findIndex(
+          (s) => !(s.endDate < leg.startDate || s.startDate > leg.endDate),
+        );
+      };
+      const a = findSegIdxForLeg(sourceId);
+      const b = findSegIdxForLeg(targetId);
+      if (a < 0 || b < 0) {
+        toast.error("Couldn't match legs to itinerary segments.");
+        return;
+      }
+      const newOrder = segs.slice();
+      const [moved] = newOrder.splice(a, 1);
+      newOrder.splice(b, 0, moved);
+      const patches = computeReorderPatches(activeTrip, newOrder, itineraryItems);
+      if (patches.length === 0) {
+        toast.message("Order unchanged.");
+        return;
+      }
+      await bulkUpdateItemDates(patches);
+      toast.success("Legs reshuffled");
+    },
+    [activeTrip, itineraryItems, displayedLegs, bulkUpdateItemDates],
+  );
+
   /* ---- Stay pills (consecutive same-stay grouping) ---- */
   const stayPills = useMemo(() => getStayPills(itineraryItems), [itineraryItems]);
   const stayLanes = useMemo(() => assignLanes(stayPills), [stayPills]);
@@ -648,6 +727,42 @@ export default function MatrixGrid() {
             <span className="ml-2 font-inter text-[10px] text-muted-foreground/70">
               Drag, scroll, or use arrows to pan
             </span>
+            {activeTrip?.start_date && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-3 inline-flex items-center gap-1 rounded-sm border border-border px-2 py-1 font-inter text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/5"
+                    title="Change start date — shifts the entire trip"
+                  >
+                    <CalendarIcon className="h-3 w-3" />
+                    Trip starts: {format(parseISO(activeTrip.start_date), "MMM d, yyyy")}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={parseISO(activeTrip.start_date)}
+                    onSelect={async (d) => {
+                      if (!d || !activeTrip.start_date) return;
+                      const delta = differenceInCalendarDays(d, parseISO(activeTrip.start_date));
+                      if (delta === 0) return;
+                      const ok = await shiftTripDates(activeTrip.id, delta);
+                      if (ok) {
+                        toast.success(
+                          `Trip shifted ${delta > 0 ? "+" : ""}${delta} day${
+                            Math.abs(delta) === 1 ? "" : "s"
+                          }`,
+                        );
+                      }
+                    }}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
             {ghostLegs.length > 0 && (
               <button
                 type="button"
@@ -773,10 +888,34 @@ export default function MatrixGrid() {
                 const { startIdx, span } = legColumnSpan(activeTrip.start_date, leg);
                 if (startIdx < 0 || startIdx >= days.length) return null;
                 const width = Math.min(span, days.length - startIdx) * 176;
+                const token = legTokenById.get(leg.id);
+                const isDragging = draggingLegId === leg.id;
                 return (
                   <button
                     key={leg.id}
                     type="button"
+                    draggable={!leg.isGhost}
+                    onDragStart={(e) => {
+                      if (leg.isGhost) return;
+                      setDraggingLegId(leg.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("application/leg-id", leg.id);
+                    }}
+                    onDragEnd={() => setDraggingLegId(null)}
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes("application/leg-id")) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }
+                    }}
+                    onDrop={(e) => {
+                      const src = e.dataTransfer.getData("application/leg-id");
+                      if (!src) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDraggingLegId(null);
+                      handleLegReorderSwap(src, leg.id);
+                    }}
                     onClick={() =>
                       setLegDialog({
                         open: true,
@@ -784,15 +923,31 @@ export default function MatrixGrid() {
                         initialStart: leg.startDate,
                       })
                     }
-                    className={`pointer-events-auto absolute top-1 flex h-7 items-center gap-1.5 truncate rounded-sm px-2.5 text-left transition-colors ${
+                    data-no-pan
+                    className={`pointer-events-auto absolute top-1 flex h-7 items-center gap-1.5 truncate rounded-sm px-2.5 text-left transition-all ${
                       leg.isGhost
-                        ? "border border-dashed border-accent/50 bg-accent/5 italic text-accent/80 hover:bg-accent/10"
-                        : "border border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
-                    }`}
-                    style={{ left: `${startIdx * 176 + 4}px`, width: `${width - 8}px` }}
-                    title={leg.isGhost ? "Derived from stays — click to refine" : leg.label}
+                        ? "border border-dashed italic"
+                        : "border cursor-grab active:cursor-grabbing"
+                    } ${isDragging ? "opacity-40 ring-2 ring-accent" : ""}`}
+                    style={{
+                      left: `${startIdx * 176 + 4}px`,
+                      width: `${width - 8}px`,
+                      backgroundColor: token
+                        ? `hsl(var(${token}) / ${leg.isGhost ? 0.12 : 0.28})`
+                        : undefined,
+                      borderColor: token ? `hsl(var(${token}) / 0.55)` : undefined,
+                      color: "hsl(var(--foreground))",
+                    }}
+                    title={
+                      leg.isGhost
+                        ? "Derived from stays — click to refine"
+                        : `${leg.label} — drag to reorder, click to edit`
+                    }
                   >
-                    <MapPin className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                    {!leg.isGhost && (
+                      <GripVertical className="h-3 w-3 shrink-0 opacity-50" strokeWidth={1.5} />
+                    )}
+                    <MapPin className="h-3 w-3 shrink-0" strokeWidth={1.5} />
                     <span className="truncate font-inter text-[11px] font-medium">
                       {leg.label} · {leg.nights}n
                     </span>
@@ -858,7 +1013,10 @@ export default function MatrixGrid() {
                 </div>
 
                 {/* LOCATION cell (visible only when no leg pill covers this day) */}
-                <div className="h-9 border-b border-border bg-background/40">
+                <div
+                  className="h-9 border-b border-border"
+                  style={cellStyleFor(dateStr)}
+                >
                   {!cellHasLeg && (
                     <button
                       type="button"
@@ -880,8 +1038,11 @@ export default function MatrixGrid() {
                   return (
                     <div
                       key={cat.key}
-                      className={`flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
-                      style={{ height: isStays ? `${staysRowHeight}px` : "112px" }}
+                      className="flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto"
+                      style={{
+                        height: isStays ? `${staysRowHeight}px` : "112px",
+                        ...cellStyleFor(dateStr),
+                      }}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
@@ -909,7 +1070,10 @@ export default function MatrixGrid() {
                   );
                 })}
 
-                <div className="flex h-8 items-center justify-center border-b border-border bg-secondary/20">
+                <div
+                  className="flex h-8 items-center justify-center border-b border-border"
+                  style={cellStyleFor(dateStr)}
+                >
                   <span className="font-inter text-[10px] font-semibold text-foreground">
                     {total > 0 ? `$${total.toLocaleString()}` : "—"}
                   </span>

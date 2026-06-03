@@ -1,43 +1,50 @@
+# Trip date shift, leg reorder, and rainbow location columns
 
-## Problem
+Three changes to make the Matrix Grid easier to reshuffle and read.
 
-The Matrix grid's wheel handler (`src/components/workspace/MatrixGrid.tsx`, `useEffect` around L176–230) was designed for a discrete mouse wheel: it captures vertical `deltaY`, accumulates it into a target `scrollLeft`, and eases toward that target with `requestAnimationFrame`. On a trackpad this produces three compounding issues:
+## 1. Inline start-date edit (shift whole trip)
 
-1. **Double inertia / rubber-band.** Trackpads emit dozens of small wheel events with their own native momentum curve. Our RAF easing layers a second decay on top, so the grid keeps gliding after the fingers lift and overshoots the user's gesture.
-2. **Vertical scroll hijack.** Any two-finger swipe with even a slight vertical component (`|deltaY| > |deltaX|`) gets converted to horizontal pan, so the page no longer scrolls vertically the way the user expects when the cursor is over the matrix.
-3. **Native horizontal swipe fights easing.** When the user actually swipes horizontally (`|deltaX| > |deltaY|`), we early-return — but the easing loop from the *previous* vertical delta is still running, so the native horizontal scroll and the eased horizontal scroll collide and jitter.
+Today, shifting the trip is buried in the "Edit Trip" dialog → Dates tab → "Shift entire trip" field. Make it one click from the grid.
 
-## Fix
+- Above the matrix date-header row (next to the existing "Drag, scroll, or use arrows to pan" caption), add a compact label like **`Trip starts: Aug 20, 2026 ▾`**.
+- Clicking it opens a small popover with a calendar.
+- Picking a new date computes `delta = newStart - currentStart` and calls the existing `shiftTripDates(tripId, delta)` in `useTripStore`. This already shifts both trip dates AND every itinerary item by N days, so the whole trip (UK leg included) moves with it.
+- Toast: `Trip shifted +/-N days`.
 
-Differentiate trackpad from mouse wheel and only apply the wheel→pan conversion + easing for a real mouse wheel. Trackpads get fully native scroll behavior (horizontal two-finger swipe pans the grid; vertical swipe scrolls the page) with zero JS interference.
+No store/DB changes — `shiftTripDates` already does exactly this.
 
-**Detection heuristic** (standard, used by Figma/Linear/etc.):
+## 2. Drag location-leg pills on the grid
 
-- A wheel event is treated as a *mouse wheel* when `deltaMode === 1` (line mode), OR when `Math.abs(deltaY) >= 50` AND `deltaY % 1 === 0` AND `deltaX === 0`. Discrete, integer, vertical-only ≈ scroll wheel notch.
-- Anything else (small fractional deltas, any deltaX, or simultaneous x/y) is treated as a *trackpad/precision* input and we **do not** preventDefault, do not start RAF, do not touch `scrollLeft`. The browser handles it natively.
+Today legs can be reordered only inside Edit Trip → Itinerary Segments. Add the same capability directly on the Location row pills.
 
-**Behavior changes**
+- Make each leg pill in the Location-row overlay (`displayedLegs.map(...)` in `MatrixGrid.tsx`) draggable horizontally with `@dnd-kit` (already in the project).
+- Drag interaction:
+  - Grabbing a confirmed leg pill (ghost pills stay click-only) shows a translucent preview that snaps to whole-day boundaries.
+  - Dropping over another leg **swaps positions** of those two legs; dropping into empty trip days **moves the leg** to start on that day (other legs after it shift to fill the gap, preserving each leg's night count).
+  - Constraint: the leg train always stays inside the trip's `start_date`..`end_date`. If a swap/move would push legs past the end, the drop is rejected with a toast: `Won't fit — extend trip dates first.`
+- Persistence: build the new ordered `LocationSegment[]` and reuse `computeReorderPatches(activeTrip, newOrder, items)` + `bulkUpdateItemDates(patches)` from `src/lib/segments.ts` and `useTripStore`. This is exactly what the Edit Trip → Segments tab already does, so behavior stays consistent.
+- Click (no drag) still opens `LocationLegDialog` as today.
 
-- Trackpad two-finger horizontal swipe → native horizontal scroll of the matrix (already works because container is `overflow-auto`). No easing layered on top, no jitter.
-- Trackpad two-finger vertical swipe → page scrolls vertically as normal. Matrix no longer eats the gesture.
-- Mouse scroll wheel over the matrix → existing behavior preserved: vertical wheel notches convert to smooth horizontal pan with the RAF easing, only when the matrix can still pan horizontally; otherwise the page scrolls vertically.
-- Cancel any in-flight RAF the moment a trackpad event arrives so a lingering mouse-wheel ease doesn't fight a new trackpad gesture.
+## 3. Vertical rainbow columns by location (replace horizontal category bands)
 
-**Drag-pan (mousedown/mousemove) and arrow-button scrolls are unchanged.**
+- Remove the per-category `CELL_BG` tints (`bg-[hsl(var(--cell-stays))]`, etc.) so category rows have neutral backgrounds.
+- Each day-column instead gets a faint background tint derived from which leg covers that day. Tint is applied to: the location cell, all 4 category cells, and the daily-$ footer cell of that column — producing a continuous vertical band per leg.
+- Color mapping: legs are assigned colors in chronological order from a 7-stop rainbow palette — red, orange, amber, green, teal, blue, violet (extend with a second pass at lower saturation if there are >7 legs).
+- The leg pill itself in the Location row uses the same color (slightly stronger) as a header for its column band, so the eye reads "this whole vertical stripe = Tuscany," "this whole stripe = London," etc.
+- Days with no leg (gaps) stay neutral background.
+- Tokens: add 7 HSL variables in `index.css` (`--leg-1` … `--leg-7`) with two opacities — a `~10%` fill for cells and `~25%` for the leg pill — so it stays within the Quiet-Luxury palette and works in any theme.
 
-## Files to edit
+### Technical details
 
-- `src/components/workspace/MatrixGrid.tsx` — replace the `handleWheel` body inside the existing `useEffect` (L176–230). No new imports, no signature changes, no other component touched.
+- Files touched:
+  - `src/components/workspace/MatrixGrid.tsx` — add start-date popover; make Location-row pills draggable; replace `CELL_BG` with a per-column `legColorFor(dateStr)` helper applied to each cell wrapper.
+  - `src/index.css` — add `--leg-1`…`--leg-7` HSL tokens.
+  - `src/lib/segments.ts` — small helper `assignLegColors(segments)` returning a `Map<segId, tokenIndex>` based on chronological order.
+- Reuses existing logic; no schema or RLS changes.
+- Out of scope: changing trip *end* date inline (still in Edit Trip), drag-resizing leg length on the grid, recoloring the Calendar view.
 
-## Out of scope
+### Validation
 
-- No changes to the drag-pan handlers, arrow buttons, or scroll-edge state.
-- No changes to keyboard shortcuts.
-- No touch / pointer event handling changes (mobile already uses native scroll).
-
-## Validation
-
-- On a MacBook trackpad: two-finger horizontal swipe glides the matrix left/right with native rubber-banding, no judder. Two-finger vertical swipe scrolls the page; the matrix doesn't intercept. Diagonal swipes feel natural (both axes move independently).
-- On a Magic Mouse / external wheel mouse: scrolling the wheel up/down over the matrix still pans horizontally with the existing smooth easing.
-- On Windows precision touchpad: same as MacBook trackpad.
-- Arrow buttons and click-drag still pan as before.
+- Click `Trip starts: Aug 20 ▾`, pick Aug 13 → every item and the trip range slides 7 days earlier; UK leg keeps its night count.
+- Drag the UK leg pill past the Italy leg → legs swap, item dates re-anchor via `computeReorderPatches`, and the rainbow stripes redraw so UK's color follows it to its new position.
+- Matrix shows continuous vertical color bands instead of horizontal pastel rows; gaps between legs are uncolored.

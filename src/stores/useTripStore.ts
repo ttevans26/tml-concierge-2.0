@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { nativeStorage } from "@/lib/persistStorage";
 import { supabase } from "@/integrations/supabase/client";
+import { getCachedUserId } from "@/lib/session";
 import { MOCK_NETWORK_USERS } from "@/data/mockNetworkUsers";
 import { MOCK_NETWORK_TRIPS, MOCK_NETWORK_TRIP_ITEMS } from "@/data/mockNetworkTrips";
 

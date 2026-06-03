@@ -1,9 +1,12 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import AppHeader from "@/components/AppHeader";
 import GeminiFooter from "@/components/GeminiFooter";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
 export default function AppLayout() {
+  const { pathname } = useLocation();
+  // Trip workspace has its own embedded ConciergePanel — avoid double UI.
+  const hideFloatingConcierge = pathname.startsWith("/trip/");
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <AppHeader />
@@ -11,7 +14,7 @@ export default function AppLayout() {
       <main className="flex-1 pb-safe-nav sm:pb-0">
         <Outlet />
       </main>
-      <GeminiFooter />
+      {!hideFloatingConcierge && <GeminiFooter />}
       <MobileBottomNav />
     </div>
   );

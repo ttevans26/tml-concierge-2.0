@@ -135,10 +135,10 @@ export default function ConciergePanel() {
       });
       if (!resp.ok || !resp.body) {
         if (resp.status === 429)
-          toast({ title: "Rate limit reached", description: "Give the concierge a moment.", variant: "destructive" });
+          toast({ title: "Concierge is warming up", description: "Try again in a moment." });
         else if (resp.status === 402)
           toast({ title: "AI credits exhausted", description: "Add funds in Settings → Workspace → Usage.", variant: "destructive" });
-        else toast({ title: "Concierge unavailable", description: "Please try again shortly.", variant: "destructive" });
+        else toast({ title: "Concierge unavailable", description: "Please try again shortly." });
         setStreaming(false);
         return;
       }

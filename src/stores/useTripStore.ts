@@ -498,13 +498,13 @@ export const useTripStore = create<TripStore>()(
         cover_image_url: source.cover_image_url,
         is_published: false,
       } as any)
-      .select()
+      .select(TRIP_COLUMNS)
       .single();
     if (error || !newTrip) return null;
     // Clone itinerary items (as drafts)
     const { data: items } = await supabase
       .from("itinerary_items")
-      .select("*")
+      .select(ITINERARY_COLUMNS)
       .eq("trip_id", id);
     if (items && items.length) {
       const clones = (items as any[]).map((i) => {
@@ -525,7 +525,7 @@ export const useTripStore = create<TripStore>()(
     const { data: item, error } = await supabase
       .from("itinerary_items")
       .insert({ ...data, user_id: user.id, title: data.title || "Untitled", category: data.category || "activity" } as any)
-      .select()
+      .select(ITINERARY_COLUMNS)
       .single();
     if (!error && item) {
       set({ itineraryItems: [...get().itineraryItems, item as ItineraryItem] });
@@ -589,15 +589,12 @@ export const useTripStore = create<TripStore>()(
         byId.has(i.id) ? { ...i, date: byId.get(i.id)! } : i,
       ),
     });
-    // Issue updates in parallel (Supabase has no native multi-row UPDATE on disparate values)
-    const results = await Promise.all(
-      patches.map((p) =>
-        supabase.from("itinerary_items").update({ date: p.date } as any).eq("id", p.id),
-      ),
-    );
-    const firstError = results.find((r) => r.error)?.error;
-    if (firstError) {
-      console.error("bulkUpdateItemDates partial failure:", firstError);
+    // Single round-trip via SECURITY INVOKER RPC (RLS still applies).
+    const { error } = await supabase.rpc("bulk_update_item_dates", {
+      patches: patches as unknown as any,
+    });
+    if (error) {
+      console.error("bulkUpdateItemDates rpc failure:", error);
     }
   },
 

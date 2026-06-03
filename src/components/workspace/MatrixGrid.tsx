@@ -601,10 +601,18 @@ export default function MatrixGrid() {
       };
       if (data.id) {
         await updateItineraryItem(data.id, payload);
-        toast.success("Location updated");
+        if (conflictLeg) {
+          toast.warning(`Overlaps ${conflictLeg.city || "another leg"} — review your plan.`);
+        } else {
+          toast.success("Location updated");
+        }
       } else {
         await createItineraryItem(payload);
-        toast.success("Location added");
+        if (conflictLeg) {
+          toast.warning(`Overlaps ${conflictLeg.city || "another leg"} — review your plan.`);
+        } else {
+          toast.success("Location added");
+        }
       }
     },
     [activeTrip, legs, createItineraryItem, updateItineraryItem],

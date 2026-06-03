@@ -623,6 +623,13 @@ export default function StudioWorkbench() {
           <p className="mb-2 font-inter text-[10px] font-semibold uppercase tracking-wider text-accent">
             Review Scraped Items ({pendingItems.length})
           </p>
+          <BulkImportDialog
+            open={bulkOpen}
+            onOpenChange={setBulkOpen}
+            onImported={(items: ImportedPendingItem[]) =>
+              setPendingItems((prev) => [...prev, ...items])
+            }
+          />
           <div className="space-y-2">
             {pendingItems.map((item) => (
               <div

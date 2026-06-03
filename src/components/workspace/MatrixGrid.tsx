@@ -659,3 +659,23 @@ export default function MatrixGrid() {
     </div>
   );
 }
+
+/* ---------- Edit Trip trigger (button + dialog) ---------- */
+function EditTripButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 font-inter text-[11px] text-muted-foreground"
+        onClick={() => setOpen(true)}
+        title="Edit dates & segments"
+      >
+        <Pencil className="h-3 w-3" />
+        Edit Trip
+      </Button>
+      <EditTripDialog open={open} onOpenChange={setOpen} />
+    </>
+  );
+}

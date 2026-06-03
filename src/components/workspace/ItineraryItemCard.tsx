@@ -4,6 +4,7 @@ import { Wand2 } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import { haversineDistance, formatDistance } from "@/lib/distance";
 import EditItemDialog from "./EditItemDialog";
+import { MarkerPopup } from "@/components/ui/marker-popup";
 import type { ConflictFix } from "@/lib/conflictResolution";
 
 interface ItineraryItemCardProps {
@@ -92,13 +93,24 @@ export default function ItineraryItemCard({ item, hasConflict = false, fix = nul
 
   return (
     <>
-      <div
+      <MarkerPopup
+        data={{
+          title: item.title,
+          subtitle: item.location_name,
+          address: (meta.address as string) || (item.location_name as string) || null,
+          rating: (meta.rating as number) ?? (meta.review_score as number) ?? null,
+          photoUrl: photoUrl,
+          googlePlaceId: item.google_place_id,
+          category: item.category,
+        }}
+      >
+        <div
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData("application/itinerary-item", item.id);
           e.dataTransfer.effectAllowed = "move";
         }}
-        className={`group relative cursor-pointer rounded-sm border-thin overflow-hidden transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-card`}
+        className={`group relative cursor-pointer rounded-editorial border-thin overflow-hidden bg-surface-2 shadow-paper transition-all duration-quick ease-editorial hover:-translate-y-px hover:shadow-raised hover:border-foil ${isAnchor ? "ring-1 ring-accent shadow-foil" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"}`}
         onClick={() => setEditing(true)}
       >
         {/* Photo background */}
@@ -243,6 +255,7 @@ export default function ItineraryItemCard({ item, hasConflict = false, fix = nul
           </div>
         </div>
       </div>
+      </MarkerPopup>
 
       {editing && (
         <EditItemDialog

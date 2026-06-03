@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import { Wifi, KeyRound, Loader2, Check } from "lucide-react";
+import { MapArc, type ArcPoint } from "@/components/ui/map-arc";
 
 interface PublicItem {
   id: string;
@@ -146,6 +147,26 @@ export default function PublicTripView() {
     }
   }, [trip?.start_date, trip?.end_date]);
 
+  const arcPoints = useMemo<ArcPoint[]>(() => {
+    return items
+      .filter((i) => i.location_lat != null && i.location_lng != null)
+      .map((i) => ({
+        id: i.id,
+        label: i.title,
+        sublabel: i.location_name,
+        lat: Number(i.location_lat),
+        lng: Number(i.location_lng),
+        kind:
+          i.category === "stays"
+            ? "stay"
+            : i.category === "dining"
+              ? "dining"
+              : i.category === "logistics"
+                ? "logistics"
+                : "activity",
+      }));
+  }, [items]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -165,13 +186,29 @@ export default function PublicTripView() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* Hero — Editorial Arc Atlas */}
+      <section className="relative px-4 pt-6 sm:px-8 sm:pt-10">
+        <MapArc
+          points={arcPoints}
+          title={trip.name}
+          subtitle={
+            trip.destination
+              ? `${trip.destination} · A TML Concierge Journey`
+              : "A TML Concierge Journey"
+          }
+          height={380}
+        />
+      </section>
+
       {/* Header */}
-      <header className="border-b border-border px-6 py-5">
+      <header className="border-b border-foil px-6 py-5 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="font-playfair text-xl font-semibold text-foreground">{trip.name}</h1>
+            <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
+              Shared itinerary
+            </p>
             {trip.destination && (
-              <p className="mt-0.5 font-inter text-xs text-muted-foreground">{trip.destination}</p>
+              <p className="mt-1 italic-accent text-base text-foreground">{trip.destination}</p>
             )}
             {days.length > 0 && (
               <p className="mt-1 font-inter text-[11px] text-muted-foreground">

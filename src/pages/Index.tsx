@@ -154,7 +154,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   }, [trip.id, trip.destination]);
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md">
+    <div className="group relative flex flex-col overflow-hidden rounded-editorial border border-foil bg-surface-2 shadow-paper transition-all duration-soft ease-editorial hover:-translate-y-0.5 hover:shadow-raised">
       {/* Actions menu */}
       <div className="absolute right-2 top-2 z-10" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
@@ -315,18 +315,25 @@ export default function Index() {
   }, [authLoading, user, fetchTrips]);
 
   return (
-    <div className="px-6 py-10 md:px-12 lg:px-20">
+    <div className="px-6 py-12 md:px-12 lg:px-20">
       {/* Header */}
-      <header className="mb-12 flex items-end justify-between">
+      <header className="mb-14 flex flex-wrap items-end justify-between gap-6 border-b border-foil pb-8">
         <div>
-          <h1 className="font-playfair text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-            Your Trips
+          <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
+            The Studio · {format(new Date(), "MMMM yyyy")}
+          </p>
+          <h1 className="mt-2 font-display-xl text-ink">
+            Your <span className="italic-accent text-accent">journeys</span>
           </h1>
+          <p className="mt-3 max-w-xl font-inter text-[13px] leading-relaxed text-muted-foreground">
+            Quiet luxury, considered itineraries, and a strategic eye on every point. Continue where you left off, or begin a new chapter.
+          </p>
         </div>
 
         <Button
+          variant="premium"
           onClick={() => setDialogOpen(true)}
-          className="bg-accent text-accent-foreground font-inter text-sm hover:bg-accent/90"
+          className="font-inter text-sm"
         >
           <Plus className="mr-1.5 h-4 w-4" />
           New Journey
@@ -343,7 +350,7 @@ export default function Index() {
       ) : trips.length === 0 ? (
         <EmptyState onNew={() => setDialogOpen(true)} />
       ) : (
-        <div className="mx-auto flex max-w-4xl flex-col gap-8">
+        <div className="mx-auto flex max-w-4xl flex-col gap-10">
           {[...trips]
             .sort((a, b) => {
               const ad = a.start_date ?? "9999-12-31";

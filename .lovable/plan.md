@@ -1,112 +1,107 @@
-# Demo-Blocker Fix Plan
+## Editorial Restage — Quiet Luxury v2
 
-Six workflows, all desktop-only, all incremental wiring on top of components/tables that already exist. No new tables required.
+Keeps the existing palette (Cream / Onyx / Bronze) but adds dimension through layered elevation, paper grain, foil accents, larger display type, and motion. Three reference components from 21st.dev get integrated into Concierge, Studio, and the Public share view.
 
----
-
-## 1. Concierge tool-call result cards
-
-**Problem**: `concierge-chat` executes tool calls but the chat renders only the assistant's text. `ConciergeToolCard.tsx` exists but is never mounted.
-
-**Changes**
-- `concierge-chat/index.ts`: after each tool execution, append a `role='tool'` message with `tool_calls` JSON containing `{name, args, result, status, affected_item_ids[]}`.
-- `ConciergePanel.tsx`: in the message map, when `msg.role === 'tool'` render `<ConciergeToolCard>` instead of a text bubble.
-- `ConciergeToolCard.tsx`: humanize tool names (`add_itinerary_item` → "Added to itinerary"), show compact summary line + collapsible args/result JSON, red border on `status='error'`, and a "View in Matrix" link that calls `useTripStore.setSelectedItemId(id)` for the first affected item.
+**Revert:** no theme flag. If you don't like it, click the revert button on the implementation message or use the History tab to jump back. All changes will land in one logical batch so reverting is a single click.
 
 ---
 
-## 2. Approval status UI (draft / confirmed / cancelled)
+### 1. Token & primitive layer (the foundation)
 
-**Problem**: `approval_status` enum exists on `itinerary_items` but nothing flips it; everything is stuck on `draft`, so Today page pills and cancellation warnings have no signal.
+`src/index.css` + `tailwind.config.ts`:
 
-**Changes**
-- `useTripStore.ts`: add `updateItemStatus(itemId, status)` action (optimistic, single column update).
-- `EditItemDialog.tsx`: add a 3-segment toggle (Draft / Confirmed / Cancelled) at the top of the form, with bronze accent on active.
-- `ItineraryItemCard.tsx`: add a small status pill (top-right) — gray for draft, bronze for confirmed, strikethrough + muted for cancelled.
-- `Today.tsx`: filter out `cancelled` items from Next Up; show confirmation pill where space allows.
+- **Surface tiers** — add `--surface-1` (cream base), `--surface-2` (raised cards), `--surface-3` (popovers/modals), each a half-step warmer/cooler than today's flat `--card`.
+- **Elevation tokens** — `--shadow-paper`, `--shadow-raised`, `--shadow-float`, `--shadow-foil`. Soft, warm, multi-layer (no harsh black drop-shadows).
+- **Bronze gradient tokens** — `--gradient-foil` (bronze 38% → 52% diagonal), `--gradient-foil-soft` for badges/CTAs, `--gradient-ink` (onyx → 18% black) for headings.
+- **Grain texture** — `--texture-grain` as an inline SVG noise data-URL applied at `opacity:.035` on `body::before` and `.surface-grain` utility.
+- **Radii** — keep 2px default, but introduce `--radius-md: 4px` for hero cards / map / Concierge bubble so depth reads correctly.
+- **Hairline borders** — preserve 0.5px, add `--border-foil` (bronze at 30% opacity) for hover/active states.
+- **Type scale** — extend Playfair: `display-xl 72/68`, `display-lg 56/56`, `display-md 40/44`, plus an `italic-accent` class (Playfair italic, +1 tracking) for the "Urge" logotype mood. Inter scale unchanged.
+- **Motion tokens** — `--ease-editorial: cubic-bezier(.2,.8,.2,1)`, `--dur-quick 180ms`, `--dur-soft 320ms`, `--dur-page 480ms`.
 
----
-
-## 3. Social import review tray
-
-**Problem**: `studio_social_imports` rows land with `status='pending'` but there's no UI to triage them.
-
-**Changes**
-- New `src/components/studio/SocialImportTray.tsx`: slide-out sheet listing pending imports with thumbnail, caption, detected destination, and a per-item table of `extracted_items` (editable title + category dropdown + folder selector).
-- Per-row actions: **Approve** (insert into `studio_items`, set import `status='approved'`), **Reject** (set `status='rejected'`), **Edit** (inline).
-- Bulk: "Approve all" and "Reject all" at the top of the tray.
-- Mount trigger in `StudioSidebar.tsx` as a bell badge showing pending count (poll `studio_social_imports` on mount + after `ingest-social-post` returns).
+All values added to `tailwind.config.ts` so they're usable as `bg-surface-2`, `shadow-paper`, `font-display-lg`, `ease-editorial`, etc. No raw hex in components.
 
 ---
 
-## 4. Trip Editor orphan resolution
+### 2. Chrome restage
 
-**Problem**: `OrphanItemsBanner` shows count; `OrphanItemsSheet` lists items but offers no resolution.
-
-**Changes**
-- `OrphanItemsSheet.tsx`: per-row controls — date picker (constrained to the new trip range), category dropdown, and a Delete icon. "Save all" applies in one batch via `useTripStore.bulkUpdateItems`.
-- Add "Delete all orphans" destructive button at the footer with `AlertDialog` confirm.
-- Make the banner auto-dismiss when orphan count drops to 0 (already derived, just guard the render).
-- Add a discoverable entry to open `EditTripDialog`: a pencil icon next to the trip name in `TripSwitcher` header area in `TripWorkspace.tsx`.
+- **`AppHeader`** — taller (72px), bronze hairline under, italic Playfair wordmark, foil hover on nav links.
+- **`AppLayout`** — body gets the grain layer + a faint top vignette.
+- **Buttons (`ui/button`)** — new `premium` variant (foil gradient, soft shadow, magnetic 1px lift on hover); `ghost` keeps current look; `outline` gains bronze hairline.
+- **Cards (`ui/card` + workspace cards)** — `surface-2`, `shadow-paper`, hover lifts to `shadow-raised` over 180ms.
+- **Dialogs / popovers / sheets** — `surface-3`, `shadow-float`, `radius-md`, backdrop warms to cream-tinted blur instead of neutral black.
 
 ---
 
-## 5. Gmail Smart Pull connect gate + status
+### 3. Page-level editorial restage
 
-**Problem**: `useGmailConnectionStatus` hook exists, `smart-pull-gmail?mode=status` endpoint exists, but `SmartPullInbox` doesn't consume either.
-
-**Changes**
-- `SmartPullInbox.tsx`:
-  - Call `useGmailConnectionStatus()` on mount.
-  - Header row: green dot + "Gmail connected" OR amber dot + "Not connected" with a **Connect Gmail** button that opens the connector picker (link to settings drawer route).
-  - Sync button `disabled` until status is `connected`.
-  - Surface 403/insufficient-scope errors inline with a "Reconnect with more access" CTA.
+- **`Index.tsx` (dashboard)** — display-xl Playfair hero ("Your Studio"), italic accent on a single word, trip cards become magazine tiles with cover photo, day count, and bronze foil meta strip. Empty state becomes a centered editorial moment.
+- **`TripWorkspace.tsx`** — header shows trip name in display-md, dates in italic-accent, bronze hairline under. Left/center/right panels get distinct surface tiers so the depth reads.
+- **`Studio.tsx`** — left sidebar `surface-1`, workbench `surface-2`, right rail `surface-2`. **Default workbench (no folder selected) becomes the arc map** (see §4).
+- **`Today.tsx`** — "Day X of Y" gets a Playfair treatment; "Next Up" hero card uses foil border and place photo background.
+- **`PublicTripView.tsx`** — top of page becomes a full-bleed arc map hero with the trip wordmark overlaid (see §4).
+- **`Login` / `Signup` / `ForgotPassword`** — split-screen editorial: large Playfair quote left, form right on `surface-2`.
 
 ---
 
-## 6. TripCard duplicate / delete
+### 4. New component integrations
 
-**Problem**: `duplicateTrip` / `deleteTrip` actions exist on the store but nothing calls them.
+**A. Animated AI chat → `ConciergePanel.tsx`**
+Replace the current textarea + send button with the 21st.dev animated chat input (`https://21st.dev/community/components/jatin-yadav05/animated-ai-chat/default`). Keep all existing wiring: same submit handler, same `tool_calls` rendering above, same `ConciergeToolCard`. Component file: `src/components/ui/animated-ai-chat.tsx`. Style overrides to bind it to our tokens (cream surface, bronze accent ring, Playfair placeholder).
 
-**Changes**
-- `Index.tsx` TripCard: add a `<DropdownMenu>` with `MoreHorizontal` trigger (top-right of card, `min-h-[44px]` hit zone).
-  - **Duplicate** → call `duplicateTrip(id)`, navigate to new trip, toast.
-  - **Delete** → open `<AlertDialog>`, on confirm call `deleteTrip(id)`, toast.
-- Stop click-propagation on the trigger so the card link doesn't fire.
+**B. Marker popup → Matrix + Studio cards**
+Wrap `ItineraryItemCard` and Studio research-item cards in a `MarkerPopupHover` (from `https://21st.dev/community/components/mapcn/mapcn-marker-popup/default`). Triggers on hover/focus for any card with `google_place_id`, showing place photo, rating, address, and a "Open in Maps" affordance. Component file: `src/components/ui/marker-popup.tsx`. Lazy — only mounts on first hover.
 
----
-
-## Files
-
-**New**
-- `src/components/studio/SocialImportTray.tsx`
-
-**Edited**
-- `supabase/functions/concierge-chat/index.ts`
-- `src/components/workspace/ConciergePanel.tsx`
-- `src/components/workspace/ConciergeToolCard.tsx`
-- `src/components/workspace/EditItemDialog.tsx`
-- `src/components/workspace/ItineraryItemCard.tsx`
-- `src/components/workspace/OrphanItemsSheet.tsx`
-- `src/components/workspace/OrphanItemsBanner.tsx`
-- `src/components/workspace/SmartPullInbox.tsx`
-- `src/components/studio/StudioSidebar.tsx` (or wherever the sidebar lives)
-- `src/pages/TripWorkspace.tsx` (edit-trip entry icon)
-- `src/pages/Today.tsx` (status pill filter)
-- `src/pages/Index.tsx` (TripCard dropdown)
-- `src/stores/useTripStore.ts` (`updateItemStatus`, `bulkUpdateItems`)
-
-**No migrations.** All schema already in place (`approval_status` enum, `studio_social_imports`, `display_currency`, etc.).
+**C. Map arc → Public share view hero + Studio default**
+Use the arc map (`https://21st.dev/community/components/mapcn/mapcn-map-arc/default`) in two places:
+- **`PublicTripView.tsx`** — full-bleed hero, arcs drawn between each day's anchor stay and that day's first activity. Trip title overlaid in Playfair display-xl.
+- **`Studio.tsx`** — when no folder is selected (current empty state), the workbench renders the arc map plotting all `sites_of_interest` and Stay anchors for the active trip. Clicking a folder swaps it out for the normal list view.
+Component file: `src/components/ui/map-arc.tsx`. Needs Mapbox or MapLibre token — we'll reuse the existing Google Maps key path if the component supports it; otherwise add a `MAPBOX_TOKEN` secret (will prompt if required).
 
 ---
 
-## Out of scope (intentionally deferred)
+### 5. Motion polish
 
-- Mobile breakpoints
-- Cancellation deadline notifications cron
-- Aviationstack auto-refresh for upcoming flights
-- Share-link access request inbox
-- FX currency switcher in BudgetSidebar
-- AI-aware packing list
+- Page transitions: `fade-in` + 4px translate on route change (480ms `ease-editorial`).
+- Card hover: 1px lift + shadow swap.
+- CTA "magnetic" hover on `premium` buttons (subtle cursor-follow within 8px).
+- Concierge messages: stagger-in (60ms per message).
+- Matrix cell drop: brief foil flash on the destination cell.
 
-Ready to implement once approved.
+All motion respects `prefers-reduced-motion`.
+
+---
+
+### 6. Files touched
+
+**New:**
+- `src/components/ui/animated-ai-chat.tsx`
+- `src/components/ui/marker-popup.tsx`
+- `src/components/ui/map-arc.tsx`
+- `src/styles/grain.svg` (or inline data-URL in CSS)
+
+**Edited (tokens / chrome):**
+- `src/index.css`, `tailwind.config.ts`, `src/components/ui/button.tsx`, `src/components/ui/card.tsx`, `src/components/ui/dialog.tsx`, `src/components/ui/sheet.tsx`, `src/components/ui/popover.tsx`, `src/components/AppHeader.tsx`, `src/components/AppLayout.tsx`, `index.html` (font preload + display sizes).
+
+**Edited (pages):**
+- `src/pages/Index.tsx`, `src/pages/TripWorkspace.tsx`, `src/pages/Studio.tsx`, `src/pages/Today.tsx`, `src/pages/PublicTripView.tsx`, `src/pages/Login.tsx`, `src/pages/Signup.tsx`, `src/pages/ForgotPassword.tsx`.
+
+**Edited (workspace):**
+- `src/components/workspace/ConciergePanel.tsx`, `src/components/workspace/ItineraryItemCard.tsx`, `src/components/workspace/MatrixGrid.tsx`, `src/components/workspace/BudgetSidebar.tsx`, `src/components/workspace/TripSwitcher.tsx`, `src/components/studio/*` (research card + sidebar).
+
+**No DB migrations. No store changes. No behavior changes** — purely visual + the three component swaps.
+
+---
+
+### 7. Out of scope
+
+- Mobile breakpoints (postponed per earlier decision).
+- Dark mode polish (will inherit token changes but won't be hand-tuned).
+- New illustrations / photography.
+- A persistent theme toggle — revert via History instead.
+
+---
+
+### Open question I'll resolve during build
+
+The 21st.dev arc map requires a map provider. I'll first try wiring it to the existing Google Maps key. If the component is Mapbox-only, I'll pause and request a `MAPBOX_TOKEN` secret before continuing — no silent fallback.

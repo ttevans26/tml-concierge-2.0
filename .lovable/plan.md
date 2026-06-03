@@ -1,51 +1,137 @@
-## Goal
+## Post-MVP → iOS Production Readiness Roadmap
 
-Make every interaction feel instant. Profiling on `/` shows 1.5 MB JS up-front (195 script chunks), 3.9 s DOMContentLoaded, and the largest user-land modules (StudioWorkbench 41 KB, TripDocuments 16 KB, MatrixGrid 28 KB, GeminiFooter 24 KB) are loaded even when not used. Several hot components also subscribe to the **entire** Zustand store, so any unrelated update re-renders huge trees.
+This is a sequenced engineering plan, not an implementation. Each section ends with the concrete files / connectors / tools to add.
 
-## Fix plan (frontend only — no behavior changes)
+```text
+Phase A: Production hardening (web)   →   Phase B: Native bridge (Capacitor → iOS)   →   Phase C: App Store launch
+```
 
-### 1. Lazy-load all non-critical routes (`src/App.tsx`)
+---
 
-Currently every page is a static import, so Studio/Tools/Network/Today/Trip/Public bundles ship on first load of `/`. Convert to `React.lazy` + `<Suspense>` with a lightweight fallback. Keep `Login`, `Signup`, `ProtectedRoute`, `AppLayout`, and `Index` eager so the landing path stays fast. Expected: ~40–60% smaller initial JS, FCP closer to 1.5 s.
+### Phase A — Production-grade web foundation
 
-### 2. Scope global store subscriptions
+These are blockers regardless of platform. Best done now while the codebase is small.
 
-Replace bare `useTripStore()` (re-renders on any state change) with field selectors in:
-- `src/pages/TripWorkspace.tsx` (line 23 — currently subscribes to whole store while just bootstrapping)
-- `src/pages/Today.tsx` (uses 4 fields — split into 4 selectors)
-- `src/pages/Index.tsx` (3 fields)
-- `src/components/workspace/IdeasVault.tsx` (`activeTrip` only)
+**A1. Auth hardening**
+- Turn off zero-verification: enable email confirmation, enforce HIBP password check, add MFA (TOTP) for power users.
+- Add **Apple Sign-In** via `supabase--configure_social_auth` — Apple requires it whenever any social login (Google) is offered in an iOS app, so wiring it now avoids rework.
+- Add `/reset-password` flow (currently a stub) and email-change confirmation.
+- Replace any `getSession()` used for trust checks with `getUser()` server-side.
 
-Result: typing in a dialog or moving a card no longer re-renders unrelated pages.
+**A2. Data layer audit**
+- Run `supabase--linter` + `security--run_security_scan`; resolve every flagged table.
+- Add explicit `GRANT`s on any tables created without them.
+- Add composite indexes on hot paths: `itinerary_items(trip_id, date)`, `studio_items(folder_id, created_at)`, `trip_access_requests(owner_user_id, status)`.
+- Replace `select *` with explicit column lists in `useTripStore`, `useStudioStore`, `useNotificationsStore` to reduce payload and unlock column-level grants.
+- Add pagination/cursor APIs for lists that can grow unbounded (notifications, studio items, smart-pull inbox).
+- Scope Realtime channels per trip (`postgres_changes` filtered by `trip_id=eq.…`) rather than table-wide; current global subscriptions will not scale past a few hundred users.
 
-### 3. Memoize hot workspace components
+**A3. Edge function discipline**
+- Every function in `supabase/functions/*` needs: zod input validation, structured logging, per-user rate limiting, and `verify_jwt` review.
+- Centralize CORS via `npm:@supabase/supabase-js@2/cors` (already standard).
+- Move `aviationstack-lookup`, `fetch-fx-rates`, `concierge-chat` behind a small Redis-backed (Upstash) rate limiter — Gemini/Aviationstack quotas are real.
+- Add an `error_log` table or Sentry sink so edge failures are visible.
 
-- `src/components/workspace/MatrixGrid.tsx` — wrap day-cell + item-card render in `useMemo` keyed on `(items, dragState)`; wrap `ItineraryItemCard` with `React.memo`. Move date-range computation behind `useMemo`. Replace inline `() => …` handlers passed to many cells with stable `useCallback`s.
-- `src/components/workspace/ItineraryItemCard.tsx` — `React.memo` with shallow prop compare; pre-format currency/time once.
-- `src/components/workspace/BudgetSidebar.tsx` — already uses selectors; add `useMemo` for the formatted progress strings.
-- `src/components/workspace/ProximityMap.tsx` — memoize the haversine/sorted list; gate the heavy SVG render behind `useDeferredValue` so dragging on the Matrix doesn't stall the map.
-- `src/components/studio/StudioWorkbench.tsx` — split into the top toolbar (eager) and the list/map (lazy via `React.lazy`); memoize list filtering.
+**A4. Service-layer abstraction**
+- Today components import `supabase` directly. Introduce `src/services/{trips,studio,profile,notifications}.ts` wrappers that return typed promises. This is the single most important refactor for portability — it lets you swap transport (REST → tRPC → native bridge) without touching components.
+- Keep Zustand stores as today, but have them call services, not raw supabase.
+- Remove `/dev-sandbox` mock paths from `useTripStore` and `warningFilter` for production builds (keep behind `import.meta.env.DEV`).
 
-### 4. Defer heavy non-critical UI
+**A5. Observability**
+- Sentry (or PostHog Error Tracking) for browser + Edge Functions.
+- PostHog or Plausible for product analytics with explicit event names: `trip_created`, `itinerary_item_added`, `concierge_message_sent`.
+- Web Vitals reporting to Sentry/PostHog so regressions are caught before users complain.
 
-- `GeminiFooter.tsx` — keep the trigger button eager but `React.lazy` the chat panel (loads `AnimatedAIChat`, `react-markdown` ~70 KB) only after the user opens it.
-- `TripDocuments.tsx`, `SmartPullInbox.tsx`, `PackingList.tsx`, `ShareControls.tsx`, `TripSettingsModal.tsx`, `EditItemDialog.tsx`, `AddItemDialog.tsx` — convert to `React.lazy` and mount on first open (same pattern already applied to `SchedulingModal`/`ProfileDrawer`).
-- `react-day-picker` (106 KB) — already isolated via lazy SchedulingModal; audit any remaining eager calendar usage in `EditTripDialog`/`TripSettingsModal` and lazy-load those too.
+**A6. Error & loading discipline**
+- Add a top-level `<ErrorBoundary>` per route plus per-panel boundaries in TripWorkspace.
+- Standardize on `react-query` (already installed) for server reads — replace ad-hoc `useEffect(fetch…)` patterns in `Today.tsx`, `Index.tsx`, `Network.tsx`. This gives retries, dedupe, and stale-while-revalidate for free.
 
-### 5. Reduce render-blocking + asset cost
+**A7. Accessibility & i18n baseline**
+- axe-core pass on the Matrix and Studio surfaces; current 0.5 px borders + 9 pt labels frequently fail contrast.
+- Wrap user-visible strings in `react-i18next` even before adding a second locale — retrofitting later is painful.
 
-- Add `rel="preconnect"` for `fonts.gstatic.com` in `index.html` alongside existing fonts link to cut TTF latency.
-- Confirm Tailwind/Vite is tree-shaking `lucide-react` (157 KB dev chunk). Replace any `import * as Icons from "lucide-react"` style imports with named imports.
-- Audit `NotificationsPopover` realtime subscription is created once at idle (already done) — extend the same `requestIdleCallback` pattern to `useTripStore.fetchTrips` initial call on `Index`.
+**A8. Build pipeline & quality gates**
+- GitHub Actions: typecheck, lint, vitest, `supabase db lint`, bundle-size budget on PR.
+- Lighthouse CI on the published preview.
+- Renovate/Dependabot for security updates.
 
-### 6. Verify
+---
 
-After each batch, run `browser--performance_profile` on `/` and `/trip/:id`, then `start_profiling` → interact (drag a card, open Concierge, open profile) → `stop_profiling`. Target: INP < 100 ms on all primary interactions, initial JS payload under ~800 KB on `/`.
+### Phase B — Capacitor / iOS bridge
 
-## Out of scope
+Capacitor 8 is already in `package.json` — half-installed. Finish the wrapper before adding native features.
 
-No backend, schema, or business-logic changes. No design refactors. Component APIs preserved.
+**B1. Capacitor project init**
+- Run `npx cap init` with `appId app.lovable.693f38f0fd12468791b16036a995ed65`, then `npx cap add ios`.
+- Set production `webDir: "dist"`. Keep the live-reload `server.url` block dev-only.
+- Configure `Info.plist` privacy strings: camera (document scan), photo library (avatars), location (proximity map), tracking (analytics).
 
-## Risk / rollback
+**B2. Native capabilities — install only what's needed**
+| Capability | Plugin | Use |
+|---|---|---|
+| Secure token storage | `@capacitor-community/keychain` | Replace `localStorage` Supabase session on native |
+| Push | `@capacitor/push-notifications` + FCM | Flight gate changes, concierge replies, trip-share notifications |
+| Deep links | `@capacitor/app` + universal links | `/itinerary/:token`, `/trip/:id` |
+| Background fetch | `@capacitor/background-runner` | Periodic flight + cancellation-deadline polling |
+| Haptics | `@capacitor/haptics` | Drag-drop feedback in Matrix |
+| Status bar / safe area | already installed | Audit every fixed/sticky element for safe-area-inset |
+| Camera + files | `@capacitor/camera`, `@capacitor/filesystem` | Document upload to `trip-documents` bucket |
+| Geolocation | `@capacitor/geolocation` | Live distance from Anchor Stay |
+| Network | already installed | Wire to `OfflineIndicator` |
 
-All changes are local to listed files. Each step is independently revertable via History. Lazy-loaded chunks fall back to a small spinner; if a Suspense boundary triggers a visible flash, swap to `startTransition` for that route.
+**B3. Auth adapter for native**
+- Supabase JS works in Capacitor but session persistence needs an adapter. Implement `CapacitorStorageAdapter` over Keychain and pass to `createClient({ auth: { storage } })` when `Capacitor.isNativePlatform()`.
+- For Apple Sign-In on native, use `@capacitor-community/apple-sign-in` and post the identity token to Supabase via `signInWithIdToken({ provider: 'apple' })`.
+- Google native: `@codetrix-studio/capacitor-google-auth` with same id-token flow.
+
+**B4. Offline-first**
+- Already have Zustand optimistic updates — extend with a persistent outbox: queued mutations stored via `@capacitor/preferences`, replayed on reconnect.
+- IndexedDB cache of last trip + itinerary items so cold-launching offline shows last-known state.
+- Conflict policy: server-wins for prices/dates, client-wins for notes; encode per-table.
+
+**B5. Push pipeline**
+- Edge function `send-push` that takes `user_id + payload`, looks up device tokens in a new `device_tokens` table, calls FCM (Android + iOS via APNs).
+- Triggers: `cancellation-scan` cron, `aviationstack-lookup` delta, `trip_access_requests` insert, `notifications` insert.
+
+**B6. App-shell readiness**
+- Replace `window.location` usage with React Router navigation throughout (deep links break otherwise).
+- Audit `fetch_website`/external URL handlers — open in `Browser.open` plugin on native, not `window.open`.
+- Make every long press / drag work with touch (current dnd-kit setup already does, but verify on a real device).
+
+---
+
+### Phase C — App Store launch
+
+**C1. Payments decision**
+- If TML Concierge will ever sell subscriptions, premium trip slots, or "Concierge credits" to consumers, Apple **requires StoreKit IAP** for those purchases. Stripe is fine for business/B2B billing only.
+- Use `RevenueCat` (Capacitor SDK) to abstract StoreKit + later Google Play Billing. Mirror entitlements into `profiles.subscription_tier`.
+
+**C2. Privacy & compliance**
+- App Privacy questionnaire: list every data category collected (auth email, location, payment, analytics).
+- ATT prompt before any tracking SDK initializes (Sentry + PostHog need configuration to be IDFA-clean).
+- GDPR/CCPA: `delete-account` function exists — add a user-initiated export endpoint + 30-day retention policy.
+- Add a public privacy policy + terms URL; required at submission.
+
+**C3. CI/CD for native**
+- EAS Build, Codemagic, or Bitrise — pick one. Configure: signing certs, TestFlight upload, Play internal track. Mirror Vite web build into Capacitor sync step.
+- Source-map upload to Sentry on every build.
+
+**C4. Test plan**
+- Detox or Maestro for native smoke tests (login → create trip → drag item → open concierge).
+- Vitest for stores/services.
+- Manual device matrix: iPhone SE (small), 15 Pro (notch), iPad (split view).
+
+---
+
+### Suggested execution order
+
+1. A1, A2, A3 (auth + data + edge hardening) — required before any external users.
+2. A4, A6 (service layer + react-query) — the refactor that makes everything after easier.
+3. A5, A7, A8 (observability, a11y, CI) — parallelizable.
+4. B1 → B3 → B4 → B5 (native shell, auth, offline, push, in that order).
+5. C1 → C2 → C3 → C4.
+
+### Out of scope here
+- Visual design changes
+- Adding new product features
+- Migrating off Lovable Cloud (Supabase is appropriate for both web and native long-term)

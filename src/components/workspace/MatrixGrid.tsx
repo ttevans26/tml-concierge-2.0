@@ -855,25 +855,30 @@ export default function MatrixGrid() {
                   const cellItems = itineraryItems.filter(
                     (item) => item.date === dateStr && item.category === cat.key
                   );
+                  const isStays = cat.key === "stays";
                   return (
                     <div
                       key={cat.key}
-                      className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
+                      className={`flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
+                      style={{ height: isStays ? `${staysRowHeight}px` : "112px" }}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
-                      {cellItems.map((item) => (
-                        <ItineraryItemCard
-                          key={item.id}
-                          item={item}
-                          hasConflict={conflictIds.has(item.id)}
-                          fix={conflictFixes.get(item.id) ?? null}
-                          onApplyFix={handleApplyFix}
-                        />
-                      ))}
+                      {!isStays &&
+                        cellItems.map((item) => (
+                          <ItineraryItemCard
+                            key={item.id}
+                            item={item}
+                            hasConflict={conflictIds.has(item.id)}
+                            fix={conflictFixes.get(item.id) ?? null}
+                            onApplyFix={handleApplyFix}
+                          />
+                        ))}
                       <button
                         onClick={() => openAdd(dateStr, cat.key)}
-                        className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
+                        className={`flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation ${
+                          isStays ? "mt-auto" : ""
+                        }`}
                       >
                         <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
                           + Add

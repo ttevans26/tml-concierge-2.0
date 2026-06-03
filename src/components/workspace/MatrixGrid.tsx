@@ -86,6 +86,17 @@ const CELL_BG: Record<string, string> = {
   activity: "bg-[hsl(var(--cell-activity))]",
 };
 
+/** 7-stop rainbow palette token names; cycles for >7 legs. */
+const LEG_TOKENS = [
+  "--leg-1",
+  "--leg-2",
+  "--leg-3",
+  "--leg-4",
+  "--leg-5",
+  "--leg-6",
+  "--leg-7",
+];
+
 export default function MatrixGrid() {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);

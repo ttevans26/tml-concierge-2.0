@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { notifications as notificationsService, ServiceError } from "@/services";
 
 type NotificationKind =
   | "follow"
@@ -73,22 +74,17 @@ export default function NotificationsPopover() {
   );
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("id, kind, title, body, created_at, is_read, trip_id, item_id")
-      .eq("is_dismissed", false)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) {
-      console.warn("notifications load failed", error);
-      return;
+    try {
+      const data = await notificationsService.listActive(50);
+      setItems(
+        data.map((n) => ({
+          ...n,
+          href: n.trip_id ? `/trip/${n.trip_id}` : undefined,
+        })) as NotificationItem[],
+      );
+    } catch (err) {
+      console.warn("notifications load failed", err instanceof ServiceError ? err.message : err);
     }
-    setItems(
-      (data ?? []).map((n) => ({
-        ...n,
-        href: n.trip_id ? `/trip/${n.trip_id}` : undefined,
-      })) as NotificationItem[],
-    );
   }, []);
 
   useEffect(() => {
@@ -129,19 +125,19 @@ export default function NotificationsPopover() {
     const ids = items.filter((n) => !n.is_read).map((n) => n.id);
     if (ids.length === 0) return;
     setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    await supabase.from("notifications").update({ is_read: true }).in("id", ids);
+    await notificationsService.markRead(ids).catch((e) => console.warn("markRead", e));
   };
 
   const dismiss = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setItems((prev) => prev.filter((n) => n.id !== id));
-    await supabase.from("notifications").update({ is_dismissed: true }).eq("id", id);
+    await notificationsService.dismiss(id).catch((e) => console.warn("dismiss", e));
   };
 
   const handleClick = async (n: NotificationItem) => {
     if (!n.is_read) {
       setItems((prev) => prev.map((it) => (it.id === n.id ? { ...it, is_read: true } : it)));
-      await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+      await notificationsService.markOneRead(n.id).catch((e) => console.warn("markOneRead", e));
     }
     if (n.href) {
       setOpen(false);

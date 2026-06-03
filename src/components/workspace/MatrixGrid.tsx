@@ -799,10 +799,10 @@ export default function MatrixGrid() {
                   <button
                     type="button"
                     className="ml-2 inline-flex items-center gap-1 rounded-sm border border-border px-2 py-1 font-inter text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/5"
-                    title="Reshuffle legs — reorder locations without dragging across the grid"
+                    title="Reshuffle locations — reorder destinations without dragging across the grid"
                   >
                     <Shuffle className="h-3 w-3" />
-                    Reshuffle legs
+                    Reshuffle locations
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">

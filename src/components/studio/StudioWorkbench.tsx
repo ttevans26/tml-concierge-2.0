@@ -618,18 +618,18 @@ export default function StudioWorkbench() {
       </div>
 
       {/* Pending Review Tray */}
+      <BulkImportDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        onImported={(items: ImportedPendingItem[]) =>
+          setPendingItems((prev) => [...prev, ...items])
+        }
+      />
       {pendingItems.length > 0 && (
         <div className="border-b border-border bg-secondary/30 px-5 py-3">
           <p className="mb-2 font-inter text-[10px] font-semibold uppercase tracking-wider text-accent">
             Review Scraped Items ({pendingItems.length})
           </p>
-          <BulkImportDialog
-            open={bulkOpen}
-            onOpenChange={setBulkOpen}
-            onImported={(items: ImportedPendingItem[]) =>
-              setPendingItems((prev) => [...prev, ...items])
-            }
-          />
           <div className="space-y-2">
             {pendingItems.map((item) => (
               <div

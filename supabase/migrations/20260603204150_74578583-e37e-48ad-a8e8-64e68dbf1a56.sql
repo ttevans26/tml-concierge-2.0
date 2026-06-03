@@ -1,0 +1,1 @@
+ALTER TYPE public.itinerary_category ADD VALUE IF NOT EXISTS 'location';

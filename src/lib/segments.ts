@@ -87,7 +87,40 @@ export function buildSegments(trip: Trip, items: ItineraryItem[]): LocationSegme
     }
   }
 
-  return segments;
+  // Post-pass: merge adjacent assigned segments whose stays share the same
+  // location_name (case-insensitive). Collapses duplicates like two distinct
+  // Paris hotels back-to-back into a single "Paris" band.
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+  const locOf = (seg: LocationSegment): string | null => {
+    for (const id of seg.itemIds) {
+      const it = itemsById.get(id);
+      if (it?.category === "stays" && it.location_name?.trim()) {
+        return norm(it.location_name);
+      }
+    }
+    return null;
+  };
+  const merged: LocationSegment[] = [];
+  for (const seg of segments) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      !prev.isUnassigned &&
+      !seg.isUnassigned &&
+      locOf(prev) &&
+      locOf(prev) === locOf(seg)
+    ) {
+      prev.endDate = seg.endDate;
+      prev.nights += seg.nights;
+      prev.itemIds.push(...seg.itemIds);
+      for (const [k, v] of Object.entries(seg.counts)) {
+        prev.counts[k] = (prev.counts[k] ?? 0) + v;
+      }
+    } else {
+      merged.push(seg);
+    }
+  }
+  return merged;
 }
 
 /**

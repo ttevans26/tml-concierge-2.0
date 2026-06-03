@@ -228,7 +228,10 @@ interface TripStore {
   fetchProfile: () => Promise<void>;
   setActiveTrip: (trip: Trip | null) => void;
 
-  createTrip: (data: Partial<Trip>) => Promise<Trip | null>;
+  createTrip: (
+    data: Partial<Trip>,
+    options?: { seedStays?: { city: string; nights: number }[] },
+  ) => Promise<Trip | null>;
   updateTrip: (id: string, data: Partial<Trip>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;
   duplicateTrip: (id: string) => Promise<Trip | null>;

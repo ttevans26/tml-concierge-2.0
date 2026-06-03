@@ -154,7 +154,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   }, [trip.id, trip.destination]);
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md">
+    <div className="group relative flex flex-col overflow-hidden rounded-editorial border border-foil bg-surface-2 shadow-paper transition-all duration-soft ease-editorial hover:-translate-y-0.5 hover:shadow-raised">
       {/* Actions menu */}
       <div className="absolute right-2 top-2 z-10" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>

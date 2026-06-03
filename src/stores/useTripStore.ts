@@ -393,12 +393,16 @@ export const useTripStore = create<TripStore>()(
     set({ loading: true });
     const { data, error } = await supabase
       .from("trips")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(TRIP_COLUMNS)
+      .order("created_at", { ascending: false })
+      .limit(PAGE_SOFT_LIMIT);
     if (error) {
       console.error("Supabase fetchTrips error:", error);
     } else {
       set({ trips: (data as Trip[]) || [] });
+      if (data && data.length === PAGE_SOFT_LIMIT) {
+        console.warn(`fetchTrips hit soft cap of ${PAGE_SOFT_LIMIT} — pagination needed.`);
+      }
     }
     set({ loading: false });
   },
@@ -406,16 +410,20 @@ export const useTripStore = create<TripStore>()(
   fetchItineraryItems: async (tripId) => {
     const { data, error } = await supabase
       .from("itinerary_items")
-      .select("*")
+      .select(ITINERARY_COLUMNS)
       .eq("trip_id", tripId)
-      .order("sort_order");
+      .order("sort_order")
+      .limit(PAGE_SOFT_LIMIT);
     if (!error && data) set({ itineraryItems: data as ItineraryItem[] });
+    if (data && data.length === PAGE_SOFT_LIMIT) {
+      console.warn(`fetchItineraryItems hit soft cap of ${PAGE_SOFT_LIMIT} for trip ${tripId}.`);
+    }
   },
 
   fetchFlights: async (tripId) => {
     const { data, error } = await supabase
       .from("flight_tracking")
-      .select("*")
+      .select(FLIGHT_COLUMNS)
       .eq("trip_id", tripId)
       .order("departure_time");
     if (!error && data) set({ flights: data as FlightTracking[] });
@@ -426,7 +434,7 @@ export const useTripStore = create<TripStore>()(
     if (!user) return;
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_COLUMNS)
       .eq("user_id", user.id)
       .single();
     if (!error && data) set({ profile: data as Profile });

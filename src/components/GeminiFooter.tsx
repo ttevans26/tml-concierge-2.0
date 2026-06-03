@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Sparkles, X, Loader2, RotateCcw, Bookmark, CalendarDays } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+const ReactMarkdown = lazy(() => import("react-markdown"));
 import { cn } from "@/lib/utils";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { useTripStore } from "@/stores/useTripStore";
@@ -57,6 +57,7 @@ function stripTrailingRule(text: string): string {
 
 export default function GeminiFooter() {
   const [open, setOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -288,7 +289,7 @@ export default function GeminiFooter() {
 
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => { setHasOpened(true); setOpen((o) => !o); }}
           aria-expanded={open}
           aria-label={open ? "Close Gemini Concierge" : "Open Gemini Concierge"}
           className={cn(

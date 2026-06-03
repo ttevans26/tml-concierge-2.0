@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO, addDays, differenceInCalendarDays } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { CalendarIcon, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import PlaceAutocomplete, { type PlacePick } from "@/components/ui/PlaceAutocomplete";
 import type { LocationLeg } from "@/lib/locationLegs";
 
@@ -71,9 +74,18 @@ export default function LocationLegDialog({
   const [startDate, setStartDate] = useState("");
   const [nights, setNights] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const prevOpen = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
+    // Only reset on open transition (false -> true) so parent re-renders
+    // pushing new leg/initialStart refs don't wipe in-progress edits.
+    if (!open) {
+      prevOpen.current = false;
+      return;
+    }
+    if (prevOpen.current) return;
+    prevOpen.current = true;
     if (leg) {
       setCity(leg.city);
       setState(leg.state);
@@ -99,16 +111,46 @@ export default function LocationLegDialog({
 
   const endDate = useMemo(() => {
     if (!startDate) return "";
-    return format(addDays(parseISO(startDate), nights - 1), "yyyy-MM-dd");
+    try {
+      return format(addDays(parseISO(startDate), nights - 1), "yyyy-MM-dd");
+    } catch {
+      return "";
+    }
   }, [startDate, nights]);
 
-  const handleSelect = (p: PlacePick) => {
+  const tripStartDate = useMemo(() => (tripStart ? parseISO(tripStart) : undefined), [tripStart]);
+  const tripEndDate = useMemo(() => (tripEnd ? parseISO(tripEnd) : undefined), [tripEnd]);
+  const selectedDate = useMemo(() => {
+    if (!startDate) return undefined;
+    try {
+      return parseISO(startDate);
+    } catch {
+      return undefined;
+    }
+  }, [startDate]);
+
+  const handleSelect = useCallback((p: PlacePick) => {
     const parsed = parseDescription(p.description, p.mainText, p.secondaryText);
     setCity(parsed.city);
     setState(parsed.state);
     setCountry(parsed.country);
     setGooglePlaceId(p.placeId);
-  };
+  }, []);
+
+  const handleDateSelect = useCallback(
+    (d: Date | undefined) => {
+      if (!d) return;
+      const iso = format(d, "yyyy-MM-dd");
+      setStartDate(iso);
+      // Clamp nights to new available window
+      if (tripEnd) {
+        const remaining = differenceInCalendarDays(parseISO(tripEnd), d) + 1;
+        setNights((n) => Math.max(1, Math.min(Math.max(1, remaining), n)));
+      }
+      setCalendarOpen(false);
+    },
+    [tripEnd],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,14 +224,35 @@ export default function LocationLegDialog({
               <Label className="font-inter text-xs uppercase tracking-widest text-muted-foreground">
                 Start Date
               </Label>
-              <Input
-                type="date"
-                value={startDate}
-                min={tripStart}
-                max={tripEnd}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="border-thin border-border bg-background font-inter"
-              />
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start border-thin border-border bg-background font-inter text-sm font-normal",
+                      !selectedDate && "text-muted-foreground",
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleDateSelect}
+                    defaultMonth={selectedDate ?? tripStartDate}
+                    disabled={{
+                      before: tripStartDate as Date,
+                      after: tripEndDate as Date,
+                    }}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label className="font-inter text-xs uppercase tracking-widest text-muted-foreground">
@@ -201,6 +264,10 @@ export default function LocationLegDialog({
                 max={maxNights}
                 value={nights}
                 onChange={(e) => setNights(Math.max(1, Number(e.target.value) || 1))}
+                onBlur={(e) => {
+                  const n = Math.max(1, Math.min(maxNights, Number(e.target.value) || 1));
+                  setNights(n);
+                }}
                 className="border-thin border-border bg-background font-inter"
               />
             </div>
@@ -217,6 +284,7 @@ export default function LocationLegDialog({
               <Button
                 type="button"
                 variant="ghost"
+                disabled={submitting}
                 onClick={async () => {
                   if (!leg.id) return;
                   setSubmitting(true);

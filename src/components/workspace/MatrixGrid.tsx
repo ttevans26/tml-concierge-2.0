@@ -22,6 +22,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import CalendarStaysView from "./CalendarStaysView";
+import LocationLegDialog from "./LocationLegDialog";
+import {
+  getLegs,
+  getGhostLegsFromStays,
+  legColumnSpan,
+  legOverlaps,
+  formatLegLabel,
+  type LocationLeg,
+} from "@/lib/locationLegs";
+import { MapPin, Sparkles } from "lucide-react";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {

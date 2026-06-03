@@ -636,6 +636,17 @@ export default function StudioWorkbench() {
             <Layers className="h-3 w-3" />
             Bulk
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={() => setPasteSocialOpen(true)}
+            disabled={scraping}
+            title="Paste an Instagram or TikTok link"
+          >
+            <Share2 className="h-3 w-3" />
+            Social
+          </Button>
         </div>
       </div>
 
@@ -646,6 +657,11 @@ export default function StudioWorkbench() {
         onImported={(items: ImportedPendingItem[]) =>
           setPendingItems((prev) => [...prev, ...items])
         }
+      />
+      <PasteSocialDialog
+        open={pasteSocialOpen}
+        onOpenChange={setPasteSocialOpen}
+        onImported={() => setSocialRefreshKey((k) => k + 1)}
       />
       {pendingItems.length > 0 && (
         <div className="border-b border-border bg-secondary/30 px-5 py-3">

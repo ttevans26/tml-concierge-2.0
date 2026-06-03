@@ -458,6 +458,75 @@ export default function MatrixGrid() {
   );
   const displayedLegs: LocationLeg[] = legs.length > 0 ? legs : ghostLegs;
 
+  /* ---- Per-day leg color (vertical rainbow bands) ---- */
+  const dayLegColor = useMemo(() => {
+    const map = new Map<string, string>(); // dateStr -> hsl token name
+    const sorted = displayedLegs.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    sorted.forEach((leg, idx) => {
+      const token = LEG_TOKENS[idx % LEG_TOKENS.length];
+      const start = parseISO(leg.startDate);
+      const end = parseISO(leg.endDate);
+      const span = Math.max(1, differenceInCalendarDays(end, start) + 1);
+      for (let i = 0; i < span; i++) {
+        map.set(format(addDays(start, i), "yyyy-MM-dd"), token);
+      }
+    });
+    return map;
+  }, [displayedLegs]);
+
+  const legTokenById = useMemo(() => {
+    const m = new Map<string, string>();
+    const sorted = displayedLegs.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    sorted.forEach((leg, idx) => m.set(leg.id, LEG_TOKENS[idx % LEG_TOKENS.length]));
+    return m;
+  }, [displayedLegs]);
+
+  /** Tailwind-arbitrary inline style for a day column cell tint. */
+  const cellStyleFor = (dateStr: string): React.CSSProperties => {
+    const token = dayLegColor.get(dateStr);
+    if (!token) return {};
+    return { backgroundColor: `hsl(var(${token}) / 0.10)` };
+  };
+
+  /* ---- Drag-to-reorder location legs (swap on drop) ---- */
+  const [draggingLegId, setDraggingLegId] = useState<string | null>(null);
+
+  const handleLegReorderSwap = useCallback(
+    async (sourceId: string, targetId: string) => {
+      if (!activeTrip || sourceId === targetId) return;
+      const segs = buildSegments(activeTrip, itineraryItems);
+      if (segs.length < 2) {
+        toast.error("Need at least two segments to reorder.");
+        return;
+      }
+      // Match leg → segment by date overlap (legs and segments share startDate windows).
+      const findSegIdxForLeg = (legId: string) => {
+        const leg = displayedLegs.find((l) => l.id === legId);
+        if (!leg) return -1;
+        return segs.findIndex(
+          (s) => !(s.endDate < leg.startDate || s.startDate > leg.endDate),
+        );
+      };
+      const a = findSegIdxForLeg(sourceId);
+      const b = findSegIdxForLeg(targetId);
+      if (a < 0 || b < 0) {
+        toast.error("Couldn't match legs to itinerary segments.");
+        return;
+      }
+      const newOrder = segs.slice();
+      const [moved] = newOrder.splice(a, 1);
+      newOrder.splice(b, 0, moved);
+      const patches = computeReorderPatches(activeTrip, newOrder, itineraryItems);
+      if (patches.length === 0) {
+        toast.message("Order unchanged.");
+        return;
+      }
+      await bulkUpdateItemDates(patches);
+      toast.success("Legs reshuffled");
+    },
+    [activeTrip, itineraryItems, displayedLegs, bulkUpdateItemDates],
+  );
+
   /* ---- Stay pills (consecutive same-stay grouping) ---- */
   const stayPills = useMemo(() => getStayPills(itineraryItems), [itineraryItems]);
   const stayLanes = useMemo(() => assignLanes(stayPills), [stayPills]);

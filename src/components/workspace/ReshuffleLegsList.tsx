@@ -98,14 +98,14 @@ export default function ReshuffleLegsList({ trip, items, onApply, onClose }: Pro
     const patches = computeReorderPatches(trip, order, items);
     await onApply(patches);
     setSaving(false);
-    toast.success("Legs reshuffled");
+    toast.success("Locations reshuffled");
     onClose();
   };
 
   if (baseSegments.length < 2) {
     return (
       <div className="p-4 font-inter text-xs text-muted-foreground">
-        Add at least two location legs to reshuffle the trip.
+        Add stays in at least two locations to reshuffle the trip.
       </div>
     );
   }
@@ -119,7 +119,7 @@ export default function ReshuffleLegsList({ trip, items, onApply, onClose }: Pro
   return (
     <div className="flex w-[360px] flex-col">
       <div className="border-b border-border px-3 py-2.5">
-        <div className="font-playfair text-sm text-foreground">Reshuffle legs</div>
+        <div className="font-playfair text-sm text-foreground">Reshuffle locations</div>
         <div className="mt-0.5 font-inter text-[10px] text-muted-foreground">
           Drag to reorder. Night counts stay; dates shift automatically.
         </div>

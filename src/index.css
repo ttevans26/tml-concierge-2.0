@@ -160,6 +160,15 @@
     --cell-activity: 38 18% 13%;
     --cell-sites: 280 18% 14%;
 
+    /* Location leg rainbow palette (dark theme) */
+    --leg-1: 0 60% 60%;
+    --leg-2: 25 70% 60%;
+    --leg-3: 45 75% 60%;
+    --leg-4: 140 45% 55%;
+    --leg-5: 185 55% 55%;
+    --leg-6: 220 60% 65%;
+    --leg-7: 280 45% 65%;
+
     --warning-forest: 145 25% 55%;
     --warning-amber: 38 55% 60%;
 

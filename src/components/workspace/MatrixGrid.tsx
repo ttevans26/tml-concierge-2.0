@@ -34,7 +34,7 @@ import {
   type StayPill,
   type LocationLeg,
 } from "@/lib/locationLegs";
-import { MapPin, Sparkles, Bed, CalendarIcon, GripVertical } from "lucide-react";
+import { MapPin, Sparkles, Bed, CalendarIcon, GripVertical, Plus } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildSegments, computeReorderPatches } from "@/lib/segments";
@@ -797,6 +797,47 @@ export default function MatrixGrid() {
                 </PopoverContent>
               </Popover>
             )}
+            {activeTrip?.end_date && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-2 inline-flex items-center gap-1 rounded-sm border border-border px-2 py-1 font-inter text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/5"
+                    title="Change end date — extends or shortens the trip"
+                  >
+                    <CalendarIcon className="h-3 w-3" />
+                    Trip ends: {format(parseISO(activeTrip.end_date), "MMM d, yyyy")}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={parseISO(activeTrip.end_date)}
+                    onSelect={async (d) => {
+                      if (!d || !activeTrip.start_date || !activeTrip.end_date) return;
+                      const next = format(d, "yyyy-MM-dd");
+                      if (next === activeTrip.end_date) return;
+                      const startD = parseISO(activeTrip.start_date);
+                      if (d < startD) {
+                        toast.error("End date can't be before the start date.");
+                        return;
+                      }
+                      const delta = differenceInCalendarDays(d, parseISO(activeTrip.end_date));
+                      await updateTrip(activeTrip.id, { end_date: next });
+                      toast.success(
+                        delta > 0
+                          ? `Trip extended through ${format(d, "MMM d")}`
+                          : `Trip shortened to ${format(d, "MMM d")}`,
+                      );
+                    }}
+                    disabled={{ before: parseISO(activeTrip.start_date!) }}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
             {activeTrip && (
               <Popover open={reshuffleOpen} onOpenChange={setReshuffleOpen}>
                 <PopoverTrigger asChild>
@@ -1185,6 +1226,32 @@ export default function MatrixGrid() {
               </div>
             );
           })}
+          {/* Trailing "+ Add day" column (Google Sheets style) */}
+          {activeTrip?.end_date && (
+            <div className="w-44 shrink-0 border-r border-border last:border-r-0">
+              <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!activeTrip?.end_date) return;
+                    const nextDay = addDays(parseISO(activeTrip.end_date), 1);
+                    const next = format(nextDay, "yyyy-MM-dd");
+                    await updateTrip(activeTrip.id, { end_date: next });
+                    toast.success(`Added ${format(nextDay, "MMM d")}`);
+                  }}
+                  className="group inline-flex items-center gap-1 rounded-sm border border-dashed border-border/60 px-2 py-0.5 font-inter text-[11px] text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-accent"
+                  title="Add another day to the trip"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add day
+                </button>
+              </div>
+              <div
+                className="flex h-full flex-col items-center justify-start bg-muted/10"
+                style={{ minHeight: `${36 + staysRowHeight + 112 * (CATEGORIES.length - 1) + 32}px` }}
+              />
+            </div>
+          )}
           </div>
         </div>
       </div>

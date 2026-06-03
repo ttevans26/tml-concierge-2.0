@@ -499,6 +499,51 @@ export const useTripStore = create<TripStore>()(
       pushHistory({ kind: "move", id, before: { date: before.date, category: before.category }, after: { date: updateData.date ?? before.date, category: updateData.category ?? before.category } });
     }
   },
+
+  bulkUpdateItemDates: async (patches) => {
+    if (!patches.length) return;
+    // Optimistic update
+    const byId = new Map(patches.map((p) => [p.id, p.date]));
+    set({
+      itineraryItems: get().itineraryItems.map((i) =>
+        byId.has(i.id) ? { ...i, date: byId.get(i.id)! } : i,
+      ),
+    });
+    // Issue updates in parallel (Supabase has no native multi-row UPDATE on disparate values)
+    const results = await Promise.all(
+      patches.map((p) =>
+        supabase.from("itinerary_items").update({ date: p.date } as any).eq("id", p.id),
+      ),
+    );
+    const firstError = results.find((r) => r.error)?.error;
+    if (firstError) {
+      console.error("bulkUpdateItemDates partial failure:", firstError);
+    }
+  },
+
+  shiftTripDates: async (id, deltaDays) => {
+    const trip = get().trips.find((t) => t.id === id) ?? get().activeTrip;
+    if (!trip || !trip.start_date || !trip.end_date || deltaDays === 0) return false;
+    const newStart = (() => {
+      const d = new Date(trip.start_date + "T00:00:00");
+      d.setUTCDate(d.getUTCDate() + deltaDays);
+      return d.toISOString().slice(0, 10);
+    })();
+    const newEnd = (() => {
+      const d = new Date(trip.end_date + "T00:00:00");
+      d.setUTCDate(d.getUTCDate() + deltaDays);
+      return d.toISOString().slice(0, 10);
+    })();
+    const tripItems = get().itineraryItems.filter((i) => i.trip_id === id && i.date);
+    const patches = tripItems.map((i) => {
+      const d = new Date(i.date! + "T00:00:00");
+      d.setUTCDate(d.getUTCDate() + deltaDays);
+      return { id: i.id, date: d.toISOString().slice(0, 10) };
+    });
+    await get().updateTrip(id, { start_date: newStart, end_date: newEnd });
+    await get().bulkUpdateItemDates(patches);
+    return true;
+  },
 }),
     {
       name: "tml-trip-store-v1",

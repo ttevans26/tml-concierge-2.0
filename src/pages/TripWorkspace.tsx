@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
@@ -8,6 +8,7 @@ import StudioSidebar from "@/components/workspace/StudioSidebar";
 import MatrixGrid from "@/components/workspace/MatrixGrid";
 import BudgetSidebar from "@/components/workspace/BudgetSidebar";
 import ConciergePanel from "@/components/workspace/ConciergePanel";
+import ProximityMap from "@/components/workspace/ProximityMap";
 import TripHealthBar from "@/components/workspace/TripHealthBar";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +42,7 @@ export default function TripWorkspace() {
     }
   }, [budgetOpen]);
 
-  const [rightTab, setRightTab] = useState<"budget" | "concierge">("budget");
+  const [rightTab, setRightTab] = useState<"budget" | "concierge" | "map">("budget");
   const askConcierge = useTripStore((s) => s.askConcierge);
 
   const handleAskConcierge = (prompt: string) => {
@@ -173,6 +174,18 @@ export default function TripWorkspace() {
                 Concierge
               </button>
               <button
+                onClick={() => setRightTab("map")}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
+                  rightTab === "map"
+                    ? "border-b-2 border-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <MapPin className="h-3 w-3" />
+                Map
+              </button>
+              <button
                 onClick={() => setBudgetOpen(false)}
                 className="flex items-center justify-center px-2 text-muted-foreground hover:text-foreground"
                 title="Collapse panel"
@@ -181,11 +194,11 @@ export default function TripWorkspace() {
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
-              {rightTab === "budget" ? (
+              {rightTab === "budget" && (
                 <BudgetSidebar embedded onCollapse={() => setBudgetOpen(false)} />
-              ) : (
-                <ConciergePanel />
               )}
+              {rightTab === "concierge" && <ConciergePanel />}
+              {rightTab === "map" && <ProximityMap />}
             </div>
           </div>
         ) : (

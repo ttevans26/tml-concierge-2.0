@@ -7,6 +7,8 @@ import { format, parseISO } from "date-fns";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
+import SchedulingModal from "@/components/SchedulingModal";
+import { CalendarClock } from "lucide-react";
 
 interface TripHealthBarProps {
   onAskConcierge?: (prompt: string) => void;
@@ -25,6 +27,10 @@ export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
   const [open, setOpen] = useState(false);
   const [creatingId, setCreatingId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<ItineraryItem | null>(null);
+  const [schedule, setSchedule] = useState<{ open: boolean; agenda: string }>({
+    open: false,
+    agenda: "",
+  });
 
   const { score, gaps } = useMemo(() => {
     return {
@@ -120,9 +126,22 @@ export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
                   </Button>
                 )}
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   className={`${onAskConcierge ? "" : "ml-auto"} h-7 gap-1 px-2 font-inter text-[11px]`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSchedule({ open: true, agenda: g.prompt });
+                  }}
+                  title="Book a planning session"
+                >
+                  <CalendarClock className="h-3 w-3" />
+                  Schedule
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 font-inter text-[11px]"
                   disabled={creatingId === g.id}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -153,6 +172,11 @@ export default function TripHealthBar({ onAskConcierge }: TripHealthBarProps) {
           item={editItem}
         />
       )}
+      <SchedulingModal
+        open={schedule.open}
+        onOpenChange={(o) => setSchedule((s) => ({ ...s, open: o }))}
+        prefill={{ tripId: activeTrip?.id, agenda: schedule.agenda }}
+      />
     </div>
   );
 }

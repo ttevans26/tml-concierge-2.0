@@ -448,7 +448,7 @@ export const useTripStore = create<TripStore>()(
 
   /* ---- Create ---- */
 
-  createTrip: async (data) => {
+  createTrip: async (data, options) => {
     const uid = await getCachedUserId();
     if (!uid) return null;
     const { data: trip, error } = await supabase
@@ -458,6 +458,40 @@ export const useTripStore = create<TripStore>()(
       .single();
     if (!error && trip) {
       set({ trips: [trip as Trip, ...get().trips] });
+      const seedStays = options?.seedStays;
+      if (seedStays && seedStays.length && trip.start_date) {
+        const start = new Date(trip.start_date + "T00:00:00");
+        const rows: any[] = [];
+        let offset = 0;
+        for (const seg of seedStays) {
+          for (let n = 0; n < seg.nights; n++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + offset + n);
+            const iso = d.toISOString().slice(0, 10);
+            rows.push({
+              trip_id: trip.id,
+              user_id: uid,
+              category: "stays",
+              title: `Stay — ${seg.city}`,
+              location_name: seg.city,
+              date: iso,
+              approval_status: "draft",
+              currency: "USD",
+              sort_order: 0,
+            });
+          }
+          offset += seg.nights;
+        }
+        if (rows.length) {
+          const { data: inserted } = await supabase
+            .from("itinerary_items")
+            .insert(rows)
+            .select(ITINERARY_COLUMNS);
+          if (inserted?.length) {
+            set({ itineraryItems: [...get().itineraryItems, ...(inserted as ItineraryItem[])] });
+          }
+        }
+      }
       return trip as Trip;
     }
     return null;

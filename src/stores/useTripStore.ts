@@ -159,6 +159,12 @@ interface TripStore {
   profile: Profile | null;
   loading: boolean;
 
+  /* undo/redo */
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+
   /* anchor */
   activeAnchor: ItineraryItem | null;
   setActiveAnchor: (item: ItineraryItem | null) => void;
@@ -207,6 +213,7 @@ interface TripStore {
   createItineraryItem: (data: Partial<ItineraryItem>) => Promise<ItineraryItem | null>;
   updateItineraryItem: (id: string, data: Partial<ItineraryItem>) => Promise<void>;
   deleteItineraryItem: (id: string) => Promise<void>;
+  moveItineraryItem: (id: string, patch: { date?: string | null; category?: ItineraryItem["category"] }) => Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,6 +235,10 @@ export const selectRemainingBudget = (state: TripStore) => {
 export const useTripStore = create<TripStore>()(
   persist(
     (set, get) => ({
+  /* ---- Undo/Redo (in-memory, not persisted) ---- */
+  // History entries are not declared in the interface; kept as internal state.
+  // We use plain refs on the closure via a module-level WeakMap fallback.
+
   trips: [],
   activeTrip: null,
   itineraryItems: [],
@@ -237,6 +248,22 @@ export const useTripStore = create<TripStore>()(
   activeAnchor: null,
 
   setActiveAnchor: (item) => set({ activeAnchor: item }),
+
+  canUndo: () => undoStack.length > 0,
+  canRedo: () => redoStack.length > 0,
+
+  undo: async () => {
+    const op = undoStack.pop();
+    if (!op) return;
+    redoStack.push(op);
+    await applyOp(op, "undo", get, set);
+  },
+  redo: async () => {
+    const op = redoStack.pop();
+    if (!op) return;
+    undoStack.push(op);
+    await applyOp(op, "redo", get, set);
+  },
 
   /* ---- Checklist (client-side) ---- */
   checklistTasks: [],
@@ -435,18 +462,37 @@ export const useTripStore = create<TripStore>()(
   },
 
   updateItineraryItem: async (id, data) => {
+    const before = get().itineraryItems.find((i) => i.id === id);
     const { error } = await supabase.from("itinerary_items").update(data as any).eq("id", id);
     if (!error) {
       set({
         itineraryItems: get().itineraryItems.map((i) => (i.id === id ? { ...i, ...data } : i)),
       });
+      if (before) pushHistory({ kind: "update", id, before: snapshot(before), after: { ...snapshot(before), ...data } });
     }
   },
 
   deleteItineraryItem: async (id) => {
+    const before = get().itineraryItems.find((i) => i.id === id);
     const { error } = await supabase.from("itinerary_items").delete().eq("id", id);
     if (!error) {
       set({ itineraryItems: get().itineraryItems.filter((i) => i.id !== id) });
+      if (before) pushHistory({ kind: "delete", id, before: snapshot(before) });
+    }
+  },
+
+  moveItineraryItem: async (id, patch) => {
+    const before = get().itineraryItems.find((i) => i.id === id);
+    if (!before) return;
+    const updateData: Partial<ItineraryItem> = {};
+    if (patch.date !== undefined) updateData.date = patch.date;
+    if (patch.category !== undefined) updateData.category = patch.category;
+    const { error } = await supabase.from("itinerary_items").update(updateData as any).eq("id", id);
+    if (!error) {
+      set({
+        itineraryItems: get().itineraryItems.map((i) => (i.id === id ? { ...i, ...updateData } : i)),
+      });
+      pushHistory({ kind: "move", id, before: { date: before.date, category: before.category }, after: { date: updateData.date ?? before.date, category: updateData.category ?? before.category } });
     }
   },
 }),
@@ -467,3 +513,69 @@ export const useTripStore = create<TripStore>()(
     },
   ),
 );
+
+/* ------------------------------------------------------------------ */
+/*  Undo/Redo internals                                               */
+/* ------------------------------------------------------------------ */
+
+type HistoryOp =
+  | { kind: "update"; id: string; before: Record<string, unknown>; after: Record<string, unknown> }
+  | { kind: "delete"; id: string; before: Record<string, unknown> }
+  | { kind: "move"; id: string; before: { date: string | null; category: ItineraryItem["category"] }; after: { date: string | null; category: ItineraryItem["category"] } };
+
+const MAX_HISTORY = 50;
+const undoStack: HistoryOp[] = [];
+const redoStack: HistoryOp[] = [];
+
+function snapshot(item: ItineraryItem): Record<string, unknown> {
+  // Return a plain object copy used for restoring values via UPDATE.
+  // We deliberately omit server-managed fields.
+  const { id: _id, created_at: _c, updated_at: _u, ...rest } = item;
+  return JSON.parse(JSON.stringify(rest));
+}
+
+function pushHistory(op: HistoryOp) {
+  undoStack.push(op);
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  // New action invalidates redo
+  redoStack.length = 0;
+}
+
+async function applyOp(
+  op: HistoryOp,
+  dir: "undo" | "redo",
+  get: () => TripStore,
+  set: (partial: Partial<TripStore>) => void
+) {
+  if (op.kind === "move") {
+    const target = dir === "undo" ? op.before : op.after;
+    await supabase.from("itinerary_items").update(target as any).eq("id", op.id);
+    set({
+      itineraryItems: get().itineraryItems.map((i) =>
+        i.id === op.id ? { ...i, ...target } : i,
+      ),
+    });
+    return;
+  }
+  if (op.kind === "update") {
+    const target = dir === "undo" ? op.before : op.after;
+    await supabase.from("itinerary_items").update(target as any).eq("id", op.id);
+    set({
+      itineraryItems: get().itineraryItems.map((i) =>
+        i.id === op.id ? ({ ...i, ...target } as ItineraryItem) : i,
+      ),
+    });
+    return;
+  }
+  if (op.kind === "delete") {
+    if (dir === "undo") {
+      // Re-insert the deleted item
+      const restored = { id: op.id, ...op.before } as any;
+      await supabase.from("itinerary_items").insert(restored);
+      set({ itineraryItems: [...get().itineraryItems, restored as ItineraryItem] });
+    } else {
+      await supabase.from("itinerary_items").delete().eq("id", op.id);
+      set({ itineraryItems: get().itineraryItems.filter((i) => i.id !== op.id) });
+    }
+  }
+}

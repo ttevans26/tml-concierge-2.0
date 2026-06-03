@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
+import ConciergeToolCard from "@/components/workspace/ConciergeToolCard";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 
@@ -110,8 +111,15 @@ export default function ConciergePanel() {
       if (!cancelled) {
         setMessages(
           (data || [])
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content })),
+            .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool")
+            // Hide assistant rows that only carry tool_calls with no visible content (rendered by tool cards instead)
+            .filter((m) => !(m.role === "assistant" && !m.content && m.tool_calls))
+            .map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant" | "tool",
+              content: m.content,
+              tool_calls: m.tool_calls,
+            })),
         );
         setLoadingThread(false);
       }

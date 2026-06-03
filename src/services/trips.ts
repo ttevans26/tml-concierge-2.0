@@ -37,7 +37,7 @@ export async function listMyTrips(): Promise<Trip[]> {
     .select(TRIP_COLUMNS)
     .order("start_date", { ascending: true });
   if (error) wrapError("listMyTrips", error);
-  return (data ?? []) as Trip[];
+  return (data ?? []) as unknown as Trip[];
 }
 
 export async function getTrip(id: string): Promise<Trip | null> {
@@ -47,7 +47,7 @@ export async function getTrip(id: string): Promise<Trip | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) wrapError("getTrip", error);
-  return (data as Trip | null) ?? null;
+  return (data as unknown as Trip | null) ?? null;
 }
 
 export async function createTrip(input: TripInsert): Promise<Trip> {
@@ -57,7 +57,7 @@ export async function createTrip(input: TripInsert): Promise<Trip> {
     .select(TRIP_COLUMNS)
     .single();
   if (error) wrapError("createTrip", error);
-  return data as Trip;
+  return data as unknown as Trip;
 }
 
 export async function updateTrip(id: string, patch: TripUpdate): Promise<Trip> {
@@ -68,7 +68,7 @@ export async function updateTrip(id: string, patch: TripUpdate): Promise<Trip> {
     .select(TRIP_COLUMNS)
     .single();
   if (error) wrapError("updateTrip", error);
-  return data as Trip;
+  return data as unknown as Trip;
 }
 
 export async function deleteTrip(id: string): Promise<void> {

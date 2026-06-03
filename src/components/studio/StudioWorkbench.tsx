@@ -495,6 +495,7 @@ export default function StudioWorkbench() {
               {sortByProximity ? "Proximity ✓" : "Sort by Proximity"}
             </Button>
           )}
+          <SocialImportsTray refreshKey={socialRefreshKey} />
         </div>
       </div>
 

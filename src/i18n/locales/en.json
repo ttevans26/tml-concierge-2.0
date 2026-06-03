@@ -1,0 +1,24 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "back": "Back",
+    "skipToContent": "Skip to content"
+  },
+  "errors": {
+    "boundaryTitle": "Something went wrong",
+    "boundaryBody": "We hit an unexpected error. Try refreshing — your work is saved.",
+    "network": "Network error. Check your connection and try again."
+  },
+  "nav": {
+    "today": "Today",
+    "trips": "Trips",
+    "studio": "Studio",
+    "network": "Network",
+    "settings": "Settings"
+  }
+}

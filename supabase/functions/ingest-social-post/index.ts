@@ -1,11 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { jsonResponse } from "../_shared/cors.ts";
+import { createHandler } from "../_shared/handler.ts";
+import { obj, str, optional, url as urlValidator } from "../_shared/validate.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const InputSchema = obj({
+  url: urlValidator({ max: 2048 }),
+  note: optional(str({ max: 500 })),
+});
 
 function detectPlatform(url: string): "instagram" | "tiktok" | null {
   try {
@@ -134,55 +136,39 @@ async function extractWithGemini(apiKey: string, payload: {
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+serve(
+  createHandler(
+    {
+      fn: "ingest-social-post",
+      // 10 imports/min/IP — LLM cost-sensitive
+      rateLimit: { capacity: 10, refillPerSec: 10 / 60 },
+    },
+    async ({ req, log }) => {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) return jsonResponse({ error: "Missing authorization" }, 401);
 
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Invalid session" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const user = userData.user;
-
-    const body = await req.json().catch(() => ({}));
-    const url = typeof body?.url === "string" ? body.url.trim() : "";
-    const note = typeof body?.note === "string" ? body.note.trim().slice(0, 500) : null;
-
-    if (!url) {
-      return new Response(JSON.stringify({ error: "url is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const platform = detectPlatform(url);
-    if (!platform) {
-      return new Response(
-        JSON.stringify({ error: "Only Instagram and TikTok URLs are supported right now." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } },
       );
-    }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userData?.user) return jsonResponse({ error: "Invalid session" }, 401);
+      const user = userData.user;
+      log.bind({ userId: user.id });
+
+      const raw = await req.json().catch(() => ({}));
+      const { url, note } = InputSchema.parse(raw);
+
+      const platform = detectPlatform(url);
+      if (!platform)
+        return jsonResponse(
+          { error: "Only Instagram and TikTok URLs are supported right now." },
+          400,
+        );
+
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const oembed = await fetchOEmbed(platform, url);
@@ -195,10 +181,10 @@ serve(async (req) => {
         url,
         caption: oembed?.caption ?? null,
         author: oembed?.author ?? null,
-        note,
+        note: note ?? null,
       });
     } catch (err: any) {
-      console.error("Extraction error", err);
+      log.error("extraction_error", { err: err?.message });
       extractionError = err?.message ?? "Extraction failed";
     }
 
@@ -241,21 +227,14 @@ serve(async (req) => {
         extracted_items: itemsWithKeep,
         status,
         error: extractionError,
-        note,
+        note: note ?? null,
       })
       .select()
       .single();
 
     if (insertErr) throw insertErr;
 
-    return new Response(JSON.stringify({ import: row }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("ingest-social-post error", err);
-    return new Response(JSON.stringify({ error: err?.message ?? "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+      return jsonResponse({ import: row });
+    },
+  ),
+);

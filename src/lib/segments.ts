@@ -41,9 +41,11 @@ export function buildSegments(trip: Trip, items: ItineraryItem[]): LocationSegme
   for (const s of stays) {
     const offset = differenceInCalendarDays(parseISO(s.date!), ts);
     if (offset >= 0 && offset < totalDays) {
-      // Prefer location_name; fall back to title to avoid collapsing distinct stays
-      const label = (s.location_name?.trim() || s.title.trim()) || "Stay";
-      dayLabels[offset] = label;
+      // Group strictly by location_name (city/state/country). Stays without a
+      // location stay null so they merge with adjacent unnamed nights and the
+      // user is prompted to set a city in the Reshuffle row.
+      const label = s.location_name?.trim();
+      if (label) dayLabels[offset] = label;
     }
   }
 

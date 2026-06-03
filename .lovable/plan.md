@@ -1,60 +1,41 @@
-## Quick Reshuffle: list-style leg reordering
+# Reshuffle Locations: delete bands + dedupe duplicate cities
 
-Dragging a leg pill across many day-columns in the Matrix is awkward. Add a compact "Reshuffle" affordance that opens a vertical, playlist-style list of all location legs so you can drag them up/down (or use ▲/▼ buttons) — night counts stay locked, dates recompute automatically around the new order.
+Two issues to fix in the Reshuffle Locations popover.
 
-### Where it lives
+## 1. Duplicate location bands (e.g. two "Paris" rows)
 
-A small **`Shuffle` icon button** added to the leg-row toolbar in `MatrixGrid.tsx` (next to the existing pan / "Trip starts" controls, above the location pills). Tooltip: *"Reshuffle legs"*.
+**Root cause** — `src/lib/segments.ts` `buildSegments()` groups consecutive nights by label, but when a Stay has no `location_name` it falls back to the Stay's `title` (hotel name). Two different Paris hotels back-to-back therefore produce two segments labeled by hotel, not one "Paris" band.
 
-Clicking opens a `Popover` (anchored under the button, ~360px wide) titled **"Reshuffle legs"** with:
-- Subtitle: *"Drag to reorder. Night counts stay; dates shift automatically."*
-- A vertical list of leg rows, one per segment, in current order.
-
-### Each row shows
-
-```
-≡  London                                ▲ ▼
-   Aug 20 → Aug 24 · 4 nights
+```ts
+// current
+const label = (s.location_name?.trim() || s.title.trim()) || "Stay";
 ```
 
-- Grip handle (left) — drag up/down within the list.
-- Location name (Playfair, sm).
-- Date range + nights count (Inter, xs, muted).
-- ▲ / ▼ icon buttons on the right for one-tap moves (disabled at top/bottom).
-- "Unassigned days" segments are listed but rendered muted and **non-draggable** (locked in place visually, same behavior as today's EditTripDialog reorder).
+**Fix** — prefer `location_name` (city/state/country) as the only grouping key. When it's missing, mark that night as `null` (unassigned-style) so it merges with adjacent unnamed nights and the user is prompted to "Set city, state, country" in the Reshuffle row, which already cascades the name to every stay in the window.
 
-A live preview line at the bottom: *"New trip window: Aug 13 → Sep 10"* (unchanged total, just confirms nothing fell off).
+This collapses the duplicate Paris bands into one and keeps the Matrix Grid + Reshuffle list in sync (both already read from segments / legs derived this way).
 
-Footer: **Cancel** · **Apply reshuffle** (primary). Apply is disabled until the order actually changes.
+Side-effect to verify: the Matrix Grid leg label for orphan-stay nights will now show as "Set location" until named — acceptable because the new inline rename in the Reshuffle row writes it back to all stays in the window.
 
-### Behavior
+## 2. Delete a location band
 
-Reuse the existing engine — no new logic:
-- `buildSegments(activeTrip, itineraryItems)` → initial list.
-- On Apply: `computeReorderPatches(activeTrip, newOrder, items)` → `bulkUpdateItemDates(patches)` (same flow `handleLegReorderSwap` uses today).
-- Toast: *"Legs reshuffled"*.
-- Close popover; Matrix re-renders with the new vertical rainbow bands already in place.
+Add a small trash icon button on each `ReshuffleRow` (next to the up/down arrows, hidden for unassigned rows).
 
-### Drag-across-the-grid: keep or remove?
+**Behavior** when clicked:
+1. Confirm via `AlertDialog` ("Remove {label} and its {N} nights? Stays, dining and activities in this window will be deleted.").
+2. Remove the segment from local `order` state in `ReshuffleLegsList`.
+3. On Apply, in addition to existing `computeReorderPatches`, delete every `itemIds` belonging to removed segments via `useTripStore.deleteItineraryItem`, and shrink `trip.end_date` by the removed nights using `updateTrip`.
+4. Trip start_date unchanged; subsequent segments shift earlier automatically because they're re-laid out from `trip.start_date` using their preserved night counts.
 
-Keep the existing drag-to-swap on the horizontal leg pills (some users will discover it), but the Reshuffle popover becomes the primary, recommended path. No change to the pills' visual treatment.
+If the user removes every assigned segment, disable Apply with a tooltip ("A trip needs at least one location").
 
-### Files
+## Files to touch
 
-- `src/components/workspace/MatrixGrid.tsx`
-  - Add `Shuffle` lucide icon import.
-  - Add a `Popover` trigger button in the leg toolbar area (near the existing "Trip starts" popover).
-  - Render the new `ReshuffleLegsList` inside the popover.
-- `src/components/workspace/ReshuffleLegsList.tsx` *(new)*
-  - Self-contained list using `@dnd-kit/sortable` (already a dep — `SegmentCard` uses it).
-  - Reuses `SegmentCard`-style row markup but trimmed (no category-count chips, adds ▲/▼ buttons).
-  - Props: `trip`, `items`, `onApply(patches)`, `onClose()`.
+- `src/lib/segments.ts` — change `dayLabels[offset]` to only use `location_name`; drop the title fallback.
+- `src/components/workspace/ReshuffleLegsList.tsx` — add `removedIds` state, trash button + confirm dialog per row, extend `handleApply` to delete items and patch `trip.end_date`.
+- `src/components/workspace/MatrixGrid.tsx` — pass `updateTrip` / `deleteItineraryItem` callbacks through `onApply` if needed (or call store directly inside the list, matching the existing `updateItineraryItem` pattern).
 
-No store, schema, or `segments.ts` changes — purely a new presentation surface over existing helpers.
+## Out of scope
 
-### Validation
-
-- Open the popover, drag "London" from position 3 → position 1. Apply. Every London-window item moves to the start of the trip; following legs slide back by London's night count; total trip length unchanged.
-- ▲/▼ buttons produce the same result as dragging by one slot.
-- Cancel discards changes; no DB write.
-- Unassigned-day rows can't be dragged but render in place so users see the full picture.
+- Logistics rows, budget recomputation triggers (Splurge Engine already reacts to store changes).
+- Editing nights inline (separate request).

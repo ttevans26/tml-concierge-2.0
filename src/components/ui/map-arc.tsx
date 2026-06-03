@@ -15,7 +15,7 @@ export interface MapArcProps {
   points: ArcPoint[];
   title?: string;
   subtitle?: string;
-  height?: number;
+  height?: number | string;
   className?: string;
   /** Visual mode: editorial arc atlas, or a slowly rotating wireframe globe placeholder. */
   mode?: "arc" | "globe";
@@ -75,7 +75,8 @@ export function MapArc({
   }, [valid]);
 
   const W = 1000;
-  const H = 1000 * (height / 1000) * 1.4; // keep aspect roughly 5:7
+  const heightNum = typeof height === "number" ? height : 360;
+  const H = 1000 * (heightNum / 1000) * 1.4; // keep aspect roughly 5:7
 
   const project = (p: ArcPoint) => {
     if (!proj) return { x: W / 2, y: H / 2 };
@@ -256,7 +257,7 @@ function GlobePlaceholder({
 }: {
   title?: string;
   subtitle?: string;
-  height: number;
+  height: number | string;
   className?: string;
 }) {
   const VB = 400;
@@ -276,7 +277,7 @@ function GlobePlaceholder({
         "relative w-full overflow-hidden rounded-hero border border-foil bg-cream shadow-paper",
         className,
       )}
-      style={{ height }}
+      style={height === undefined ? undefined : { height }}
     >
       <svg
         viewBox={`0 0 ${VB} ${VB}`}

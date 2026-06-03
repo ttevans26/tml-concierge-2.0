@@ -369,6 +369,16 @@ export default function ConciergePanel() {
                 </div>
               );
             }
+            if (m.role === "tool") {
+              const tc = (m.tool_calls as { name?: string; args?: Record<string, unknown> } | null) || {};
+              let result: unknown = m.content;
+              try { result = JSON.parse(m.content); } catch { /* keep raw */ }
+              return (
+                <div key={i} className="pl-2">
+                  <ConciergeToolCard tc={{ name: tc.name || "tool", args: tc.args, result }} />
+                </div>
+              );
+            }
             const { text, suggestions } = parseSuggestions(m.content);
             return (
               <div key={i} className="space-y-2">

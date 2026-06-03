@@ -1,81 +1,85 @@
-# Social Post Ingest → Studio Vault
+# Trip Editor — Dates & Location Segments
 
-Add the ability to paste an Instagram or TikTok URL into TML Concierge, extract location + recommended places from the public caption, and stage results in a review tray that creates/uses a Studio folder named after the detected destination.
+Add a single "Edit Trip" surface that lets you (a) change the trip's date window and (b) reorder location segments by drag-and-drop. Existing `TripSettingsModal` stays focused on budget/currency; the new editor opens from the same Settings menu as a dedicated tab.
 
-iOS share-sheet wiring (PWA Web Share Target + Capacitor Share Extension) is deferred; the ingest pipeline is built so that a future share entry point just POSTs to the same endpoint.
+## 1. Entry point
 
-## User flow
+In the workspace header, replace the single **Settings** button with a small dropdown:
+- **Edit Trip…** → opens `EditTripDialog` (new)
+- **Trip Settings…** → existing budget/currency modal
 
-1. In **Studio**, a new **"Paste Social Link"** button opens a small dialog (URL + optional note).
-2. Backend resolves the URL via **oEmbed** (Instagram `/oembed`, TikTok `/oembed`) → returns caption, author, thumbnail.
-3. Gemini parses the caption and returns structured JSON: `{ destination, confidence, items: [{ title, category, address?, note }] }`.
-4. Results land in a **Pending Social Imports** tray (modeled after Smart Pull Inbox) with:
-   - Detected destination + suggested folder (existing match or "Create new: {Destination}").
-   - Editable list of extracted items, each with category dropdown (Stay / Dining / Activity / Site) and keep/discard toggle.
-   - Source preview (thumbnail + caption + link back).
-5. **Commit** creates the folder if needed, runs each kept item through the existing Google Places validation (reuses entity validation flow to populate `google_place_id`, `lat/lng`, `address`, photo) and inserts into `studio_items`.
+`EditTripDialog` is a tabbed Dialog with two tabs: **Dates** and **Itinerary Segments**.
 
-## Scope
+## 2. Dates tab
 
-- `studio_social_imports` table (staging) so review state survives reloads and the future share target can drop rows here directly.
-- Edge function `ingest-social-post` (URL in → oEmbed fetch → Gemini extract → row in `studio_social_imports` with `status='pending'`).
-- Studio UI: paste dialog + tray drawer + commit handler.
-- Reuse existing `validate-place` / Google Places lookup for each committed item.
-- Toast + notification on completion.
+Three controls, all operating on `trips.start_date` / `trips.end_date`:
 
-## Out of scope (this batch)
+1. **Start date** picker (Shadcn Calendar in Popover, `pointer-events-auto`)
+2. **End date** picker
+3. **Shift entire trip** — number input `±N days` + "Apply shift" button. Adds N to both start and end and to every item's `date`.
 
-- iOS native share sheet (Capacitor share extension).
-- PWA `share_target` manifest wiring.
-- Scraping comments, video transcription, or visual analysis of the post.
-- YouTube / Pinterest / Threads (same pipeline can extend later).
+Live preview strip shows: `Aug 21 → Sep 17, 2026  ·  28 nights` updating to the proposed dates with a diff badge (`+3 days at end`, `-2 days at start`, `shifted +7 days`).
 
-## Technical details
+**Soft-orphan rule (per your answer):** if the new window excludes existing items, they are kept in the DB but their `date` falls outside `[start_date, end_date]`. A persistent banner appears in the workspace ("3 items outside trip window — Review") that opens an **Orphaned Items tray** (new small Sheet) listing each orphan with two actions: "Move to <nearest valid day>" or "Delete".
 
-**Schema** (new migration):
-```
-studio_social_imports (
-  id uuid pk, user_id uuid, source_url text, platform text,  -- 'instagram' | 'tiktok'
-  caption text, thumbnail_url text, author text,
-  detected_destination text, suggested_folder_id uuid null,
-  extracted_items jsonb,         -- array of {title, category, address, note, keep}
-  status text default 'pending', -- pending | committed | discarded | failed
-  error text null,
-  created_at, updated_at
-)
-```
-RLS: user-owned, standard CRUD policies + GRANTs to `authenticated` and `service_role`.
+Extending dates simply widens the Matrix — empty new day columns appear automatically (Matrix already renders by `eachDayOfInterval(start, end)`).
 
-**Edge function `ingest-social-post`** (`verify_jwt` default):
-- Validate body `{ url, note? }` with Zod; reject non-IG/TikTok hosts.
-- Detect platform from hostname; call oEmbed:
-  - IG: `https://graph.facebook.com/v18.0/instagram_oembed?url=...` *(requires app token — fallback to public `https://www.instagram.com/api/v1/oembed/?url=...` which still serves caption for public posts; if both fail, save row with `status='failed'` and surface caption-less preview)*.
-  - TikTok: `https://www.tiktok.com/oembed?url=...` (no auth needed).
-- Send caption + author to Gemini (`google/gemini-2.5-flash`) with tool schema `extract_travel_post` → `{ destination, items[] }`.
-- Insert row, return `import_id`.
+Save = single `updateTrip` call. If a shift is applied, also bulk-update affected `itinerary_items.date` (one RPC-style batch update grouped by trip).
 
-**Frontend**:
-- `src/components/studio/PasteSocialDialog.tsx` — URL input + submit.
-- `src/components/studio/SocialImportsTray.tsx` — list pending imports, expand to edit/keep items, "Create folder & add" CTA.
-- Hook into `StudioWorkbench` header next to Bulk Import.
-- Realtime subscription on `studio_social_imports` so the tray badge updates when a row finishes processing (sets the stage for share-sheet drops later).
+## 3. Itinerary Segments tab
 
-**Future share entry point** (designed for, not built):
-- Same `ingest-social-post` endpoint will accept POSTs from the Capacitor share extension and from a PWA `share_target` route at `/share-in`. No backend changes needed when that batch lands — just a thin auth-aware wrapper that calls the function and redirects to the tray.
+**Segment definition (per your answer): by Stay items.** Algorithm runs client-side over `itinerary_items` where `category = 'stay'`:
 
-## Files
+1. Sort stays by `date`.
+2. Each stay spans `date` … `date + nights - 1` (uses existing Stay Mapping Logic).
+3. Group consecutive stays sharing the same `location_name` (case-insensitive) into one **Segment**: `{ location_name, startDate, endDate, stayIds[], itemIds[] }`.
+4. `itemIds` = all `itinerary_items` (any category) whose `date` falls in `[startDate, endDate]`.
+5. Days with no Stay become a synthetic "Unassigned" segment so nothing is lost.
 
-New:
-- `supabase/functions/ingest-social-post/index.ts`
-- `src/components/studio/PasteSocialDialog.tsx`
-- `src/components/studio/SocialImportsTray.tsx`
-- migration: `studio_social_imports` table + RLS + GRANTs
+UI: vertical list of segment cards (DnD-kit sortable). Each card shows:
+- Location name (e.g. "London, UK")
+- Date range + night count
+- Item count by category (chips)
+- Drag handle (left), kebab menu (right) with **Move to start**, **Move to end**, **Detach day(s)**
 
-Edited:
-- `src/components/studio/StudioWorkbench.tsx` (add buttons + tray mount)
-- `src/integrations/supabase/types.ts` (auto-regen after migration)
-- `mem://index.md` + new `mem://features/social-post-ingest`
+**Drag-and-drop:** install `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`. Vertical sortable list; same library is already a candidate for the Studio→Matrix bridge so it's reusable.
 
-## Open question
+**Reorder math:** when segments are reordered, recompute each segment's new `startDate` by walking the trip from `trips.start_date`, allocating each segment its original night-count consecutively. Then for every item in the segment, `newDate = trip.start_date + (segmentOffset + itemDayWithinSegment)`. Times, costs, and all other fields untouched.
 
-Instagram's public oEmbed endpoint has been progressively locked down; for posts where it returns 401, the import will land with caption empty and we'll fall back to "user pastes/edits caption" inline in the tray. Acceptable for v1?
+Preview row at top: `Old: London → Paris → Rome` ⟶ `New: Paris → Rome → London`. **Apply Reorder** triggers a batched `update` on `itinerary_items.date` for affected items (single Supabase call using `upsert` array of `{id, date}`), wrapped in optimistic Zustand updates with rollback on error.
+
+## 4. Data & store
+
+- No schema changes. `trips.start_date/end_date` and `itinerary_items.date` already exist.
+- `useTripStore` additions:
+  - `shiftTripDates(deltaDays: number)` — updates trip + all items.
+  - `reorderSegments(newOrder: Segment[])` — bulk update item dates.
+  - `getOrphanedItems()` — derived selector for items outside `[start_date, end_date]`.
+- All writes go through existing `supabase.from(...).update(...)`; RLS already restricts to owner.
+
+## 5. Orphan banner
+
+Mount a small `OrphanItemsBanner` inside `WorkspaceLayout` above the Matrix. Visible only when `getOrphanedItems().length > 0`. Click opens the orphan Sheet.
+
+## 6. Files
+
+**New**
+- `src/components/workspace/EditTripDialog.tsx` (tabs + dates form + segments list)
+- `src/components/workspace/SegmentCard.tsx` (sortable DnD item)
+- `src/components/workspace/OrphanItemsBanner.tsx`
+- `src/components/workspace/OrphanItemsSheet.tsx`
+- `src/lib/segments.ts` (pure helpers: `buildSegments`, `reorderSegmentsToDates`)
+
+**Edited**
+- `src/stores/useTripStore.ts` — add `shiftTripDates`, `reorderSegments`, orphan selector.
+- `src/components/workspace/WorkspaceLayout.tsx` (or header component) — Settings dropdown + banner mount.
+- `src/components/workspace/TripSettingsModal.tsx` — keep as-is, just relabeled "Trip Settings" in the dropdown.
+- `package.json` — add `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`.
+- `mem://index.md` + new `mem://features/trip-editor` entry.
+
+## 7. Out of scope
+
+- Editing per-item dates/times (already handled in Smart Card edit).
+- Auto-suggesting new segment order (no AI here — purely user-driven).
+- Multi-trip merging or copying segments between trips.
+- Conflict detection beyond what Matrix Logic already does on save.

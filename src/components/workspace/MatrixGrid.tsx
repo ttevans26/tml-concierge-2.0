@@ -11,7 +11,7 @@ import type { ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "sonner";
 import { suggestFixesForConflicts, type ConflictFix } from "@/lib/conflictResolution";
 import { Inbox, Lock, Globe, ChevronLeft, ChevronRight, Pencil, Settings, ChevronDown } from "lucide-react";
-import { Undo2, Redo2 } from "lucide-react";
+import { Undo2, Redo2, Shuffle } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { buildSegments, computeReorderPatches } from "@/lib/segments";
 import { differenceInCalendarDays, addDays } from "date-fns";
 const EditItemDialog = lazy(() => import("./EditItemDialog"));
+import ReshuffleLegsList from "./ReshuffleLegsList";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {

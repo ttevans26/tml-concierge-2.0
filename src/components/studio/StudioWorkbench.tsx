@@ -19,6 +19,9 @@ import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 import { classifyPlace, CATEGORY_LABEL } from "@/lib/placeCategory";
 import BulkImportDialog, { type ImportedPendingItem } from "./BulkImportDialog";
 import { Layers } from "lucide-react";
+import PasteSocialDialog from "./PasteSocialDialog";
+import SocialImportsTray from "./SocialImportsTray";
+import { Share2 } from "lucide-react";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -67,6 +70,8 @@ export default function StudioWorkbench() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [prefillTitle, setPrefillTitle] = useState<string>("");
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [pasteSocialOpen, setPasteSocialOpen] = useState(false);
+  const [socialRefreshKey, setSocialRefreshKey] = useState(0);
 
   /* Find-a-Place (Google Places autocomplete) state */
   const [placeQuery, setPlaceQuery] = useState("");

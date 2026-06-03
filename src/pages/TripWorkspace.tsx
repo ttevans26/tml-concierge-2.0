@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin, ListChecks, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,20 +7,31 @@ import { useTripStore } from "@/stores/useTripStore";
 import StudioSidebar from "@/components/workspace/StudioSidebar";
 import MatrixGrid from "@/components/workspace/MatrixGrid";
 import BudgetSidebar from "@/components/workspace/BudgetSidebar";
-import ConciergePanel from "@/components/workspace/ConciergePanel";
-import ProximityMap from "@/components/workspace/ProximityMap";
 import TripHealthBar from "@/components/workspace/TripHealthBar";
 import TripSwitcher from "@/components/workspace/TripSwitcher";
-import PackingList from "@/components/workspace/PackingList";
-import TripDocuments from "@/components/workspace/TripDocuments";
-import EditTripDialog from "@/components/workspace/EditTripDialog";
 import { cn } from "@/lib/utils";
+
+const ConciergePanel = lazy(() => import("@/components/workspace/ConciergePanel"));
+const ProximityMap = lazy(() => import("@/components/workspace/ProximityMap"));
+const PackingList = lazy(() => import("@/components/workspace/PackingList"));
+const TripDocuments = lazy(() => import("@/components/workspace/TripDocuments"));
+const EditTripDialog = lazy(() => import("@/components/workspace/EditTripDialog"));
+
+const PanelFallback = () => (
+  <div className="flex h-full items-center justify-center p-6">
+    <Skeleton className="h-6 w-32 rounded-sm" />
+  </div>
+);
 
 export default function TripWorkspace() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { trips, activeTrip, loading, fetchTrips, fetchItineraryItems, setActiveTrip } =
-    useTripStore();
+  const trips = useTripStore((s) => s.trips);
+  const activeTrip = useTripStore((s) => s.activeTrip);
+  const loading = useTripStore((s) => s.loading);
+  const fetchTrips = useTripStore((s) => s.fetchTrips);
+  const fetchItineraryItems = useTripStore((s) => s.fetchItineraryItems);
+  const setActiveTrip = useTripStore((s) => s.setActiveTrip);
 
   const [studioOpen, setStudioOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -49,13 +60,14 @@ export default function TripWorkspace() {
   const [rightTab, setRightTab] =
     useState<"budget" | "concierge" | "map" | "packing" | "documents">("budget");
   const [editTripOpen, setEditTripOpen] = useState(false);
+  const [editTripMounted, setEditTripMounted] = useState(false);
   const askConcierge = useTripStore((s) => s.askConcierge);
 
-  const handleAskConcierge = (prompt: string) => {
+  const handleAskConcierge = useCallback((prompt: string) => {
     setBudgetOpen(true);
     setRightTab("concierge");
     askConcierge(prompt);
-  };
+  }, [askConcierge]);
 
   /* Hydrate trip + itinerary */
   useEffect(() => {
@@ -110,7 +122,7 @@ export default function TripWorkspace() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          onClick={() => setEditTripOpen(true)}
+          onClick={() => { setEditTripMounted(true); setEditTripOpen(true); }}
           title="Edit trip dates & segments"
           aria-label="Edit trip"
         >
@@ -118,7 +130,11 @@ export default function TripWorkspace() {
         </Button>
       </header>
 
-      <EditTripDialog open={editTripOpen} onOpenChange={setEditTripOpen} />
+      {editTripMounted && (
+        <Suspense fallback={null}>
+          <EditTripDialog open={editTripOpen} onOpenChange={setEditTripOpen} />
+        </Suspense>
+      )}
 
       {/* Trip Health Bar */}
       <TripHealthBar onAskConcierge={handleAskConcierge} />
@@ -193,10 +209,18 @@ export default function TripWorkspace() {
               {rightTab === "budget" && (
                 <BudgetSidebar embedded onCollapse={() => setBudgetOpen(false)} />
               )}
-              {rightTab === "concierge" && <ConciergePanel />}
-              {rightTab === "map" && <ProximityMap />}
-              {rightTab === "packing" && <PackingList />}
-              {rightTab === "documents" && <TripDocuments />}
+              {rightTab === "concierge" && (
+                <Suspense fallback={<PanelFallback />}><ConciergePanel /></Suspense>
+              )}
+              {rightTab === "map" && (
+                <Suspense fallback={<PanelFallback />}><ProximityMap /></Suspense>
+              )}
+              {rightTab === "packing" && (
+                <Suspense fallback={<PanelFallback />}><PackingList /></Suspense>
+              )}
+              {rightTab === "documents" && (
+                <Suspense fallback={<PanelFallback />}><TripDocuments /></Suspense>
+              )}
             </div>
           </div>
         ) : (

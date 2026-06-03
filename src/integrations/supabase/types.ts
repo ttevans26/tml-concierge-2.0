@@ -435,6 +435,60 @@ export type Database = {
           },
         ]
       }
+      studio_social_imports: {
+        Row: {
+          author: string | null
+          caption: string | null
+          created_at: string
+          detected_destination: string | null
+          error: string | null
+          extracted_items: Json
+          id: string
+          note: string | null
+          platform: string
+          source_url: string
+          status: string
+          suggested_folder_id: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author?: string | null
+          caption?: string | null
+          created_at?: string
+          detected_destination?: string | null
+          error?: string | null
+          extracted_items?: Json
+          id?: string
+          note?: string | null
+          platform: string
+          source_url: string
+          status?: string
+          suggested_folder_id?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author?: string | null
+          caption?: string | null
+          created_at?: string
+          detected_destination?: string | null
+          error?: string | null
+          extracted_items?: Json
+          id?: string
+          note?: string | null
+          platform?: string
+          source_url?: string
+          status?: string
+          suggested_folder_id?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tml_core_tenets: {
         Row: {
           created_at: string

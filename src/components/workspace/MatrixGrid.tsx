@@ -1029,8 +1029,16 @@ export default function MatrixGrid() {
                   <button
                     key={pill.id}
                     type="button"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData(
+                        "application/stay-pill",
+                        JSON.stringify({ itemIds: pill.itemIds, startDate: pill.startDate }),
+                      );
+                    }}
                     onClick={() => setStayEdit({ open: true, item: pill.firstItem })}
-                    className={`pointer-events-auto absolute flex h-6 items-center gap-1.5 truncate rounded-sm border px-2.5 text-left transition-colors ${
+                    className={`pointer-events-auto absolute flex h-6 cursor-grab items-center gap-1.5 truncate rounded-sm border px-2.5 text-left transition-colors active:cursor-grabbing ${
                       hasConflict
                         ? "border-destructive/70 bg-destructive/10 ring-1 ring-destructive/40 hover:bg-destructive/20"
                         : "border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
@@ -1040,7 +1048,7 @@ export default function MatrixGrid() {
                       width: `${width - 8}px`,
                       top: `${lane * STAY_LANE_H + 6}px`,
                     }}
-                    title={`${pill.title}${pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"}`}
+                    title={`${pill.title}${pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"} — drag to a new start date, click to edit`}
                   >
                     <Bed className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
                     <span className="truncate font-inter text-[11px] font-medium">

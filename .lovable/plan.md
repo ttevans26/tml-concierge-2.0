@@ -1,5 +1,21 @@
 # Remaining Roadmap — Ranked for iOS Plug-In Readiness
 
+> **Status update (this turn):** Tier 1 #1 *Auth Hardening* is **SHIPPED**.
+> Apple Sign-In enabled via `configure_social_auth(["google","apple"])`; HIBP
+> password check enabled. New `src/lib/session.ts` caches `auth.uid()` from
+> `onAuthStateChange` and replaces 6 `supabase.auth.getUser()` round-trips
+> in `useTripStore` / `useStudioStore` (cellular-critical). New
+> `src/lib/authRedirect.ts` centralizes OAuth redirect URI with a
+> Capacitor-aware branch (warns until iOS scheme is wired in Tier 2 #5).
+> Apple button added to Login + Signup. Signup now handles email-confirm
+> sessions gracefully (toast instead of redirect-to-empty). `useAuth`
+> identifies the user in `obs` (lights up the moment Sentry/PostHog ship).
+>
+> `auto_confirm_email` left `true` per MVP zero-verification memory rule.
+> Flip via `configure_auth` when you're ready to require confirmation in prod.
+>
+> **Next up per recommendation: Tier 1 #2 — Service-Layer Adoption.**
+
 Goal: every item below either (a) removes a blocker that would force a rewrite once we wrap in Capacitor / submit to the App Store, or (b) is deferrable until after the iOS shell is live. Ranking is by **iOS impact × user-visible risk × effort to retrofit later**.
 
 ---

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { jsonResponse } from "../_shared/cors.ts";
 import { createHandler } from "../_shared/handler.ts";
 import { obj, str, optional } from "../_shared/validate.ts";
 

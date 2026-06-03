@@ -420,6 +420,18 @@ export default function MatrixGrid() {
   );
   const displayedLegs: LocationLeg[] = legs.length > 0 ? legs : ghostLegs;
 
+  /* ---- Stay pills (consecutive same-stay grouping) ---- */
+  const stayPills = useMemo(() => getStayPills(itineraryItems), [itineraryItems]);
+  const stayLanes = useMemo(() => assignLanes(stayPills), [stayPills]);
+  const stayPillLane = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const { pill, lane } of stayLanes) m.set(pill.id, lane);
+    return m;
+  }, [stayLanes]);
+  const maxStayLane = stayLanes.reduce((m, x) => Math.max(m, x.lane), -1);
+  const STAY_LANE_H = 28;
+  const staysRowHeight = Math.max(112, (maxStayLane + 1) * STAY_LANE_H + 16);
+
   const handleSaveLeg = useCallback(
     async (data: {
       id?: string;

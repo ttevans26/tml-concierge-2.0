@@ -258,11 +258,13 @@ export default function ItineraryItemCard({ item, hasConflict = false, fix = nul
       </MarkerPopup>
 
       {editing && (
-        <EditItemDialog
-          open={editing}
-          onOpenChange={setEditing}
-          item={item}
-        />
+        <Suspense fallback={null}>
+          <EditItemDialog
+            open={editing}
+            onOpenChange={setEditing}
+            item={item}
+          />
+        </Suspense>
       )}
     </>
   );

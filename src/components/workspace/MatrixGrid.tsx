@@ -1020,7 +1020,10 @@ export default function MatrixGrid() {
                 </div>
 
                 {/* LOCATION cell (visible only when no leg pill covers this day) */}
-                <div className="h-9 border-b border-border bg-background/40">
+                <div
+                  className="h-9 border-b border-border"
+                  style={cellStyleFor(dateStr)}
+                >
                   {!cellHasLeg && (
                     <button
                       type="button"
@@ -1042,8 +1045,11 @@ export default function MatrixGrid() {
                   return (
                     <div
                       key={cat.key}
-                      className={`flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
-                      style={{ height: isStays ? `${staysRowHeight}px` : "112px" }}
+                      className="flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto"
+                      style={{
+                        height: isStays ? `${staysRowHeight}px` : "112px",
+                        ...cellStyleFor(dateStr),
+                      }}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
@@ -1071,7 +1077,10 @@ export default function MatrixGrid() {
                   );
                 })}
 
-                <div className="flex h-8 items-center justify-center border-b border-border bg-secondary/20">
+                <div
+                  className="flex h-8 items-center justify-center border-b border-border"
+                  style={cellStyleFor(dateStr)}
+                >
                   <span className="font-inter text-[10px] font-semibold text-foreground">
                     {total > 0 ? `$${total.toLocaleString()}` : "—"}
                   </span>

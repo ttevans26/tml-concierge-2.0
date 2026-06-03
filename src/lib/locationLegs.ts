@@ -94,3 +94,90 @@ export function addDaysIso(iso: string, days: number): string {
 }
 
 export { formatLabel as formatLegLabel };
+
+/* ---------------- Stay pills (consecutive same-stay grouping) ---------------- */
+
+export interface StayPill {
+  id: string;            // first underlying item id (used to open edit dialog)
+  itemIds: string[];     // all grouped item ids (one per night)
+  startDate: string;     // yyyy-MM-dd inclusive
+  endDate: string;       // yyyy-MM-dd inclusive (last night)
+  nights: number;
+  title: string;
+  locationName: string | null;
+  googlePlaceId: string | null;
+  firstItem: ItineraryItem;
+}
+
+function stayGroupKey(it: ItineraryItem): string {
+  return [
+    it.title?.trim().toLowerCase() ?? "",
+    it.google_place_id ?? "",
+    it.location_name?.trim().toLowerCase() ?? "",
+  ].join("|");
+}
+
+/**
+ * Collapse per-night stay items into spanning pills.
+ * Stays sharing title + location are merged when their dates are consecutive.
+ */
+export function getStayPills(items: ItineraryItem[]): StayPill[] {
+  const stays = items
+    .filter((i) => i.category === "stays" && !!i.date)
+    .slice()
+    .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+
+  const pills: StayPill[] = [];
+  const byKey = new Map<string, StayPill>();
+
+  for (const it of stays) {
+    const key = stayGroupKey(it);
+    const existing = byKey.get(key);
+    const date = it.date as string;
+    // Consecutive if date == endDate + 1
+    const nextDay = existing
+      ? format(addDays(parseISO(existing.endDate), 1), "yyyy-MM-dd")
+      : null;
+    if (existing && nextDay === date) {
+      existing.endDate = date;
+      existing.nights += 1;
+      existing.itemIds.push(it.id);
+      continue;
+    }
+    const pill: StayPill = {
+      id: it.id,
+      itemIds: [it.id],
+      startDate: date,
+      endDate: date,
+      nights: 1,
+      title: it.title,
+      locationName: it.location_name ?? null,
+      googlePlaceId: it.google_place_id ?? null,
+      firstItem: it,
+    };
+    pills.push(pill);
+    byKey.set(key, pill);
+  }
+
+  return pills;
+}
+
+/** Greedy lane assignment so overlapping pills stack vertically. Returns max lane index. */
+export function assignLanes<T extends { startDate: string; endDate: string }>(
+  pills: T[],
+): { pill: T; lane: number }[] {
+  const sorted = pills.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const laneEnds: string[] = []; // endDate per lane
+  const out: { pill: T; lane: number }[] = [];
+  for (const p of sorted) {
+    let lane = laneEnds.findIndex((end) => end < p.startDate);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(p.endDate);
+    } else {
+      laneEnds[lane] = p.endDate;
+    }
+    out.push({ pill: p, lane });
+  }
+  return out;
+}

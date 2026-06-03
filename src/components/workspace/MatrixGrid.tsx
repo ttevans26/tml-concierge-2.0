@@ -29,9 +29,13 @@ import {
   legColumnSpan,
   legOverlaps,
   formatLegLabel,
+  getStayPills,
+  assignLanes,
+  type StayPill,
   type LocationLeg,
 } from "@/lib/locationLegs";
-import { MapPin, Sparkles } from "lucide-react";
+import { MapPin, Sparkles, Bed } from "lucide-react";
+const EditItemDialog = lazy(() => import("./EditItemDialog"));
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -238,6 +242,12 @@ export default function MatrixGrid() {
     initialStart: string;
   }>({ open: false, leg: null, initialStart: "" });
 
+  /* ---- Stay pill edit dialog state ---- */
+  const [stayEdit, setStayEdit] = useState<{ open: boolean; item: ItineraryItem | null }>({
+    open: false,
+    item: null,
+  });
+
   // Smart Pull state
   const [smartPullOpen, setSmartPullOpen] = useState(false);
 
@@ -409,6 +419,18 @@ export default function MatrixGrid() {
     [activeTrip, itineraryItems, legs.length],
   );
   const displayedLegs: LocationLeg[] = legs.length > 0 ? legs : ghostLegs;
+
+  /* ---- Stay pills (consecutive same-stay grouping) ---- */
+  const stayPills = useMemo(() => getStayPills(itineraryItems), [itineraryItems]);
+  const stayLanes = useMemo(() => assignLanes(stayPills), [stayPills]);
+  const stayPillLane = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const { pill, lane } of stayLanes) m.set(pill.id, lane);
+    return m;
+  }, [stayLanes]);
+  const maxStayLane = stayLanes.reduce((m, x) => Math.max(m, x.lane), -1);
+  const STAY_LANE_H = 28;
+  const staysRowHeight = Math.max(112, (maxStayLane + 1) * STAY_LANE_H + 16);
 
   const handleSaveLeg = useCallback(
     async (data: {
@@ -701,7 +723,10 @@ export default function MatrixGrid() {
             {CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
-                className="flex h-28 items-center border-b border-border px-3"
+                className="flex items-center border-b border-border px-3"
+                style={{
+                  height: cat.key === "stays" ? `${staysRowHeight}px` : "112px",
+                }}
               >
                 <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
                   {cat.label}
@@ -755,6 +780,47 @@ export default function MatrixGrid() {
               })}
             </div>
 
+            {/* Absolute stay-pill overlay over the Stays row */}
+            <div
+              className="pointer-events-none absolute left-0 z-10"
+              style={{
+                top: `${40 + 36}px`, // date header (40) + location row (36)
+                width: `${days.length * 176}px`,
+                height: `${staysRowHeight}px`,
+              }}
+            >
+              {stayLanes.map(({ pill, lane }) => {
+                if (!activeTrip?.start_date) return null;
+                const { startIdx, span } = legColumnSpan(activeTrip.start_date, pill);
+                if (startIdx < 0 || startIdx >= days.length) return null;
+                const width = Math.min(span, days.length - startIdx) * 176;
+                const hasConflict = pill.itemIds.some((id) => conflictIds.has(id));
+                return (
+                  <button
+                    key={pill.id}
+                    type="button"
+                    onClick={() => setStayEdit({ open: true, item: pill.firstItem })}
+                    className={`pointer-events-auto absolute flex h-6 items-center gap-1.5 truncate rounded-sm border px-2.5 text-left transition-colors ${
+                      hasConflict
+                        ? "border-destructive/70 bg-destructive/10 ring-1 ring-destructive/40 hover:bg-destructive/20"
+                        : "border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
+                    }`}
+                    style={{
+                      left: `${startIdx * 176 + 4}px`,
+                      width: `${width - 8}px`,
+                      top: `${lane * STAY_LANE_H + 6}px`,
+                    }}
+                    title={`${pill.title}${pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"}`}
+                  >
+                    <Bed className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                    <span className="truncate font-inter text-[11px] font-medium">
+                      {pill.title} · {pill.nights}n
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
           {/* Day columns */}
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
@@ -789,25 +855,30 @@ export default function MatrixGrid() {
                   const cellItems = itineraryItems.filter(
                     (item) => item.date === dateStr && item.category === cat.key
                   );
+                  const isStays = cat.key === "stays";
                   return (
                     <div
                       key={cat.key}
-                      className={`flex h-28 flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
+                      className={`flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto ${CELL_BG[cat.key]}`}
+                      style={{ height: isStays ? `${staysRowHeight}px` : "112px" }}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
-                      {cellItems.map((item) => (
-                        <ItineraryItemCard
-                          key={item.id}
-                          item={item}
-                          hasConflict={conflictIds.has(item.id)}
-                          fix={conflictFixes.get(item.id) ?? null}
-                          onApplyFix={handleApplyFix}
-                        />
-                      ))}
+                      {!isStays &&
+                        cellItems.map((item) => (
+                          <ItineraryItemCard
+                            key={item.id}
+                            item={item}
+                            hasConflict={conflictIds.has(item.id)}
+                            fix={conflictFixes.get(item.id) ?? null}
+                            onApplyFix={handleApplyFix}
+                          />
+                        ))}
                       <button
                         onClick={() => openAdd(dateStr, cat.key)}
-                        className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
+                        className={`flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation ${
+                          isStays ? "mt-auto" : ""
+                        }`}
                       >
                         <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
                           + Add
@@ -860,6 +931,16 @@ export default function MatrixGrid() {
       {smartPullOpen && (
         <Suspense fallback={null}>
           <SmartPullInbox open={smartPullOpen} onOpenChange={setSmartPullOpen} />
+        </Suspense>
+      )}
+
+      {stayEdit.open && stayEdit.item && (
+        <Suspense fallback={null}>
+          <EditItemDialog
+            open={stayEdit.open}
+            onOpenChange={(open) => setStayEdit((s) => ({ ...s, open }))}
+            item={stayEdit.item}
+          />
         </Suspense>
       )}
     </div>

@@ -272,13 +272,28 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
                   value={cityInput}
                   onChange={setCityInput}
                   onSelect={(p) => {
-                    const name = p.description;
+                    const main = p.mainText || p.description.split(",")[0].trim();
+                    const parts = (p.secondaryText || "")
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    let state: string | null = null;
+                    let country: string | null = null;
+                    if (parts.length === 1) country = parts[0];
+                    else if (parts.length >= 2) {
+                      state = parts[0];
+                      country = parts[parts.length - 1];
+                    }
                     setCities((prev) => [
                       ...prev,
                       {
                         id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                        name,
+                        name: p.description,
                         nights: 1,
+                        city: main,
+                        state,
+                        country,
+                        googlePlaceId: p.placeId,
                       },
                     ]);
                     setCityInput("");

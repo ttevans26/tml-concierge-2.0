@@ -79,13 +79,6 @@ const CATEGORIES = [
   { key: "activity" as const, label: "Activity" },
 ];
 
-const CELL_BG: Record<string, string> = {
-  stays: "bg-[hsl(var(--cell-stays))]",
-  logistics: "bg-[hsl(var(--cell-logistics))]",
-  dining: "bg-[hsl(var(--cell-dining))]",
-  activity: "bg-[hsl(var(--cell-activity))]",
-};
-
 /** 7-stop rainbow palette token names; cycles for >7 legs. */
 const LEG_TOKENS = [
   "--leg-1",

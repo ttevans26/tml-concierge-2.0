@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { nativeStorage } from "@/lib/persistStorage";
 import { supabase } from "@/integrations/supabase/client";
+import { getCachedUserId } from "@/lib/session";
 
 export type StudioCategory = "stays" | "dining" | "activity" | "sites";
 
@@ -101,12 +102,12 @@ export const useStudioStore = create<StudioStore>()(
   setActiveFolder: (folder) => set({ activeFolder: folder }),
 
   addFolder: async (name, location) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    const uid = await getCachedUserId();
+    if (!uid) return null;
 
     const { data, error } = await supabase
       .from("studio_folders")
-      .insert({ name, location, user_id: user.id } as any)
+      .insert({ name, location, user_id: uid } as any)
       .select()
       .single();
 
@@ -121,12 +122,12 @@ export const useStudioStore = create<StudioStore>()(
   },
 
   addItem: async (folderId, itemData) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    const uid = await getCachedUserId();
+    if (!uid) return null;
 
     const { data, error } = await supabase
       .from("studio_items")
-      .insert({ ...itemData, folder_id: folderId, user_id: user.id } as any)
+      .insert({ ...itemData, folder_id: folderId, user_id: uid } as any)
       .select()
       .single();
 

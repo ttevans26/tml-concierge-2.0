@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, createContext, useContext, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { setCachedUserId } from "@/lib/session";
+import { obs } from "@/lib/observability";
 
 interface AuthContextType {
   session: Session | null;
@@ -27,6 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        setCachedUserId(session?.user?.id ?? null);
+        if (session?.user) {
+          obs.setUser({ id: session.user.id, email: session.user.email ?? undefined });
+        } else {
+          obs.setUser(null);
+        }
       }
     );
 
@@ -34,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      setCachedUserId(session?.user?.id ?? null);
     });
 
     return () => subscription.unsubscribe();

@@ -1,248 +1,116 @@
+# Remaining Roadmap — Ranked for iOS Plug-In Readiness
 
-# A2 — Data Layer Audit & Hardening
+> **Status update (this turn):** Tier 1 #1 *Auth Hardening* is **SHIPPED**.
+> Apple Sign-In enabled via `configure_social_auth(["google","apple"])`; HIBP
+> password check enabled. New `src/lib/session.ts` caches `auth.uid()` from
+> `onAuthStateChange` and replaces 6 `supabase.auth.getUser()` round-trips
+> in `useTripStore` / `useStudioStore` (cellular-critical). New
+> `src/lib/authRedirect.ts` centralizes OAuth redirect URI with a
+> Capacitor-aware branch (warns until iOS scheme is wired in Tier 2 #5).
+> Apple button added to Login + Signup. Signup now handles email-confirm
+> sessions gracefully (toast instead of redirect-to-empty). `useAuth`
+> identifies the user in `obs` (lights up the moment Sentry/PostHog ship).
+>
+> `auto_confirm_email` left `true` per MVP zero-verification memory rule.
+> Flip via `configure_auth` when you're ready to require confirmation in prod.
+>
+> **Next up per recommendation: Tier 1 #2 — Service-Layer Adoption.**
 
-## Status: SHIPPED (turn N)
-
-- Migration applied: 15 hot-path indexes, `bulk_update_item_dates(jsonb)` RPC, GRANT realignment.
-- GRANT fix: `anon` SELECT removed from 13 auth-only tables; granted only on `trips` and `itinerary_items` (needed for public share links). Service-role and authenticated explicit.
-- `useTripStore`: replaced every `SELECT *` with explicit column lists (`TRIP_COLUMNS`, `ITINERARY_COLUMNS`, `FLIGHT_COLUMNS`, `PROFILE_COLUMNS`); soft cap `.limit(500)` with console warning on `fetchTrips` / `fetchItineraryItems`; `bulkUpdateItemDates` now a single RPC call.
-- `useStudioStore`: explicit columns + 2000 limit on items.
-- `ConciergePanel`: messages capped at 200 per thread.
-- `SocialImportsTray`: Realtime channel scoped with `filter: user_id=eq.<uid>`.
-- `NotificationsPopover`: already scoped & limited.
-- Linter: only the two pre-existing intentional SECURITY DEFINER warnings remain (`has_role`, `request_trip_access`).
-
-### Deferred to follow-up turns
-- Caching `auth.uid()` in store to avoid `supabase.auth.getUser()` per mutation (A1 turn).
-- Cursor pagination UI (Phase B).
-- Service-layer migration of `itineraryItems` / `notifications` (A4).
-
----
-
-# A3 — Edge function discipline (SHIPPED)
-
-- New `supabase/functions/_shared/`: `cors.ts`, `logger.ts` (structured JSON), `validate.ts` (zero-dep schema lib), `rate-limit.ts` (in-isolate token bucket), `handler.ts` (CORS/rate-limit/error envelope).
-- Applied to `aviationstack-lookup` (30 req/min/IP, IATA + date schema) and `ingest-social-post` (10 imports/min/IP, URL + note schema).
-- Echoes `x-request-id` on every response for client-side correlation.
-- Removed hardcoded Aviationstack fallback API key and stopped echoing upstream error bodies to clients.
-
-### Follow-ups (apply same pattern, copy-paste)
-- `concierge-chat`, `scrape-and-parse`, `smart-pull*`, `get-concierge-suggestions`, `cancellation-scan`, `fetch-fx-rates`, `delete-account`.
-- For strict global rate limits, back the bucket with a Postgres `rate_limits` table or Upstash.
+Goal: every item below either (a) removes a blocker that would force a rewrite once we wrap in Capacitor / submit to the App Store, or (b) is deferrable until after the iOS shell is live. Ranking is by **iOS impact × user-visible risk × effort to retrofit later**.
 
 ---
 
-# A4 — Service-layer scaffolding (SHIPPED, adoption in-flight)
+## Tier 1 — Must ship before the iOS build (blockers)
 
-- Fixed `services/trips.ts` column list to match live schema (`name`, `display_currency` etc.).
-- Added `services/itineraryItems.ts`, `services/notifications.ts`, `services/profile.ts`, `services/flights.ts`. All export explicit column constants and use `wrapError` → `ServiceError`.
-- `services/itineraryItems.bulkUpdateDates` wraps the new RPC.
-- Migrated `NotificationsPopover` off direct `supabase.from("notifications")` calls — reference adoption pattern.
-- `src/services/index.ts` exposes the new namespaces.
+### 1. A1 — Auth Hardening (Apple Sign-In + email confirm + session model)
+**Why first:** Apple **requires** "Sign in with Apple" on any App Store app that offers third-party social login (we have Google). Retrofitting auth after launch invalidates existing sessions and breaks deep links. Also unlocks production-grade email confirm, which today is bypassed.
+- Enable `apple` provider via `configure_social_auth(["google","apple"])`, keep email.
+- Flip `auto_confirm_email=false` behind a `VITE_REQUIRE_EMAIL_CONFIRM` flag so dev/sandbox stays frictionless.
+- Cache `authUserId` in `useTripStore` on first resolve + `onAuthStateChange` (already noted as A2 follow-up). Removes a `supabase.auth.getUser()` round-trip per mutation — critical over cellular.
+- Add Capacitor-safe deep-link redirect handling (`app.lovable...://auth/callback`) in `useAuth.tsx`.
+- HIBP password check on (`password_hibp_enabled=true`).
 
-### Follow-ups
-- Migrate `useTripStore` (~13 call sites), `useStudioStore` (~5 call sites), `PackingList`, `TripDocuments`, `ConciergePanel`, `SocialImportsTray` to import from `@/services`.
-- Goal: only services files contain `from "@/integrations/supabase/client"`.
+### 2. Service-Layer Adoption (finish A4)
+**Why:** This is the seam that lets us swap Supabase JS for a Capacitor-native bridge or offline cache later without touching components. Today only `NotificationsPopover` is migrated.
+- Migrate call sites in order: `useTripStore` (13) → `useStudioStore` (5) → `PackingList`, `TripDocuments`, `ConciergePanel`, `SocialImportsTray`.
+- Add ESLint rule forbidding `@/integrations/supabase/client` imports outside `src/services/` + `src/integrations/`.
+- Outcome: a single place to add retry/offline/queue logic for mobile.
 
----
+### 3. Offline + Network Resilience Pass
+**Why:** Mobile networks drop. Without this, drag-and-drop on the Matrix corrupts state on flaky Wi-Fi.
+- Wrap every service write in a retry-with-backoff helper (lives in `src/services/_http.ts`).
+- Add `@tanstack/react-query` for read caching (we have it in deps — adopt for trips/items list, falls back to cache when offline).
+- Persist `useTripStore` slices (active trip + last 50 items) via the existing `lib/persistStorage.ts`.
+- Show the existing `OfflineIndicator` based on `navigator.onLine` + a service-layer `lastError` flag.
 
-# A6 — Resilience + a11y/i18n
-
-Deferred to next turn. AppErrorBoundary at root already exists; remaining work is route-level boundaries, skip-link, ARIA passes, and i18n stub.
-
----
-
-# A5 — Observability (SHIPPED scaffold)
-
-- New `src/lib/observability/`:
-  - `types.ts` — provider-agnostic `ErrorReporter` / `Analytics` / `WebVitalSample` contracts.
-  - `index.ts` — `obs` singleton + `registerErrorReporter` / `registerAnalytics` + `initWebVitals` (CLS/INP/LCP/FCP/TTFB via `web-vitals`). No-op providers by default so the app keeps working without DSN/keys.
-  - `sentry.ts` — opt-in adapter; uses dynamic import so `@sentry/react` stays out of the bundle until installed.
-  - `posthog.ts` — opt-in adapter; same pattern for `posthog-js`.
-- `main.tsx` boots providers when `VITE_SENTRY_DSN` / `VITE_POSTHOG_KEY` are present and wires `window.error` + `unhandledrejection` into `obs.captureException`.
-- `AppErrorBoundary.componentDidCatch` now reports through `obs` (no-op until Sentry is wired).
-
-### How to activate later
-- `bun add @sentry/react posthog-js`
-- Add `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, optional `VITE_POSTHOG_HOST` to env. No code changes required.
-- For native (Capacitor), swap `sentry.ts` for `@sentry/capacitor` inside `createSentryReporter`; the rest of the app keeps calling `obs.*`.
+### 4. Edge Function Discipline — finish A3 rollout
+**Why:** Today only 2 of 9 functions use the `_shared/handler.ts` wrapper. Inconsistent CORS / error envelopes will manifest as silent failures inside the Capacitor WebView (stricter cookie + origin rules).
+- Migrate: `concierge-chat`, `scrape-and-parse`, `smart-pull`, `smart-pull-gmail`, `get-concierge-suggestions`, `cancellation-scan`, `fetch-fx-rates`, `delete-account`.
+- Add `x-client: ios|web` header from the service layer for per-platform rate-limit tuning.
 
 ---
 
-# A7 — Accessibility & i18n baseline (SHIPPED scaffold)
+## Tier 2 — Ship with or right after the iOS shell
 
-- `src/i18n/` with `i18next` + `react-i18next` + browser language detector, English bundle at `src/i18n/locales/en.json` (common/errors/nav namespaces).
-- Initialized from `main.tsx`. Migration is incremental — components without `t()` keep their literal strings.
-- Skip-to-content link + route-level `AppErrorBoundary` already shipped under A6.
+### 5. Capacitor Native Wrapper (the "plug-in" itself)
+Depends on Tier 1.
+- `bun add @capacitor/ios @capacitor/splash-screen @capacitor/status-bar @capacitor/push-notifications @capacitor/preferences @capacitor/share @capacitor/app`.
+- `capacitor.config.ts` already correctly defaults to bundled `dist/` (good).
+- Wire `@capacitor/preferences` as the storage adapter behind `lib/persistStorage.ts` so the same code paths work on web + native.
+- Replace `localStorage` Supabase auth storage with a Capacitor-aware adapter (Keychain on iOS via `@capacitor-community/secure-storage` or `Preferences` w/ note).
+- Add `safe-area` CSS vars to `AppLayout` (notch + home indicator).
+- Push notifications stub → wire to `notifications` table on receipt.
 
-### Follow-ups
-- Run axe/Lighthouse a11y pass on Matrix Grid + Studio (0.5px borders are the likely contrast failure; need to validate against WCAG AA at small sizes).
-- Migrate user-visible strings in `AppErrorBoundary`, nav, and common dialogs to `t()` keys first; then ship `es.json` / `fr.json` lazily via `i18next` HTTP backend.
-- Add `aria-live` regions to Matrix drag feedback and toast queue.
+### 6. A6 — Route-level Error Boundaries + native crash plumbing
+- Per-route `<AppErrorBoundary>` on `/trip/:id`, `/studio`, `/network`.
+- Swap `lib/observability/sentry.ts` for `@sentry/capacitor` inside the same shim (zero call-site changes).
 
----
-
-# A8 — Build pipeline (SHIPPED config, requires GitHub repo settings)
-
-- `.github/workflows/ci.yml` — typecheck, lint (warn-only baseline), `vitest run`, build, dist artifact upload, optional Supabase DB lint, Lighthouse CI on PRs.
-- `.lighthouserc.json` — desktop preset, a11y ≥ 0.9 enforced, perf/best-practices/SEO warn-only baseline.
-- `renovate.json` — weekly Monday cadence, grouped Radix/types updates, react/supabase/capacitor groups gated on manual review, lockfile maintenance enabled.
-- `.github/dependabot.yml` — fallback if user prefers Dependabot over Renovate (do not enable both).
-
-### Required GitHub settings before workflow does real work
-- Add `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_ID` repo secrets to enable the `supabase-lint` job.
-- Install Renovate GitHub App OR enable Dependabot in repo settings.
-- Set branch protection on `main` to require the `verify` check.
-
-Goal: make the database safe, fast, and portable before we widen the user base or move toward iOS. No new features — only schema, indexes, GRANTs, query shape, and Realtime scoping.
+### 7. A5 — Activate Sentry + PostHog
+- Add `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY` secrets.
+- `bun add @sentry/react posthog-js` (and `@sentry/capacitor` for native build).
+- Already no-op safe today; activation is one PR.
 
 ---
 
-## 1. Run baseline scans (read-only, no DB changes)
+## Tier 3 — Post-launch polish (do not block iOS)
 
-Execute in order and capture output before changing anything:
+### 8. A7 — i18n adoption + a11y pass
+- Scaffold exists (`src/i18n/`). Migrate strings in `AppErrorBoundary`, nav, common dialogs. Ship `es.json` lazily.
+- axe/Lighthouse pass on Matrix Grid + Studio; validate 0.5px borders against WCAG AA contrast at small sizes (likely the only failure).
+- `aria-live` regions for Matrix drag feedback + toast queue.
 
-1. **Supabase linter** — `supabase--linter`
-   - Triage: ignore the two known SECURITY DEFINER warnings on `has_role` and `request_trip_access`. Anything else (missing RLS, exposed columns, multiple permissive policies, unused indexes) gets a ticket below.
-2. **Security scan** — `security--run_security_scan` followed by `security--get_scan_results`
-   - Cross-check against `<supabase-tables>`: every public table must have `auth.uid()`-scoped policies. The only intentional public reads are `trips (is_published=true)` and `itinerary_items (via published trip)`.
-3. **Table schema sanity** — `security--get_table_schema`
-   - Confirms RLS is enabled on all 15 tables.
-4. **DB health** — `supabase--db_health` (slow queries, cache hit ratio, bloat) and `supabase--analytics_query` for top-10 slow statements over the last 7 days.
-5. **GRANT audit** — `supabase--read_query`:
-   ```sql
-   SELECT table_name, grantee, string_agg(privilege_type, ',') AS privs
-   FROM information_schema.role_table_grants
-   WHERE table_schema='public' AND grantee IN ('anon','authenticated','service_role')
-   GROUP BY 1,2 ORDER BY 1,2;
-   ```
-   Required state per table is in section 3.
+### 9. A8 — Branch protection + Lighthouse gating
+- CI workflow exists. Required GitHub settings: add `SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_ID` secrets, install Renovate (disable Dependabot), require `verify` check on `main`. **One-time GitHub admin task, no code.**
+
+### 10. Phase B niceties
+- Real cursor pagination UI (current 500-row soft cap is enough for MVP).
+- Backend-backed rate limits (Postgres `rate_limits` table) replacing in-isolate buckets.
 
 ---
 
-## 2. Indexes to add (one migration)
+## Recommended sequencing
 
-Driven by the hot paths in `useTripStore` and `Index.tsx`. All `CREATE INDEX CONCURRENTLY` is unavailable inside a Supabase migration transaction, so use plain `CREATE INDEX IF NOT EXISTS`.
-
-| Table | Index | Why |
-|---|---|---|
-| `itinerary_items` | `(trip_id, date)` | `fetchItineraryItems` + Matrix Grid day buckets |
-| `itinerary_items` | `(trip_id, sort_order)` | current `.order("sort_order")` query |
-| `itinerary_items` | `(user_id, date DESC)` | Today / upcoming widgets on Index.tsx |
-| `itinerary_items` | `(trip_id, category)` | category filters in Matrix |
-| `trips` | `(user_id, created_at DESC)` | `fetchTrips` order |
-| `trips` | `(share_token)` where `is_published` | `request_trip_access` lookup |
-| `flight_tracking` | `(trip_id, departure_time)` | `fetchFlights` order |
-| `notifications` | `(user_id, is_dismissed, created_at DESC)` | popover query in `NotificationsPopover.tsx:77` |
-| `trip_packing_items` | `(trip_id, sort_order)` | `PackingList` queries |
-| `trip_documents` | `(trip_id, created_at DESC)` | `TripDocuments` list |
-| `concierge_messages` | `(conversation_id, created_at)` | message thread fetch |
-| `concierge_conversations` | `(user_id, updated_at DESC)` | conversation list |
-| `studio_items` | `(user_id, folder_id)` | vault listing |
-| `studio_social_imports` | `(user_id, status, created_at DESC)` | tray polling |
-| `trip_access_requests` | `(owner_user_id, status)` and `(requester_user_id)` | dashboard pending list |
-
-After running, re-execute `supabase--linter` to confirm no "unused index" warnings on these (they will be cold for 24h — note this in plan.md, not a regression).
-
----
-
-## 3. GRANT verification (same migration if anything missing)
-
-Expected state per `<public-schema-grants>`:
-
-- **service_role**: `ALL` on every table (edge functions need it).
-- **authenticated**: `SELECT, INSERT, UPDATE, DELETE` on every user-owned table.
-- **anon**: `SELECT` **only** on `trips` and `itinerary_items` (both have `is_published`-gated policies). All other tables must NOT grant anon.
-
-If the audit query in section 1 shows a row missing, add the exact `GRANT` in the same migration. Do not run the bulk loop — we have explicit policies.
-
----
-
-## 4. Query-shape changes in stores (no schema impact)
-
-### `src/stores/useTripStore.ts`
-
-1. **Stop `SELECT *`** — define explicit column lists like `services/trips.ts` already does. Add `ITINERARY_COLUMNS` and `FLIGHT_COLUMNS` constants and use them in `fetchItineraryItems`, `fetchFlights`, `createItineraryItem(...).select(...)`, and the duplicate-trip clone read.
-2. **Pagination guard** — `fetchTrips` and `fetchItineraryItems` add `.limit(500)` with a console warning if `data.length === 500` so we notice when a user crosses the soft cap. Real pagination is Phase B.
-3. **Batched updates** — `bulkUpdateItemDates` currently fires N parallel UPDATEs. Replace with a single `rpc('bulk_update_item_dates', { patches: jsonb })` call. Add the RPC in the migration:
-   ```sql
-   CREATE OR REPLACE FUNCTION public.bulk_update_item_dates(patches jsonb)
-   RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path=public AS $$
-   BEGIN
-     UPDATE public.itinerary_items i
-        SET date = (p->>'date')::date, updated_at = now()
-       FROM jsonb_array_elements(patches) p
-      WHERE i.id = (p->>'id')::uuid;
-   END $$;
-   GRANT EXECUTE ON FUNCTION public.bulk_update_item_dates(jsonb) TO authenticated;
-   ```
-   RLS still applies because it's SECURITY INVOKER.
-4. **Awaiting auth** — `fetchProfile` and every `createX` calls `supabase.auth.getUser()` per write. Cache the user id in the store (`set({ authUserId })`) on the first resolve, and refresh from the `onAuthStateChange` listener already wired in `useAuth.tsx`. Eliminates a network round-trip per mutation.
-5. **Remove manual `user_id` filters** — none today, good. Add an ESLint rule (or grep gate) to keep it that way (memory rule already in core).
-
-### `src/components/NotificationsPopover.tsx`
-
-- The current query filters `is_dismissed=false` then sorts by `created_at` — pairs with the new composite index.
-- Add `.limit(50)` so the popover never pulls an unbounded list.
-
-### `src/components/workspace/ConciergePanel.tsx`
-
-- Message fetch should `.order("created_at").limit(200)` per conversation.
-
-### `src/stores/useStudioStore.ts`
-
-- `studio_items` fetch: replace `SELECT *` with explicit columns and add `.order("created_at", { ascending: false }).limit(500)`.
-
----
-
-## 5. Scoped Realtime
-
-Audit every `supabase.channel(...)` subscription:
-
-```bash
-rg -n "\.channel\(|postgres_changes" src
+```text
+Week 1  ┃ #1 Auth hardening (Apple + deep links + cached uid)
+Week 1  ┃ #2 Service-layer migration (parallelizable; one store per PR)
+Week 2  ┃ #3 Offline + react-query + persist
+Week 2  ┃ #4 Edge function rollout (mechanical, parallelizable)
+        ┃── iOS-ready checkpoint ──
+Week 3  ┃ #5 Capacitor wrapper + Keychain auth + safe areas
+Week 3  ┃ #6 Route boundaries + @sentry/capacitor
+Week 4  ┃ #7 Activate Sentry/PostHog with live keys
+Post    ┃ #8 i18n + a11y, #9 CI gating, #10 Phase B
 ```
 
-For each, add a server-side filter so we don't fan out every user's writes to every client:
-
-```ts
-.on('postgres_changes',
-    { event: '*', schema: 'public', table: 'itinerary_items',
-      filter: `trip_id=eq.${tripId}` }, ...)
-```
-
-Tables that need a `filter`: `itinerary_items` (by `trip_id`), `notifications` (by `user_id`), `trip_packing_items` (by `trip_id`), `concierge_messages` (by `conversation_id`), `studio_social_imports` (by `user_id`).
-
 ---
 
-## 6. Verification checklist
+## Decision needed from you
 
-After the migration runs:
+Pick **one** to start the next build turn:
 
-1. `supabase--linter` — zero new warnings.
-2. `supabase--read_query` — re-run the GRANT audit; confirm `anon` only on `trips`/`itinerary_items`.
-3. Manual: open Trip Workspace, watch Network panel — `itinerary_items` fetch should return only declared columns, sub-200ms warm.
-4. Drag a card across days, confirm a single `rpc/bulk_update_item_dates` call instead of N updates.
-5. `supabase--db_health` — slow-query list should drop the previous top offenders.
-6. Update `.lovable/plan.md`: mark A2 complete, list shipped indexes + RPC.
+- **A — Auth hardening (#1)**: highest iOS-blocker risk; biggest single unlock.
+- **B — Service-layer migration (#2)**: pure refactor, low user risk, lets future offline/native work land cheaply.
+- **C — Offline + react-query (#3)**: most user-visible quality win, but easier after #2 is done.
+- **D — Edge function rollout (#4)**: mechanical, can run in parallel with anything else.
 
----
-
-## What's NOT in this turn
-
-- A1 auth hardening (Apple/email confirm/MFA) — separate turn.
-- Service-layer migration of `itineraryItems`/`notifications` — separate turn (A4).
-- Sentry/PostHog wiring — A5.
-- Real cursor pagination UI — Phase B.
-
----
-
-## Execution order
-
-1. Run scans (section 1), paste results into chat.
-2. Single migration: indexes + missing GRANTs (if any) + `bulk_update_item_dates` RPC.
-3. Edit `useTripStore.ts`, `useStudioStore.ts`, `NotificationsPopover.tsx`, `ConciergePanel.tsx` per section 4.
-4. Add filters to all Realtime channels (section 5).
-5. Re-run linter + manual smoke; update `.lovable/plan.md`.
-
-Estimated scope: 1 migration, ~5 file edits, no UI changes.
+My recommendation: **A → B → C → D**, in that order. A and D can be parallelized if you want me to interleave.

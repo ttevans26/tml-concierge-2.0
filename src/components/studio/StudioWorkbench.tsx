@@ -22,6 +22,7 @@ import { Layers } from "lucide-react";
 import PasteSocialDialog from "./PasteSocialDialog";
 import SocialImportsTray from "./SocialImportsTray";
 import { Share2 } from "lucide-react";
+import { MapArc, type ArcPoint } from "@/components/ui/map-arc";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -427,22 +428,45 @@ export default function StudioWorkbench() {
   };
 
   if (!activeFolder) {
+    // Pull all studio items across all folders for the atlas view
+    const allPoints: ArcPoint[] = (useStudioStore.getState().folders || [])
+      .flatMap((f) => f.items)
+      .filter((i) => i.lat != null && i.lng != null)
+      .map((i) => ({
+        id: i.id,
+        label: i.title,
+        sublabel: i.location ?? null,
+        lat: Number(i.lat),
+        lng: Number(i.lng),
+        kind:
+          i.category === "stays"
+            ? "stay"
+            : i.category === "dining"
+              ? "dining"
+              : i.category === "sites"
+                ? "site"
+                : "activity",
+      }));
+
     return (
-      <div className="flex h-full flex-col items-center justify-center bg-card px-8">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border-thin border-border bg-secondary">
-          <Compass className="h-6 w-6 text-accent" strokeWidth={1.5} />
+      <div className="flex h-full flex-col gap-5 overflow-y-auto bg-surface-1 p-6 sm:p-8">
+        <div>
+          <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
+            Design Lab
+          </p>
+          <h2 className="mt-1 font-display-md text-ink">
+            The <span className="italic-accent text-accent">atlas</span> of your ideas
+          </h2>
+          <p className="mt-2 max-w-md font-inter text-[12px] leading-relaxed text-muted-foreground">
+            Every saved place plotted on a single canvas. Choose a collection from the vault to begin curating, or seed it from a social link.
+          </p>
         </div>
-        <h3 className="font-playfair text-base font-semibold text-foreground">
-          Design Lab
-        </h3>
-        <p className="mt-2 max-w-xs text-center font-inter text-xs leading-relaxed text-muted-foreground">
-          Select a collection from the Ideas Vault to view and curate your research cards.
-        </p>
-        <div className="mt-5 flex items-center gap-2">
+        <MapArc points={allPoints} height={420} />
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
-            variant="outline"
-            className="border-thin font-inter text-xs h-8 gap-1"
+            variant="foilOutline"
+            className="font-inter text-xs h-8 gap-1"
             onClick={() => setPasteSocialOpen(true)}
           >
             <Share2 className="h-3 w-3" /> Paste Social Link

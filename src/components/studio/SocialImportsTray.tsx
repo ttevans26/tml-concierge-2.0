@@ -69,17 +69,31 @@ export default function SocialImportsTray({ refreshKey }: Props) {
 
   useEffect(() => {
     load();
-    // realtime updates
-    const ch = supabase
-      .channel("studio_social_imports_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "studio_social_imports" },
-        () => load(),
-      )
-      .subscribe();
+    // Realtime updates — scoped to this user so we don't fan out
+    // every other tenant's writes to this client.
+    let ch: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user?.id;
+      if (!uid || cancelled) return;
+      ch = supabase
+        .channel(`studio_social_imports:${uid}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "studio_social_imports",
+            filter: `user_id=eq.${uid}`,
+          },
+          () => load(),
+        )
+        .subscribe();
+    })();
     return () => {
-      supabase.removeChannel(ch);
+      cancelled = true;
+      if (ch) supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);

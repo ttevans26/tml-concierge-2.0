@@ -108,7 +108,8 @@ export default function ConciergePanel() {
         .from("concierge_messages")
         .select("id, role, content, tool_calls")
         .eq("conversation_id", activeConvId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true })
+        .limit(200);
       if (!cancelled) {
         setMessages(
           (data || [])

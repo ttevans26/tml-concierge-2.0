@@ -62,7 +62,7 @@ export const useStudioStore = create<StudioStore>()(
     set({ loading: true });
     const { data: folders, error } = await supabase
       .from("studio_folders")
-      .select("*")
+      .select("id,user_id,name,location,is_global,created_at,updated_at")
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -76,9 +76,10 @@ export const useStudioStore = create<StudioStore>()(
     if (folderIds.length > 0) {
       const { data, error: itemsErr } = await supabase
         .from("studio_items")
-        .select("*")
+        .select("id,user_id,folder_id,title,description,category,address,url,lat,lng,cost,source_url,source_reference,google_place_id,api_metadata,created_at,updated_at")
         .in("folder_id", folderIds)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: true })
+        .limit(2000);
       if (!itemsErr && data) items = data;
     }
 

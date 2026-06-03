@@ -201,7 +201,28 @@ export default function MatrixGrid() {
 
     const handleWheel = (e: WheelEvent) => {
       if (e.shiftKey) return;
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+
+      // Trackpad vs mouse-wheel detection.
+      // Mouse wheel: discrete integer deltaY, no deltaX, large magnitude (or line-mode).
+      // Trackpad / precision: small/fractional deltas, often with a deltaX component.
+      const isMouseWheel =
+        e.deltaMode === 1 ||
+        (e.deltaX === 0 &&
+          Math.abs(e.deltaY) >= 50 &&
+          Number.isInteger(e.deltaY));
+
+      if (!isMouseWheel) {
+        // Trackpad: cancel any lingering eased animation so it doesn't fight
+        // native momentum, then let the browser handle everything natively
+        // (horizontal two-finger swipe → native horizontal scroll on this
+        // overflow-auto container; vertical swipe → page scroll).
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+          lastTs = 0;
+        }
+        return;
+      }
 
       const maxLeft = el.scrollWidth - el.clientWidth;
       // Snap target to current scroll if user reversed direction mid-animation.

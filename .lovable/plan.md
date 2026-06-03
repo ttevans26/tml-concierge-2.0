@@ -1,61 +1,43 @@
 
-## Goal
+## Problem
 
-The Matrix Location row already renders spanning pills (city/state/country) — the row "looks missing" because nothing seeds real `location` itinerary items today. `CreateTripDialog` only writes `stays`, so users see at most dashed *ghost* legs derived from stays (no state/country). We need real Location items written from the two intended entry points.
+The Matrix grid's wheel handler (`src/components/workspace/MatrixGrid.tsx`, `useEffect` around L176–230) was designed for a discrete mouse wheel: it captures vertical `deltaY`, accumulates it into a target `scrollLeft`, and eases toward that target with `requestAnimationFrame`. On a trackpad this produces three compounding issues:
 
-## Two workflows for Location data
+1. **Double inertia / rubber-band.** Trackpads emit dozens of small wheel events with their own native momentum curve. Our RAF easing layers a second decay on top, so the grid keeps gliding after the fingers lift and overshoots the user's gesture.
+2. **Vertical scroll hijack.** Any two-finger swipe with even a slight vertical component (`|deltaY| > |deltaX|`) gets converted to horizontal pan, so the page no longer scrolls vertically the way the user expects when the cursor is over the matrix.
+3. **Native horizontal swipe fights easing.** When the user actually swipes horizontally (`|deltaX| > |deltaY|`), we early-return — but the easing loop from the *previous* vertical delta is still running, so the native horizontal scroll and the eased horizontal scroll collide and jitter.
 
-**1) At trip creation (CreateTripDialog → useTripStore.createTrip)**
-- Upgrade the city input in `CreateTripDialog` to use the existing `PlaceAutocomplete` component (already used elsewhere) so each selected city carries `city`, `state` (admin_area_level_1), `country`, and `google_place_id`. Free-text typing still allowed (state/country fall back to `null`).
-- Extend the `CityRow` type from `{ id, name, nights }` to also include `state | null`, `country | null`, `google_place_id | null`.
-- Extend `createTrip` options:
-  ```ts
-  options?: {
-    seedStays?: { city: string; nights: number }[];
-    seedLocations?: {
-      city: string;
-      state: string | null;
-      country: string | null;
-      googlePlaceId: string | null;
-      nights: number;
-    }[];
-  }
-  ```
-- In `createTrip`, after seeding stays, walk `seedLocations` in order starting at `trip.start_date`, computing each leg's `startDate` and `endDate = startDate + (nights-1) days`. Insert one `itinerary_items` row per leg:
-  ```
-  category: 'location',
-  title: "<city>, <state>, <country>" (compact, skip nulls),
-  location_name: city,
-  google_place_id: googlePlaceId,
-  date: startDate,
-  approval_status: 'confirmed',
-  metadata: { end_date, city, state, country }
-  ```
-- `CreateTripDialog.handleSubmit` passes both `seedStays` and `seedLocations` derived from the same `cities` array (same nights cadence, guaranteed alignment).
+## Fix
 
-**2) Manually in the Matrix grid (already wired, no changes required)**
-- The "+ Location" affordance per empty day cell and pill click → `LocationLegDialog` already lets users add/edit a leg with city/state/country + Google Places autocomplete. The pill overlay renders the spanning bar above the Stays row.
-- Confirm no regressions: leg overlap protection, click-to-edit, delete via dialog.
+Differentiate trackpad from mouse wheel and only apply the wheel→pan conversion + easing for a real mouse wheel. Trackpads get fully native scroll behavior (horizontal two-finger swipe pans the grid; vertical swipe scrolls the page) with zero JS interference.
 
-## Why the row "looks missing"
+**Detection heuristic** (standard, used by Figma/Linear/etc.):
 
-When a trip has no `location` items AND no `stays` items, the row renders as an empty band (label is still visible at left, but no pills). The current trip likely has stays only with ghost-leg derivation working — but on a freshly created trip with no stays yet, the user sees only the empty Location lane. After this change, real Location pills appear immediately on trip creation.
+- A wheel event is treated as a *mouse wheel* when `deltaMode === 1` (line mode), OR when `Math.abs(deltaY) >= 50` AND `deltaY % 1 === 0` AND `deltaX === 0`. Discrete, integer, vertical-only ≈ scroll wheel notch.
+- Anything else (small fractional deltas, any deltaX, or simultaneous x/y) is treated as a *trackpad/precision* input and we **do not** preventDefault, do not start RAF, do not touch `scrollLeft`. The browser handles it natively.
+
+**Behavior changes**
+
+- Trackpad two-finger horizontal swipe → native horizontal scroll of the matrix (already works because container is `overflow-auto`). No easing layered on top, no jitter.
+- Trackpad two-finger vertical swipe → page scrolls vertically as normal. Matrix no longer eats the gesture.
+- Mouse scroll wheel over the matrix → existing behavior preserved: vertical wheel notches convert to smooth horizontal pan with the RAF easing, only when the matrix can still pan horizontally; otherwise the page scrolls vertically.
+- Cancel any in-flight RAF the moment a trackpad event arrives so a lingering mouse-wheel ease doesn't fight a new trackpad gesture.
+
+**Drag-pan (mousedown/mousemove) and arrow-button scrolls are unchanged.**
 
 ## Files to edit
 
-- `src/components/CreateTripDialog.tsx` — swap city `Input` for `PlaceAutocomplete`; extend `CityRow`; pass `seedLocations` to `createTrip`.
-- `src/stores/useTripStore.ts` — add `seedLocations` option; insert `location` rows in `createTrip`.
-- `src/lib/locationLegs.ts` — reuse `formatLegLabel` for the title; no signature changes.
+- `src/components/workspace/MatrixGrid.tsx` — replace the `handleWheel` body inside the existing `useEffect` (L176–230). No new imports, no signature changes, no other component touched.
 
 ## Out of scope
 
-- No schema migration (the `location` enum value already exists; columns already in place).
-- No changes to MatrixGrid Location row rendering, Stay-pill rendering, ghost-leg logic, or `LocationLegDialog`.
-- No changes to share/public views.
+- No changes to the drag-pan handlers, arrow buttons, or scroll-edge state.
+- No changes to keyboard shortcuts.
+- No touch / pointer event handling changes (mobile already uses native scroll).
 
 ## Validation
 
-- New trip with cities "Paris (3n), Lyon (2n)" → after creation, Matrix shows two solid Location pills spanning the right days with full "Paris, Île-de-France, France · 3n" labels; pills are clickable and edit via `LocationLegDialog`.
-- New trip with only free-typed city text → pill shows just "Paris · 3n" (state/country null), still clickable.
-- Adding a leg manually from an empty day cell still works exactly as today.
-- Existing trips are unchanged; their ghost legs continue to display until the user clicks "Confirm N location legs" or edits a pill.
+- On a MacBook trackpad: two-finger horizontal swipe glides the matrix left/right with native rubber-banding, no judder. Two-finger vertical swipe scrolls the page; the matrix doesn't intercept. Diagonal swipes feel natural (both axes move independently).
+- On a Magic Mouse / external wheel mouse: scrolling the wheel up/down over the matrix still pans horizontally with the existing smooth easing.
+- On Windows precision touchpad: same as MacBook trackpad.
+- Arrow buttons and click-drag still pan as before.

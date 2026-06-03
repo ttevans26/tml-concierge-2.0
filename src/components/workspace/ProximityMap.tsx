@@ -14,6 +14,7 @@ const PIN_HEX: Record<ItineraryItem["category"], string> = {
   activity: "#B8934A",
   logistics: "#7A7A7A",
   sites_of_interest: "#8A5B9A",
+  location: "#9B7E4B",
 };
 
 const CATEGORY_LABEL: Record<ItineraryItem["category"], string> = {
@@ -22,6 +23,7 @@ const CATEGORY_LABEL: Record<ItineraryItem["category"], string> = {
   activity: "Activity",
   logistics: "Logistics",
   sites_of_interest: "Site",
+  location: "Location",
 };
 
 function getCoords(item: ItineraryItem): { lat: number; lng: number } | null {

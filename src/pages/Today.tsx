@@ -128,7 +128,9 @@ export default function Today() {
     const tm = addDays(t, 1);
     const isoT = format(t, "yyyy-MM-dd");
     const isoTm = format(tm, "yyyy-MM-dd");
-    const ofTrip = itineraryItems.filter((i) => trip && i.trip_id === trip.id && i.date);
+    const ofTrip = itineraryItems.filter(
+      (i) => trip && i.trip_id === trip.id && i.date && i.approval_status !== "cancelled",
+    );
     const sortByTime = (a: ItineraryItem, b: ItineraryItem) =>
       (a.start_time || "00:00").localeCompare(b.start_time || "00:00");
     return {

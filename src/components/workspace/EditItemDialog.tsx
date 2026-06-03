@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useTripStore } from "@/stores/useTripStore";
 import type { ItineraryItem } from "@/stores/useTripStore";
+import { cn } from "@/lib/utils";
 
 interface EditItemDialogProps {
   open: boolean;
@@ -37,6 +38,7 @@ export default function EditItemDialog({ open, onOpenChange, item }: EditItemDia
   const [title, setTitle] = useState(item.title);
   const [category, setCategory] = useState<ItineraryItem["category"]>(item.category);
   const [cost, setCost] = useState(item.cost != null ? String(item.cost) : "");
+  const [status, setStatus] = useState<ItineraryItem["approval_status"]>(item.approval_status);
   const [submitting, setSubmitting] = useState(false);
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
   const deleteItineraryItem = useTripStore((s) => s.deleteItineraryItem);
@@ -45,6 +47,7 @@ export default function EditItemDialog({ open, onOpenChange, item }: EditItemDia
     setTitle(item.title);
     setCategory(item.category);
     setCost(item.cost != null ? String(item.cost) : "");
+    setStatus(item.approval_status);
   }, [item]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,6 +58,7 @@ export default function EditItemDialog({ open, onOpenChange, item }: EditItemDia
       title: title.trim(),
       category,
       cost: cost ? parseFloat(cost) : null,
+      approval_status: status,
     });
     setSubmitting(false);
     onOpenChange(false);
@@ -80,6 +84,33 @@ export default function EditItemDialog({ open, onOpenChange, item }: EditItemDia
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
+              Status
+            </Label>
+            <div className="flex rounded-[2px] border border-border bg-background p-0.5">
+              {([
+                { v: "draft" as const, label: "Draft" },
+                { v: "confirmed" as const, label: "Confirmed" },
+                { v: "cancelled" as const, label: "Cancelled" },
+              ]).map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setStatus(opt.v)}
+                  className={cn(
+                    "flex-1 rounded-[2px] py-1.5 font-inter text-[11px] uppercase tracking-wider transition-colors",
+                    status === opt.v
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label className="font-inter text-[11px] uppercase tracking-widest text-muted-foreground">
               Title

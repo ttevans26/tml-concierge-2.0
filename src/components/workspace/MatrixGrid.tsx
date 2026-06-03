@@ -402,6 +402,90 @@ export default function MatrixGrid() {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
 
+  /* ---- Location legs (real + ghost-derived from stays) ---- */
+  const legs = useMemo(() => getLegs(itineraryItems), [itineraryItems]);
+  const ghostLegs = useMemo(
+    () => (activeTrip && legs.length === 0 ? getGhostLegsFromStays(activeTrip, itineraryItems) : []),
+    [activeTrip, itineraryItems, legs.length],
+  );
+  const displayedLegs: LocationLeg[] = legs.length > 0 ? legs : ghostLegs;
+
+  const handleSaveLeg = useCallback(
+    async (data: {
+      id?: string;
+      city: string;
+      state: string | null;
+      country: string | null;
+      googlePlaceId: string | null;
+      startDate: string;
+      nights: number;
+    }) => {
+      if (!activeTrip) return;
+      const endDate = format(
+        new Date(parseISO(data.startDate).getTime() + (data.nights - 1) * 86400000),
+        "yyyy-MM-dd",
+      );
+      // Block overlaps with other real legs
+      const conflict = legs.some(
+        (l) =>
+          l.id !== data.id &&
+          legOverlaps(data.startDate, endDate, l.startDate, l.endDate),
+      );
+      if (conflict) {
+        toast.error("Overlaps another location leg — adjust dates.");
+        return;
+      }
+      const title = formatLegLabel(data.city, data.state, data.country);
+      const payload: Partial<ItineraryItem> = {
+        trip_id: activeTrip.id,
+        category: "location",
+        title,
+        location_name: data.city,
+        google_place_id: data.googlePlaceId,
+        date: data.startDate,
+        approval_status: "confirmed",
+        metadata: {
+          end_date: endDate,
+          city: data.city,
+          state: data.state,
+          country: data.country,
+        },
+      };
+      if (data.id) {
+        await updateItineraryItem(data.id, payload);
+        toast.success("Location updated");
+      } else {
+        await createItineraryItem(payload);
+        toast.success("Location added");
+      }
+    },
+    [activeTrip, legs, createItineraryItem, updateItineraryItem],
+  );
+
+  const handleDeleteLeg = useCallback(
+    async (id: string) => {
+      await useTripStore.getState().deleteItineraryItem(id);
+      toast.success("Location removed");
+    },
+    [],
+  );
+
+  const confirmGhostLegs = useCallback(async () => {
+    if (!activeTrip || ghostLegs.length === 0) return;
+    for (const g of ghostLegs) {
+      await createItineraryItem({
+        trip_id: activeTrip.id,
+        category: "location",
+        title: g.city,
+        location_name: g.city,
+        date: g.startDate,
+        approval_status: "confirmed",
+        metadata: { end_date: g.endDate, city: g.city, state: null, country: null },
+      });
+    }
+    toast.success(`Confirmed ${ghostLegs.length} location ${ghostLegs.length === 1 ? "leg" : "legs"}`);
+  }, [activeTrip, ghostLegs, createItineraryItem]);
+
   if (days.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-background px-8 text-center">

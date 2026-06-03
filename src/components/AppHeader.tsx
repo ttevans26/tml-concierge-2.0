@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { User, CalendarClock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import SchedulingModal from "@/components/SchedulingModal";
 import NotificationsPopover from "@/components/NotificationsPopover";
 import OfflineIndicator from "@/components/OfflineIndicator";
+
+// Heavy: react-day-picker (≈106KB) + many shadcn primitives.
+// Lazy-loaded + only mounted after first open so the header click
+// handlers stay snappy (~200ms INP otherwise on first click).
+const ProfileDrawer = lazy(() => import("@/components/ProfileDrawer"));
+const SchedulingModal = lazy(() => import("@/components/SchedulingModal"));
 
 const navItems = [
   { label: "Trips", path: "/" },
@@ -19,6 +23,19 @@ export default function AppHeader() {
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  // Track whether each lazy bundle has ever been requested so we keep it
+  // mounted (preserving state) once it loads, but never mount before first use.
+  const [profileMounted, setProfileMounted] = useState(false);
+  const [scheduleMounted, setScheduleMounted] = useState(false);
+
+  const openSchedule = () => {
+    setScheduleMounted(true);
+    setScheduleOpen(true);
+  };
+  const openProfile = () => {
+    setProfileMounted(true);
+    setProfileOpen(true);
+  };
 
   return (
     <>
@@ -85,7 +102,7 @@ export default function AppHeader() {
             variant="ghost"
             size="sm"
             className="hidden gap-1.5 font-inter text-xs text-muted-foreground hover:text-foreground md:inline-flex"
-            onClick={() => setScheduleOpen(true)}
+            onClick={openSchedule}
           >
             <CalendarClock className="h-3 w-3 text-accent" strokeWidth={1.5} />
             Plan w/ Concierge
@@ -97,15 +114,21 @@ export default function AppHeader() {
             variant="ghost"
             size="icon"
             className="h-9 w-9 text-muted-foreground hover:text-foreground"
-            onClick={() => setProfileOpen(true)}
+            onClick={openProfile}
           >
             <User className="h-3.5 w-3.5" strokeWidth={1.5} />
           </Button>
         </div>
       </header>
 
-      <ProfileDrawer open={profileOpen} onOpenChange={setProfileOpen} />
-      <SchedulingModal open={scheduleOpen} onOpenChange={setScheduleOpen} />
+      <Suspense fallback={null}>
+        {profileMounted && (
+          <ProfileDrawer open={profileOpen} onOpenChange={setProfileOpen} />
+        )}
+        {scheduleMounted && (
+          <SchedulingModal open={scheduleOpen} onOpenChange={setScheduleOpen} />
+        )}
+      </Suspense>
     </>
   );
 }

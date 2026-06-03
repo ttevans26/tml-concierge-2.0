@@ -895,10 +895,34 @@ export default function MatrixGrid() {
                 const { startIdx, span } = legColumnSpan(activeTrip.start_date, leg);
                 if (startIdx < 0 || startIdx >= days.length) return null;
                 const width = Math.min(span, days.length - startIdx) * 176;
+                const token = legTokenById.get(leg.id);
+                const isDragging = draggingLegId === leg.id;
                 return (
                   <button
                     key={leg.id}
                     type="button"
+                    draggable={!leg.isGhost}
+                    onDragStart={(e) => {
+                      if (leg.isGhost) return;
+                      setDraggingLegId(leg.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("application/leg-id", leg.id);
+                    }}
+                    onDragEnd={() => setDraggingLegId(null)}
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes("application/leg-id")) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }
+                    }}
+                    onDrop={(e) => {
+                      const src = e.dataTransfer.getData("application/leg-id");
+                      if (!src) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDraggingLegId(null);
+                      handleLegReorderSwap(src, leg.id);
+                    }}
                     onClick={() =>
                       setLegDialog({
                         open: true,
@@ -906,15 +930,31 @@ export default function MatrixGrid() {
                         initialStart: leg.startDate,
                       })
                     }
-                    className={`pointer-events-auto absolute top-1 flex h-7 items-center gap-1.5 truncate rounded-sm px-2.5 text-left transition-colors ${
+                    data-no-pan
+                    className={`pointer-events-auto absolute top-1 flex h-7 items-center gap-1.5 truncate rounded-sm px-2.5 text-left transition-all ${
                       leg.isGhost
-                        ? "border border-dashed border-accent/50 bg-accent/5 italic text-accent/80 hover:bg-accent/10"
-                        : "border border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
-                    }`}
-                    style={{ left: `${startIdx * 176 + 4}px`, width: `${width - 8}px` }}
-                    title={leg.isGhost ? "Derived from stays — click to refine" : leg.label}
+                        ? "border border-dashed italic"
+                        : "border cursor-grab active:cursor-grabbing"
+                    } ${isDragging ? "opacity-40 ring-2 ring-accent" : ""}`}
+                    style={{
+                      left: `${startIdx * 176 + 4}px`,
+                      width: `${width - 8}px`,
+                      backgroundColor: token
+                        ? `hsl(var(${token}) / ${leg.isGhost ? 0.12 : 0.28})`
+                        : undefined,
+                      borderColor: token ? `hsl(var(${token}) / 0.55)` : undefined,
+                      color: "hsl(var(--foreground))",
+                    }}
+                    title={
+                      leg.isGhost
+                        ? "Derived from stays — click to refine"
+                        : `${leg.label} — drag to reorder, click to edit`
+                    }
                   >
-                    <MapPin className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                    {!leg.isGhost && (
+                      <GripVertical className="h-3 w-3 shrink-0 opacity-50" strokeWidth={1.5} />
+                    )}
+                    <MapPin className="h-3 w-3 shrink-0" strokeWidth={1.5} />
                     <span className="truncate font-inter text-[11px] font-medium">
                       {leg.label} · {leg.nights}n
                     </span>

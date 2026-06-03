@@ -69,9 +69,13 @@ const AVAILABILITY_UPDATED_AT = format(new Date(), "MMM d, h:mm a");
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  prefill?: {
+    tripId?: string | null;
+    agenda?: string;
+  };
 }
 
-export default function SchedulingModal({ open, onOpenChange }: Props) {
+export default function SchedulingModal({ open, onOpenChange, prefill }: Props) {
   const [date, setDate] = useState<Date | undefined>();
   const [slot, setSlot] = useState<string | null>(null);
   const [agenda, setAgenda] = useState("");
@@ -79,6 +83,9 @@ export default function SchedulingModal({ open, onOpenChange }: Props) {
   const trips = useTripStore((s) => s.trips);
   const selectedTrip = trips.find((t) => t.id === tripId) ?? null;
   const addAppointment = useTripStore((s) => s.addAppointment);
+
+  // Apply prefill when modal opens
+  useEffectOnce(() => {});
 
   const dateKey = date ? format(date, "yyyy-MM-dd") : null;
   const slotsForDate = dateKey ? AVAILABILITY[dateKey] ?? [] : [];

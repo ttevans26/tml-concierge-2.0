@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "TEAMID.app.lovable.tmlconcierge"
+        ],
+        "components": [
+          { "/": "/auth/callback", "comment": "OAuth return" },
+          { "/": "/login", "comment": "Sign-in" },
+          { "/": "/signup", "comment": "Sign-up" },
+          { "/": "/reset-password", "comment": "Password reset" },
+          { "/": "/concierge*", "comment": "Concierge ask + intents" },
+          { "/": "/trip/*", "comment": "Trip workspace" },
+          { "/": "/itinerary/*", "comment": "Shared itinerary" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.app.lovable.tmlconcierge"]
+  }
+}

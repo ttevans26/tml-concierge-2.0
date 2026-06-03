@@ -734,6 +734,42 @@ export default function MatrixGrid() {
             <span className="ml-2 font-inter text-[10px] text-muted-foreground/70">
               Drag, scroll, or use arrows to pan
             </span>
+            {activeTrip?.start_date && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-3 inline-flex items-center gap-1 rounded-sm border border-border px-2 py-1 font-inter text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/5"
+                    title="Change start date — shifts the entire trip"
+                  >
+                    <CalendarIcon className="h-3 w-3" />
+                    Trip starts: {format(parseISO(activeTrip.start_date), "MMM d, yyyy")}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={parseISO(activeTrip.start_date)}
+                    onSelect={async (d) => {
+                      if (!d || !activeTrip.start_date) return;
+                      const delta = differenceInCalendarDays(d, parseISO(activeTrip.start_date));
+                      if (delta === 0) return;
+                      const ok = await shiftTripDates(activeTrip.id, delta);
+                      if (ok) {
+                        toast.success(
+                          `Trip shifted ${delta > 0 ? "+" : ""}${delta} day${
+                            Math.abs(delta) === 1 ? "" : "s"
+                          }`,
+                        );
+                      }
+                    }}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
             {ghostLegs.length > 0 && (
               <button
                 type="button"

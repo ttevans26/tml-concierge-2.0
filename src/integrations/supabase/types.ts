@@ -567,13 +567,99 @@ export type Database = {
           },
         ]
       }
+      trip_documents: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          mime_type: string | null
+          notes: string | null
+          original_name: string
+          path: string
+          size_bytes: number | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          notes?: string | null
+          original_name: string
+          path: string
+          size_bytes?: number | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          notes?: string | null
+          original_name?: string
+          path?: string
+          size_bytes?: number | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trip_packing_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_packed: boolean
+          name: string
+          notes: string | null
+          qty: number
+          sort_order: number
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_packed?: boolean
+          name: string
+          notes?: string | null
+          qty?: number
+          sort_order?: number
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_packed?: boolean
+          name?: string
+          notes?: string | null
+          qty?: number
+          sort_order?: number
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       trips: {
         Row: {
           cover_image_url: string | null
           created_at: string
           description: string | null
           destination: string | null
+          display_currency: string | null
           end_date: string | null
+          fx_rates: Json | null
           id: string
           is_published: boolean
           name: string
@@ -589,7 +675,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           destination?: string | null
+          display_currency?: string | null
           end_date?: string | null
+          fx_rates?: Json | null
           id?: string
           is_published?: boolean
           name: string
@@ -605,7 +693,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           destination?: string | null
+          display_currency?: string | null
           end_date?: string | null
+          fx_rates?: Json | null
           id?: string
           is_published?: boolean
           name?: string

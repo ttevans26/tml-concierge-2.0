@@ -104,6 +104,8 @@ export default function MatrixGrid() {
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
   const updateTrip = useTripStore((s) => s.updateTrip);
   const moveItineraryItem = useTripStore((s) => s.moveItineraryItem);
+  const shiftTripDates = useTripStore((s) => s.shiftTripDates);
+  const bulkUpdateItemDates = useTripStore((s) => s.bulkUpdateItemDates);
   const undo = useTripStore((s) => s.undo);
   const redo = useTripStore((s) => s.redo);
   const canUndo = useTripStore((s) => s.canUndo());

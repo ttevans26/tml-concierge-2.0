@@ -577,16 +577,12 @@ export default function MatrixGrid() {
         new Date(parseISO(data.startDate).getTime() + (data.nights - 1) * 86400000),
         "yyyy-MM-dd",
       );
-      // Block overlaps with other real legs
-      const conflict = legs.some(
+      // Non-blocking overlap notice — let the user save and resolve gaps/conflicts visually.
+      const conflictLeg = legs.find(
         (l) =>
           l.id !== data.id &&
           legOverlaps(data.startDate, endDate, l.startDate, l.endDate),
       );
-      if (conflict) {
-        toast.error("Overlaps another location leg — adjust dates.");
-        return;
-      }
       const title = formatLegLabel(data.city, data.state, data.country);
       const payload: Partial<ItineraryItem> = {
         trip_id: activeTrip.id,
@@ -605,10 +601,18 @@ export default function MatrixGrid() {
       };
       if (data.id) {
         await updateItineraryItem(data.id, payload);
-        toast.success("Location updated");
+        if (conflictLeg) {
+          toast.warning(`Overlaps ${conflictLeg.city || "another leg"} — review your plan.`);
+        } else {
+          toast.success("Location updated");
+        }
       } else {
         await createItineraryItem(payload);
-        toast.success("Location added");
+        if (conflictLeg) {
+          toast.warning(`Overlaps ${conflictLeg.city || "another leg"} — review your plan.`);
+        } else {
+          toast.success("Location added");
+        }
       }
     },
     [activeTrip, legs, createItineraryItem, updateItineraryItem],

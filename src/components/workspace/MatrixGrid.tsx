@@ -34,7 +34,11 @@ import {
   type StayPill,
   type LocationLeg,
 } from "@/lib/locationLegs";
-import { MapPin, Sparkles, Bed } from "lucide-react";
+import { MapPin, Sparkles, Bed, CalendarIcon, GripVertical } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { buildSegments, computeReorderPatches } from "@/lib/segments";
+import { differenceInCalendarDays, addDays } from "date-fns";
 const EditItemDialog = lazy(() => import("./EditItemDialog"));
 
 /** Check if two time ranges overlap. Items without times don't conflict. */

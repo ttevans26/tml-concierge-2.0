@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeMinor",
+    ":automergeLinters",
+    ":automergeTesters",
+    ":automergeTypes"
+  ],
+  "schedule": ["before 6am on monday"],
+  "timezone": "America/Los_Angeles",
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on monday"] },
+  "vulnerabilityAlerts": { "labels": ["security"], "automerge": false },
+  "packageRules": [
+    { "matchManagers": ["npm"], "matchUpdateTypes": ["patch", "pin", "digest"], "automerge": true },
+    { "groupName": "react", "matchPackagePatterns": ["^react", "^@types/react"], "automerge": false },
+    { "groupName": "supabase", "matchPackagePatterns": ["^@supabase/"], "automerge": false },
+    { "groupName": "capacitor", "matchPackagePatterns": ["^@capacitor/"], "automerge": false },
+    { "groupName": "radix-ui", "matchPackagePatterns": ["^@radix-ui/"], "automerge": true }
+  ]
+}

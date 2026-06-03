@@ -1,23 +1,60 @@
-## Make trip start date directly clickable on the grid
+## Quick Reshuffle: list-style leg reordering
 
-Today there is a `Trip starts: Aug 20, 2026 ▾` popover, but it sits as small gray text next to the pan controls — easy to miss. The user expects to click the start date itself.
+Dragging a leg pill across many day-columns in the Matrix is awkward. Add a compact "Reshuffle" affordance that opens a vertical, playlist-style list of all location legs so you can drag them up/down (or use ▲/▼ buttons) — night counts stay locked, dates recompute automatically around the new order.
 
-### Change
+### Where it lives
 
-In `src/components/workspace/MatrixGrid.tsx`, wrap the **first day-header cell** (the `EEE, MMM d` label of the leftmost column, currently a plain `<span>` at line ~1011) in the same `Popover` + `Calendar` that already powers the inline shift. Selecting a new date computes `delta` and calls the existing `shiftTripDates(activeTrip.id, delta)` — no store or DB changes.
+A small **`Shuffle` icon button** added to the leg-row toolbar in `MatrixGrid.tsx` (next to the existing pan / "Trip starts" controls, above the location pills). Tooltip: *"Reshuffle legs"*.
 
-Visual treatment for the first column only:
-- Cursor `pointer`, subtle dotted underline under the label, a tiny `Pencil` (or `ChevronDown`) icon to the right.
-- Hover: background tint `bg-accent/10`, foreground turns to `text-accent` to signal "editable anchor".
-- Tooltip: `Click to shift entire trip to a new start date`.
-- All other day headers stay non-interactive.
+Clicking opens a `Popover` (anchored under the button, ~360px wide) titled **"Reshuffle legs"** with:
+- Subtitle: *"Drag to reorder. Night counts stay; dates shift automatically."*
+- A vertical list of leg rows, one per segment, in current order.
 
-Keep the existing `Trip starts: …` popover in the pan toolbar as a secondary affordance (some users will look there). No other layout changes.
+### Each row shows
 
-### Validation
-- Clicking the first column header (currently `Thu, Aug 20`) opens a calendar; picking Aug 14 shifts every itinerary item by −6 days and the date header redraws as `Thu, Aug 14`.
-- Picking the same date is a no-op; toast confirms `Trip shifted -6 days`.
-- Other day columns remain non-clickable.
+```
+≡  London                                ▲ ▼
+   Aug 20 → Aug 24 · 4 nights
+```
+
+- Grip handle (left) — drag up/down within the list.
+- Location name (Playfair, sm).
+- Date range + nights count (Inter, xs, muted).
+- ▲ / ▼ icon buttons on the right for one-tap moves (disabled at top/bottom).
+- "Unassigned days" segments are listed but rendered muted and **non-draggable** (locked in place visually, same behavior as today's EditTripDialog reorder).
+
+A live preview line at the bottom: *"New trip window: Aug 13 → Sep 10"* (unchanged total, just confirms nothing fell off).
+
+Footer: **Cancel** · **Apply reshuffle** (primary). Apply is disabled until the order actually changes.
+
+### Behavior
+
+Reuse the existing engine — no new logic:
+- `buildSegments(activeTrip, itineraryItems)` → initial list.
+- On Apply: `computeReorderPatches(activeTrip, newOrder, items)` → `bulkUpdateItemDates(patches)` (same flow `handleLegReorderSwap` uses today).
+- Toast: *"Legs reshuffled"*.
+- Close popover; Matrix re-renders with the new vertical rainbow bands already in place.
+
+### Drag-across-the-grid: keep or remove?
+
+Keep the existing drag-to-swap on the horizontal leg pills (some users will discover it), but the Reshuffle popover becomes the primary, recommended path. No change to the pills' visual treatment.
 
 ### Files
-- `src/components/workspace/MatrixGrid.tsx` — wrap first day header in Popover/Calendar; reuse existing handler.
+
+- `src/components/workspace/MatrixGrid.tsx`
+  - Add `Shuffle` lucide icon import.
+  - Add a `Popover` trigger button in the leg toolbar area (near the existing "Trip starts" popover).
+  - Render the new `ReshuffleLegsList` inside the popover.
+- `src/components/workspace/ReshuffleLegsList.tsx` *(new)*
+  - Self-contained list using `@dnd-kit/sortable` (already a dep — `SegmentCard` uses it).
+  - Reuses `SegmentCard`-style row markup but trimmed (no category-count chips, adds ▲/▼ buttons).
+  - Props: `trip`, `items`, `onApply(patches)`, `onClose()`.
+
+No store, schema, or `segments.ts` changes — purely a new presentation surface over existing helpers.
+
+### Validation
+
+- Open the popover, drag "London" from position 3 → position 1. Apply. Every London-window item moves to the start of the trip; following legs slide back by London's night count; total trip length unchanged.
+- ▲/▼ buttons produce the same result as dragging by one slot.
+- Cancel discards changes; no DB write.
+- Unassigned-day rows can't be dragged but render in place so users see the full picture.

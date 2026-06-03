@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { nativeStorage } from "@/lib/persistStorage";
 import { supabase } from "@/integrations/supabase/client";
+import { getCachedUserId } from "@/lib/session";
 
 export type StudioCategory = "stays" | "dining" | "activity" | "sites";
 

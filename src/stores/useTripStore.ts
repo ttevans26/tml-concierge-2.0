@@ -431,12 +431,12 @@ export const useTripStore = create<TripStore>()(
   },
 
   fetchProfile: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const uid = await getCachedUserId();
+    if (!uid) return;
     const { data, error } = await supabase
       .from("profiles")
       .select(PROFILE_COLUMNS)
-      .eq("user_id", user.id)
+      .eq("user_id", uid)
       .single();
     if (!error && data) set({ profile: data as Profile });
   },
@@ -446,11 +446,11 @@ export const useTripStore = create<TripStore>()(
   /* ---- Create ---- */
 
   createTrip: async (data) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    const uid = await getCachedUserId();
+    if (!uid) return null;
     const { data: trip, error } = await supabase
       .from("trips")
-      .insert({ ...data, user_id: user.id, name: data.name || "Untitled Trip" } as any)
+      .insert({ ...data, user_id: uid, name: data.name || "Untitled Trip" } as any)
       .select()
       .single();
     if (!error && trip) {
@@ -481,14 +481,14 @@ export const useTripStore = create<TripStore>()(
   },
 
   duplicateTrip: async (id) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    const uid = await getCachedUserId();
+    if (!uid) return null;
     const source = get().trips.find((t) => t.id === id);
     if (!source) return null;
     const { data: newTrip, error } = await supabase
       .from("trips")
       .insert({
-        user_id: user.id,
+        user_id: uid,
         name: `${source.name} (Copy)`,
         description: source.description,
         destination: source.destination,
@@ -510,7 +510,7 @@ export const useTripStore = create<TripStore>()(
     if (items && items.length) {
       const clones = (items as any[]).map((i) => {
         const { id: _id, created_at, updated_at, ...rest } = i;
-        return { ...rest, trip_id: newTrip.id, user_id: user.id, approval_status: "draft", confirmation_code: null };
+        return { ...rest, trip_id: newTrip.id, user_id: uid, approval_status: "draft", confirmation_code: null };
       });
       await supabase.from("itinerary_items").insert(clones);
     }
@@ -521,11 +521,11 @@ export const useTripStore = create<TripStore>()(
   /* ---- Itinerary items ---- */
 
   createItineraryItem: async (data) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    const uid = await getCachedUserId();
+    if (!uid) return null;
     const { data: item, error } = await supabase
       .from("itinerary_items")
-      .insert({ ...data, user_id: user.id, title: data.title || "Untitled", category: data.category || "activity" } as any)
+      .insert({ ...data, user_id: uid, title: data.title || "Untitled", category: data.category || "activity" } as any)
       .select(ITINERARY_COLUMNS)
       .single();
     if (!error && item) {

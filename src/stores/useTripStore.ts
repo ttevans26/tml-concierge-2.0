@@ -214,6 +214,10 @@ interface TripStore {
   updateItineraryItem: (id: string, data: Partial<ItineraryItem>) => Promise<void>;
   deleteItineraryItem: (id: string) => Promise<void>;
   moveItineraryItem: (id: string, patch: { date?: string | null; category?: ItineraryItem["category"] }) => Promise<void>;
+  /** Apply a batch of `{id, date}` updates in a single round-trip (used by trip-editor). */
+  bulkUpdateItemDates: (patches: { id: string; date: string }[]) => Promise<void>;
+  /** Shift trip window + every item by deltaDays. Returns true on success. */
+  shiftTripDates: (id: string, deltaDays: number) => Promise<boolean>;
 }
 
 /* ------------------------------------------------------------------ */

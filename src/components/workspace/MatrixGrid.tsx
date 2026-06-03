@@ -231,6 +231,13 @@ export default function MatrixGrid() {
     category: ItineraryItem["category"];
   }>({ open: false, date: "", category: "activity" });
 
+  /* ---- Location leg dialog state ---- */
+  const [legDialog, setLegDialog] = useState<{
+    open: boolean;
+    leg: LocationLeg | null;
+    initialStart: string;
+  }>({ open: false, leg: null, initialStart: "" });
+
   // Smart Pull state
   const [smartPullOpen, setSmartPullOpen] = useState(false);
 

@@ -39,6 +39,7 @@ const CATEGORY_LABELS: Record<ItineraryItem["category"], string> = {
   dining: "Dining",
   activity: "Activity",
   sites_of_interest: "Site of Interest",
+  location: "Location",
 };
 
 const LOGISTICS_TYPES = [

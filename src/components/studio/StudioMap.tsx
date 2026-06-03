@@ -193,8 +193,7 @@ export default function StudioMap() {
               <MapArc
                 mode="globe"
                 points={[]}
-                height={9999}
-                className="h-full w-full rounded-none border-0 shadow-none"
+                className="absolute inset-0 h-full w-full rounded-none border-0 shadow-none"
               />
             </div>
             <div className="border-t border-border bg-card/80 px-4 py-3 text-center backdrop-blur-sm">

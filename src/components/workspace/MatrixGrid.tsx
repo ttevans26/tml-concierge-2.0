@@ -1226,6 +1226,32 @@ export default function MatrixGrid() {
               </div>
             );
           })}
+          {/* Trailing "+ Add day" column (Google Sheets style) */}
+          {activeTrip?.end_date && (
+            <div className="w-44 shrink-0 border-r border-border last:border-r-0">
+              <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!activeTrip?.end_date) return;
+                    const nextDay = addDays(parseISO(activeTrip.end_date), 1);
+                    const next = format(nextDay, "yyyy-MM-dd");
+                    await updateTrip(activeTrip.id, { end_date: next });
+                    toast.success(`Added ${format(nextDay, "MMM d")}`);
+                  }}
+                  className="group inline-flex items-center gap-1 rounded-sm border border-dashed border-border/60 px-2 py-0.5 font-inter text-[11px] text-muted-foreground hover:border-accent hover:bg-accent/10 hover:text-accent"
+                  title="Add another day to the trip"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add day
+                </button>
+              </div>
+              <div
+                className="flex h-full flex-col items-center justify-start bg-muted/10"
+                style={{ minHeight: `${36 + staysRowHeight + 112 * (CATEGORIES.length - 1) + 32}px` }}
+              />
+            </div>
+          )}
           </div>
         </div>
       </div>

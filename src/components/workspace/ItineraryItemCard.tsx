@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { lazy, memo, Suspense, useState, useMemo } from "react";
 import { Pencil, ExternalLink, Anchor, CreditCard, Navigation, AlertTriangle, Star, MapPin } from "lucide-react";
 import { Wand2 } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import { haversineDistance, formatDistance } from "@/lib/distance";
-import EditItemDialog from "./EditItemDialog";
+const EditItemDialog = lazy(() => import("./EditItemDialog"));
 import { MarkerPopup } from "@/components/ui/marker-popup";
 import type { ConflictFix } from "@/lib/conflictResolution";
 

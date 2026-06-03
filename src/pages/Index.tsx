@@ -305,7 +305,9 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 export default function Index() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { trips, loading, fetchTrips } = useTripStore();
+  const trips = useTripStore((s) => s.trips);
+  const loading = useTripStore((s) => s.loading);
+  const fetchTrips = useTripStore((s) => s.fetchTrips);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {

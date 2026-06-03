@@ -111,7 +111,10 @@ export default function Today() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const online = useOnlineStatus();
-  const { trips, itineraryItems, fetchTrips, fetchItineraryItems } = useTripStore();
+  const trips = useTripStore((s) => s.trips);
+  const itineraryItems = useTripStore((s) => s.itineraryItems);
+  const fetchTrips = useTripStore((s) => s.fetchTrips);
+  const fetchItineraryItems = useTripStore((s) => s.fetchItineraryItems);
 
   useEffect(() => {
     if (!authLoading && user) fetchTrips();

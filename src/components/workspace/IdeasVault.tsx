@@ -52,7 +52,7 @@ const STATUS_PROGRESS: Record<ScrapeStatus, number> = {
 };
 
 export default function IdeasVault() {
-  const { activeTrip } = useTripStore();
+  const activeTrip = useTripStore((s) => s.activeTrip);
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [status, setStatus] = useState<ScrapeStatus>("idle");
   const [errorDetail, setErrorDetail] = useState("");

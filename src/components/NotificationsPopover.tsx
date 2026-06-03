@@ -61,6 +61,17 @@ export default function NotificationsPopover() {
 
   const unread = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
 
+  // Pre-compute relative timestamps once per items change so we don't
+  // recompute formatDistanceToNow for every item on every render.
+  const itemsView = useMemo(
+    () =>
+      items.slice(0, 25).map((n) => ({
+        ...n,
+        timeAgo: formatDistanceToNow(new Date(n.created_at), { addSuffix: true }),
+      })),
+    [items],
+  );
+
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("notifications")
@@ -81,22 +92,35 @@ export default function NotificationsPopover() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // Defer the initial fetch + realtime subscription to idle so it never
+    // competes with the page's first-paint or with header click handlers.
     let chan: ReturnType<typeof supabase.channel> | null = null;
-    (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      const uid = u.user?.id;
-      if (!uid) return;
-      chan = supabase
-        .channel(`notifs:${uid}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
-          () => void load(),
-        )
-        .subscribe();
-    })();
+    let cancelled = false;
+    const ric: (cb: () => void) => number =
+      (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+        .requestIdleCallback ?? ((cb) => window.setTimeout(cb, 200));
+    const handle = ric(() => {
+      if (cancelled) return;
+      void load();
+      (async () => {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u.user?.id;
+        if (!uid || cancelled) return;
+        chan = supabase
+          .channel(`notifs:${uid}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
+            () => void load(),
+          )
+          .subscribe();
+      })();
+    });
     return () => {
+      cancelled = true;
+      const cic = (window as unknown as { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback;
+      if (cic) cic(handle);
+      else window.clearTimeout(handle);
       if (chan) supabase.removeChannel(chan);
     };
   }, [load]);
@@ -183,7 +207,7 @@ export default function NotificationsPopover() {
           </div>
         ) : (
           <ul className="max-h-[420px] overflow-y-auto">
-            {items.map((n) => {
+            {itemsView.map((n) => {
               const Icon = ICONS[n.kind] ?? Bell;
               return (
                 <li key={n.id}>
@@ -221,10 +245,7 @@ export default function NotificationsPopover() {
                         </p>
                       )}
                       <p className="mt-1 font-inter text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                        {LABELS[n.kind] ?? n.kind} ·{" "}
-                        {formatDistanceToNow(new Date(n.created_at), {
-                          addSuffix: true,
-                        })}
+                        {LABELS[n.kind] ?? n.kind} · {n.timeAgo}
                       </p>
                     </div>
                     <button

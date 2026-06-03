@@ -484,6 +484,7 @@ export default function MatrixGrid() {
 
   /* ---- Drag-to-reorder location legs (swap on drop) ---- */
   const [draggingLegId, setDraggingLegId] = useState<string | null>(null);
+  const [reshuffleOpen, setReshuffleOpen] = useState(false);
 
   const handleLegReorderSwap = useCallback(
     async (sourceId: string, targetId: string) => {

@@ -552,6 +552,7 @@ export default function MatrixGrid() {
       {viewMode === "calendar" ? (
         <CalendarStaysView />
       ) : (
+      <OrphanItemsBanner />
       <div
         ref={scrollRef}
         onMouseDown={onPanMouseDown}

@@ -25,19 +25,37 @@ import { toast } from "sonner";
 import { buildSegments, computeReorderPatches, type LocationSegment } from "@/lib/segments";
 import type { ItineraryItem, Trip } from "@/stores/useTripStore";
 import { useTripStore } from "@/stores/useTripStore";
+import type { LocationLeg } from "@/lib/locationLegs";
 
 interface Props {
   trip: Trip;
   items: ItineraryItem[];
+  /** Legs sourced from the Matrix Grid (real "location" items or ghost-derived). */
+  legs: LocationLeg[];
   onApply: (patches: { id: string; date: string }[]) => Promise<void> | void;
   onClose: () => void;
 }
 
-export default function ReshuffleLegsList({ trip, items, onApply, onClose }: Props) {
+export default function ReshuffleLegsList({ trip, items, legs, onApply, onClose }: Props) {
   const baseSegments = useMemo(() => buildSegments(trip, items), [trip, items]);
   const [order, setOrder] = useState<LocationSegment[]>(baseSegments);
   const [saving, setSaving] = useState(false);
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
+
+  /**
+   * Match a segment to the Matrix-Grid leg covering the same window.
+   * Legs and segments share start dates when both are derived from stays,
+   * but real "location" legs may overlap multiple stay segments — fall back
+   * to any leg whose date range overlaps the segment.
+   */
+  const legForSegment = (seg: LocationSegment): LocationLeg | null => {
+    if (seg.isUnassigned) return null;
+    const exact = legs.find((l) => l.startDate === seg.startDate);
+    if (exact) return exact;
+    return (
+      legs.find((l) => l.startDate <= seg.endDate && seg.startDate <= l.endDate) ?? null
+    );
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -141,9 +159,21 @@ export default function ReshuffleLegsList({ trip, items, onApply, onClose }: Pro
                   preview={preview.get(seg.id) ?? null}
                   onMove={(dir) => move(seg.id, dir)}
                   items={items}
+                  leg={legForSegment(seg)}
                   onRename={async (label) => {
                     const trimmed = label.trim();
                     if (!trimmed) return;
+                    const leg = legForSegment(seg);
+                    // 1) If a real location item backs this leg, update it as the source of truth.
+                    if (leg && !leg.isGhost && leg.itemRef) {
+                      const prevMeta = (leg.itemRef.metadata as Record<string, unknown>) ?? {};
+                      await updateItineraryItem(leg.itemRef.id, {
+                        location_name: trimmed,
+                        metadata: { ...prevMeta, city: trimmed },
+                      });
+                    }
+                    // 2) Always cascade to the stays in this window so the Matrix
+                    //    ghost-leg label and Reshuffle label stay in sync.
                     const stayIds = items
                       .filter(
                         (it) =>
@@ -192,10 +222,11 @@ interface RowProps {
   preview: { start: string; end: string } | null;
   onMove: (dir: -1 | 1) => void;
   items: ItineraryItem[];
+  leg: LocationLeg | null;
   onRename: (label: string) => Promise<void> | void;
 }
 
-function ReshuffleRow({ segment, index, total, preview, onMove, items, onRename }: RowProps) {
+function ReshuffleRow({ segment, index, total, preview, onMove, items, leg, onRename }: RowProps) {
   const disabled = segment.isUnassigned;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: segment.id,
@@ -207,9 +238,10 @@ function ReshuffleRow({ segment, index, total, preview, onMove, items, onRename 
     opacity: isDragging ? 0.5 : 1,
   };
 
-  // Derive the current city/location label from the underlying stays.
-  // Prefer location_name (city/state/country) over the hotel title.
+  // Source of truth: the Matrix Grid leg label (city, state, country).
+  // Falls back to any stay's location_name if no leg exists for this segment.
   const currentLabel = useMemo(() => {
+    if (leg?.label && leg.label.trim()) return leg.label.trim();
     const stays = items.filter(
       (it) =>
         it.category === "stays" &&
@@ -219,6 +251,18 @@ function ReshuffleRow({ segment, index, total, preview, onMove, items, onRename 
     );
     const named = stays.find((s) => s.location_name && s.location_name.trim());
     return named?.location_name?.trim() ?? "";
+  }, [leg, items, segment.startDate, segment.endDate]);
+
+  // Hotel/stay names shown as subline context.
+  const stayTitles = useMemo(() => {
+    const stays = items.filter(
+      (it) =>
+        it.category === "stays" &&
+        it.date &&
+        it.date >= segment.startDate &&
+        it.date <= segment.endDate,
+    );
+    return Array.from(new Set(stays.map((s) => s.title))).join(" · ");
   }, [items, segment.startDate, segment.endDate]);
 
   const [editing, setEditing] = useState(false);
@@ -294,9 +338,9 @@ function ReshuffleRow({ segment, index, total, preview, onMove, items, onRename 
             </button>
           )}
         </div>
-        {currentLabel && (
+        {stayTitles && (
           <div className="ml-4 truncate font-inter text-[9px] uppercase tracking-wide text-muted-foreground/70">
-            {segment.location}
+            {stayTitles}
           </div>
         )}
         <div className="mt-0.5 font-inter text-[10px] text-muted-foreground">

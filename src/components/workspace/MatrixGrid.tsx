@@ -809,6 +809,7 @@ export default function MatrixGrid() {
                   <ReshuffleLegsList
                     trip={activeTrip}
                     items={itineraryItems}
+                    legs={displayedLegs}
                     onApply={async (patches) => {
                       if (patches.length > 0) await bulkUpdateItemDates(patches);
                     }}

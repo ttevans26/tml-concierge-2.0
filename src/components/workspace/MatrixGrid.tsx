@@ -5,14 +5,22 @@ import ItineraryItemCard from "./ItineraryItemCard";
 import AddItemDialog from "./AddItemDialog";
 import TripSettingsModal from "./TripSettingsModal";
 import SmartPullInbox from "./SmartPullInbox";
+import EditTripDialog from "./EditTripDialog";
+import OrphanItemsBanner from "./OrphanItemsBanner";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "sonner";
 import { suggestFixesForConflicts, type ConflictFix } from "@/lib/conflictResolution";
-import { Inbox, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { Inbox, Lock, Globe, ChevronLeft, ChevronRight, Pencil, Settings, ChevronDown } from "lucide-react";
 import { Undo2, Redo2 } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import CalendarStaysView from "./CalendarStaysView";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */

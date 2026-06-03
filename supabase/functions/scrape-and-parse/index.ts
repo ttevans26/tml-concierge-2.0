@@ -34,9 +34,16 @@ serve(async (req) => {
         ? [body.url]
         : [];
 
-    if (urls.length === 0) {
+    const files: Array<{ filename?: string; mime: string; dataBase64: string }> = Array.isArray(body?.files)
+      ? body.files.filter(
+          (f: any) =>
+            f && typeof f.dataBase64 === "string" && typeof f.mime === "string",
+        )
+      : [];
+
+    if (urls.length === 0 && files.length === 0) {
       return new Response(
-        JSON.stringify({ error: "A valid URL (or urls[]) is required" }),
+        JSON.stringify({ error: "Provide urls[] or files[]" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -46,12 +53,16 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const results = await Promise.all(
+    const urlResults = await Promise.all(
       urls.map((u) => processSingleUrl(u, LOVABLE_API_KEY))
     );
+    const fileResults = await Promise.all(
+      files.map((f) => processSingleFile(f, LOVABLE_API_KEY))
+    );
+    const results = [...urlResults, ...fileResults];
 
     // Single-URL legacy shape preserved when only one URL was passed
-    if (urls.length === 1) {
+    if (urls.length === 1 && files.length === 0) {
       const r = results[0];
       if (r.error) {
         return new Response(JSON.stringify({ error: r.error }), {
@@ -64,15 +75,15 @@ serve(async (req) => {
       });
     }
 
-    // Multi-URL: aggregate response with per-URL status
+    // Multi: aggregate response with per-source status
     const flatItems = results.flatMap((r) =>
-      (r.items || []).map((i: any) => ({ ...i, source_url: r.url }))
+      (r.items || []).map((i: any) => ({ ...i, source_url: r.url ?? null }))
     );
     return new Response(
       JSON.stringify({
         items: flatItems,
         results: results.map((r) => ({
-          url: r.url,
+          source: r.url ?? r.filename ?? "file",
           ok: !r.error,
           error: r.error || null,
           count: r.items?.length ?? 0,
@@ -142,4 +153,52 @@ async function processSingleUrl(url: string, apiKey: string): Promise<{
     console.error("Failed to parse AI response:", parseErr, content);
   }
   return { url, items };
+}
+
+async function processSingleFile(
+  file: { filename?: string; mime: string; dataBase64: string },
+  apiKey: string,
+): Promise<{ url?: string; filename?: string; items?: any[]; error?: string; status?: number }> {
+  const dataUrl = `data:${file.mime};base64,${file.dataBase64}`;
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Source file: ${file.filename ?? "uploaded"} (${file.mime}). ` +
+                `Extract all travel items as a JSON array as specified.`,
+            },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    if (aiResponse.status === 429) return { filename: file.filename, error: "Rate limit exceeded", status: 429 };
+    if (aiResponse.status === 402) return { filename: file.filename, error: "AI credits exhausted", status: 402 };
+    const errText = await aiResponse.text();
+    console.error("AI gateway error (file):", aiResponse.status, errText);
+    return { filename: file.filename, error: `AI gateway error: ${aiResponse.status}`, status: 500 };
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content || "[]";
+  let items: any[] = [];
+  try {
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) items = JSON.parse(jsonMatch[0]);
+  } catch (parseErr) {
+    console.error("Failed to parse AI file response:", parseErr, content);
+  }
+  return { filename: file.filename, items };
 }

@@ -17,6 +17,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 import { classifyPlace, CATEGORY_LABEL } from "@/lib/placeCategory";
+import BulkImportDialog, { type ImportedPendingItem } from "./BulkImportDialog";
+import { Layers } from "lucide-react";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -64,6 +66,7 @@ export default function StudioWorkbench() {
   const [scraping, setScraping] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [prefillTitle, setPrefillTitle] = useState<string>("");
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   /* Find-a-Place (Google Places autocomplete) state */
   const [placeQuery, setPlaceQuery] = useState("");
@@ -600,10 +603,28 @@ export default function StudioWorkbench() {
             )}
             {scraping ? "Scraping…" : "Scrape"}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={() => setBulkOpen(true)}
+            disabled={scraping}
+            title="Bulk import URLs, PDFs, or screenshots"
+          >
+            <Layers className="h-3 w-3" />
+            Bulk
+          </Button>
         </div>
       </div>
 
       {/* Pending Review Tray */}
+      <BulkImportDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        onImported={(items: ImportedPendingItem[]) =>
+          setPendingItems((prev) => [...prev, ...items])
+        }
+      />
       {pendingItems.length > 0 && (
         <div className="border-b border-border bg-secondary/30 px-5 py-3">
           <p className="mb-2 font-inter text-[10px] font-semibold uppercase tracking-wider text-accent">

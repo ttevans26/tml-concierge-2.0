@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -6,6 +6,7 @@ import {
   UserCheck,
   AlertTriangle,
   CalendarClock,
+  X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -15,89 +16,109 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 type NotificationKind =
   | "follow"
   | "request_granted"
   | "travel_warning"
-  | "trip_countdown";
+  | "trip_countdown"
+  | "cancellation_deadline"
+  | string;
 
 interface NotificationItem {
   id: string;
   kind: NotificationKind;
   title: string;
-  body: string;
+  body: string | null;
   created_at: string;
-  read: boolean;
+  is_read: boolean;
   href?: string;
+  trip_id?: string | null;
+  item_id?: string | null;
 }
 
-const ICONS: Record<NotificationKind, typeof Bell> = {
+const ICONS: Record<string, typeof Bell> = {
   follow: UserPlus,
   request_granted: UserCheck,
   travel_warning: AlertTriangle,
   trip_countdown: CalendarClock,
+  cancellation_deadline: CalendarClock,
 };
 
-const LABELS: Record<NotificationKind, string> = {
+const LABELS: Record<string, string> = {
   follow: "New follower",
   request_granted: "Access granted",
   travel_warning: "Travel alert",
   trip_countdown: "Trip countdown",
+  cancellation_deadline: "Cancellation deadline",
 };
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "n-1",
-    kind: "trip_countdown",
-    title: "Tokyo & Kyoto — 7 days out",
-    body: "Your trip begins Aug 21. Time to confirm transfers and final dining bookings.",
-    created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    read: false,
-    href: "/",
-  },
-  {
-    id: "n-2",
-    kind: "travel_warning",
-    title: "Typhoon advisory — Osaka region",
-    body: "Possible weather disruption Aug 23–24. Consider flexible alternatives for Kinosaki day trip.",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
-    read: false,
-  },
-  {
-    id: "n-3",
-    kind: "request_granted",
-    title: "Eloise Marchand granted access",
-    body: "You can now view her shared itineraries.",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 22).toISOString(),
-    read: false,
-    href: "/network/user/nu-eloise",
-  },
-  {
-    id: "n-4",
-    kind: "follow",
-    title: "Saskia Klein started following you",
-    body: "View her profile and follow back.",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
-    read: true,
-    href: "/network/user/nu-saskia",
-  },
-];
 
 export default function NotificationsPopover() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [items, setItems] = useState<NotificationItem[]>([]);
 
-  const unread = useMemo(() => items.filter((n) => !n.read).length, [items]);
+  const unread = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
 
-  const markAllRead = () =>
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-
-  const handleClick = (n: NotificationItem) => {
-    setItems((prev) =>
-      prev.map((it) => (it.id === n.id ? { ...it, read: true } : it)),
+  const load = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("id, kind, title, body, created_at, is_read, trip_id, item_id")
+      .eq("is_dismissed", false)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      console.warn("notifications load failed", error);
+      return;
+    }
+    setItems(
+      (data ?? []).map((n) => ({
+        ...n,
+        href: n.trip_id ? `/trip/${n.trip_id}` : undefined,
+      })) as NotificationItem[],
     );
+  }, []);
+
+  useEffect(() => {
+    void load();
+    let chan: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user?.id;
+      if (!uid) return;
+      chan = supabase
+        .channel(`notifs:${uid}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
+          () => void load(),
+        )
+        .subscribe();
+    })();
+    return () => {
+      if (chan) supabase.removeChannel(chan);
+    };
+  }, [load]);
+
+  const markAllRead = async () => {
+    const ids = items.filter((n) => !n.is_read).map((n) => n.id);
+    if (ids.length === 0) return;
+    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    await supabase.from("notifications").update({ is_read: true }).in("id", ids);
+  };
+
+  const dismiss = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    await supabase.from("notifications").update({ is_dismissed: true }).eq("id", id);
+  };
+
+  const handleClick = async (n: NotificationItem) => {
+    if (!n.is_read) {
+      setItems((prev) => prev.map((it) => (it.id === n.id ? { ...it, is_read: true } : it)));
+      await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+    }
     if (n.href) {
       setOpen(false);
       navigate(n.href);
@@ -163,14 +184,16 @@ export default function NotificationsPopover() {
         ) : (
           <ul className="max-h-[420px] overflow-y-auto">
             {items.map((n) => {
-              const Icon = ICONS[n.kind];
+              const Icon = ICONS[n.kind] ?? Bell;
               return (
                 <li key={n.id}>
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleClick(n)}
                     className={cn(
-                      "flex w-full items-start gap-3 border-b border-foreground/5 px-4 py-3 text-left transition-colors hover:bg-secondary/40 last:border-b-0",
-                      !n.read && "bg-accent/[0.04]",
+                      "group flex w-full items-start gap-3 border-b border-foreground/5 px-4 py-3 text-left transition-colors hover:bg-secondary/40 last:border-b-0 cursor-pointer",
+                      !n.is_read && "bg-accent/[0.04]",
                     )}
                   >
                     <span
@@ -188,21 +211,30 @@ export default function NotificationsPopover() {
                         <p className="font-playfair text-[13px] font-semibold text-foreground truncate">
                           {n.title}
                         </p>
-                        {!n.read && (
+                        {!n.is_read && (
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                         )}
                       </div>
-                      <p className="mt-0.5 font-inter text-[11px] text-muted-foreground line-clamp-2">
-                        {n.body}
-                      </p>
+                      {n.body && (
+                        <p className="mt-0.5 font-inter text-[11px] text-muted-foreground line-clamp-2">
+                          {n.body}
+                        </p>
+                      )}
                       <p className="mt-1 font-inter text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                        {LABELS[n.kind]} ·{" "}
+                        {LABELS[n.kind] ?? n.kind} ·{" "}
                         {formatDistanceToNow(new Date(n.created_at), {
                           addSuffix: true,
                         })}
                       </p>
                     </div>
-                  </button>
+                    <button
+                      onClick={(e) => dismiss(n.id, e)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                      title="Dismiss"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 </li>
               );
             })}

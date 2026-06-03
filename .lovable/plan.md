@@ -1,61 +1,71 @@
-# Demo-Ready Functional Gap Plan
+## Deferred Batch — Implementation Plan
 
-Goal: every visible click-path in the demo lands somewhere believable. Real backend swaps, mailbox connectors, per-user OAuth, etc. stay deferred to Release 2.0. The fixes below are scoped to UX/content gaps that would visibly break a guided demo.
+Scope: ship the 6 deferred items from the demo-readiness audit. Avatar uploads are blocked by workspace policy (public buckets disabled) — included as a deferred note, not built.
 
-## Scope (in)
+---
 
-### 1. Travel Network — replace "mock" feel with curated demo content
-- Keep `MOCK_NETWORK_USERS` / `MOCK_NETWORK_TRIPS` as the data source (no real social graph this milestone).
-- Refresh content so it reads as a real "Travel Network" — replace lorem-ish names/destinations with 6–8 plausible TML-style profiles (e.g. "Marcus Chen — 14 trips planned", real city names matching trip dates Aug–Sept 2026).
-- Add a subtle "Curated demo network" footnote on `/network` so reviewers know what they're seeing (single line, muted; no big banner).
-- Wire **Request Access** button to a local optimistic state + toast ("Request sent — they'll see it in their inbox") so the click-path completes.
+### 1. Concierge chat persistence + tool-calling rewrite
 
-### 2. Travel Warnings Feed — turn mock list into a believable live feed
-- Keep `MOCK_TRAVEL_WARNINGS` as source; rewrite entries to match likely Aug–Sept 2026 destinations actually in user trips (pull destinations from `useTripStore.trips` and filter accordingly — already partly done via `filterWarningsForTrip`).
-- Add `published_at` recency labels ("2 days ago") computed from `Date.now()` so the feed feels live.
-- Add small "Source: U.S. State Dept / WHO (curated)" caption so it's clearly demo-curated, not fabricated authority.
+Tables `concierge_conversations` and `concierge_messages` already exist with RLS. The current `ConciergePanel` + `concierge-chat` edge function is a stateless one-shot.
 
-### 3. Concierge Inspiration / Gemini placeholder cleanup
-- The `GeminiFooter` floating button and `ConciergePanel` both call `concierge-chat` — verify both render a non-empty response in demo. If the function returns `429`/`unavailable` the panel shows a destructive toast; add a friendly fallback message ("Concierge is warming up — try again in a moment") instead of a red error toast for first-load 429.
-- Hide the floating `GeminiFooter` on `/trip/:id` since `ConciergePanel` already serves that surface (currently both visible → confusing in demo).
+- Refactor `concierge-chat` to accept `conversation_id`, load prior messages, append new user message, stream Gemini response (SSE), persist assistant reply + `tool_calls` JSON.
+- Define a small tool schema: `create_itinerary_item`, `search_studio_items`, `suggest_anchor`, `get_trip_summary`. Execute tool calls server-side against the trip via service role with `user_id` from JWT.
+- Rewrite `ConciergePanel`: conversation list sidebar (new / rename / delete), threaded message view with `react-markdown`, streaming indicator, tool-call chips ("Added Aman Venice to Day 3").
+- Persist active `conversation_id` per trip in `useTripStore`.
 
-### 4. Tools page — Upcoming Appointments empty state
-- Inspect `UpcomingAppointments`; if list is empty for the demo trip, render a single seeded example ("Visa appointment — Italian Consulate · Aug 4") tied to the active trip so the panel never demos empty.
-- Same treatment for `PreparednessChecklist` AI tasks — confirm `deriveAiTasks` returns at least 3 derived items for the seeded itinerary; otherwise add a fallback derived item ("Confirm passport valid 6+ months past return date").
+### 2. Bulk Import dialog + PDF/image OCR
 
-### 5. Dashboard `Index` — empty/first-run polish
-- If `trips.length === 0`, render a single "Sample Trip" CTA card seeded with the Aug 21 – Sept 17 2026 demo trip parameters so the demo can be reset and still look populated.
+`scrape-and-parse` already accepts arrays. UI is single-URL.
 
-### 6. Profile drawer — "Avatar uploads coming soon" copy
-- Remove the "coming soon" label and either (a) wire to existing `avatars` Supabase bucket (if present) or (b) cleanly hide the upload control behind a placeholder ring. Pick (b) for demo speed — initials avatar, no broken button.
+- New `BulkImportDialog` opened from Studio header: tabs for **URLs** (textarea, one per line), **PDF/Image** (drop zone, multi-file).
+- For PDFs/images: upload to a new private `import-uploads` bucket, call extended `scrape-and-parse` with `{ type: 'file', storage_path }`. Backend uses Gemini multimodal (vision) to extract structured items — no separate OCR service.
+- Progress list with per-item status (queued / parsing / done / failed), bulk "Send to Review Tray".
 
-### 7. ShareControls / PublicTripView spot-check
-- Confirm `/share/:token` loads without auth and redacts financial fields (RLS view already in place). Add only what's needed: a one-line "View-only — costs redacted" caption at the top of the public view if missing.
+### 3. NotificationsPopover → real `notifications` table
 
-### 8. Studio → Matrix drag, Smart Pull paste, Proximity Map
-- These were just shipped in prior milestones — smoke-test once via browser tool to confirm no regression; no scoped change unless something is broken.
+Currently mocked. Schema exists; `cancellation-scan` already writes rows.
 
-## Scope (out — Release 2.0)
+- Replace mock data with Supabase query: `select * from notifications where is_dismissed = false order by created_at desc limit 50`.
+- Realtime subscription on `notifications` filtered by `user_id`.
+- Actions: mark read (`is_read = true`), dismiss (`is_dismissed = true`), click → route to trip/item.
+- Unread badge count from query.
 
-- Real social graph / Trip Access Requests backend wiring.
-- Real travel-warnings data source (State Dept API / RSS).
-- Gmail/Nylas mailbox connector for Smart Pull.
-- Per-category budget caps, real cpp redemption math, live FX rates.
-- Push notifications, Live Activities, iOS share-sheet, biometric.
-- Sentry, PostHog, Playwright E2E, image upload via Supabase Storage.
-- Avatar upload pipeline.
+### 4. Gap-fill → SchedulingModal + conflict "Apply fix"
 
-## Technical notes
+`SchedulingModal` and `conflictResolution.ts` exist but aren't wired.
 
-- All changes are frontend-only except possibly seeding one demo trip. No new tables, no new edge functions, no new secrets.
-- Files touched (estimate):
-  - `src/data/mockNetworkUsers.ts`, `src/data/mockNetworkTrips.ts`, `src/data/mockTravelWarnings.ts` — content refresh.
-  - `src/pages/Network.tsx`, `src/components/network/ConnectionsList.tsx` — Request Access toast + "curated" footnote.
-  - `src/components/tools/TravelWarningsFeed.tsx` — recency labels + source caption.
-  - `src/components/GeminiFooter.tsx` — hide on `/trip/:id`; soften 429 toast.
-  - `src/components/workspace/ConciergePanel.tsx` — same toast softening.
-  - `src/components/tools/UpcomingAppointments.tsx`, `src/components/tools/PreparednessChecklist.tsx` — seeded fallback items.
-  - `src/pages/Index.tsx` — empty-state seed CTA.
-  - `src/components/ProfileDrawer.tsx` — remove "coming soon" copy, clean avatar fallback.
-  - `src/pages/PublicTripView.tsx` — view-only caption if missing.
-- Browser smoke test after edits: load `/`, open a trip, open Concierge tab, open Map tab, open Studio, open `/network`, open `/tools`, open `/share/:token`.
+- In `MatrixGrid`, gap-detection action buttons currently insert drafts directly — change to open `SchedulingModal` pre-filled with `{ date, category, suggestion }`.
+- In `ItineraryItemCard` conflict badge, add **Apply fix** button. Reads suggested resolution from `conflictResolution.ts` (shift time, move day, drop overlap) and applies via `updateItineraryItem`.
+- Toast with undo on both actions.
+
+### 5. Gmail connector for Smart Pull
+
+Today: paste-only into `SmartPullInbox`.
+
+- Use the **Google Mail** App connector (workspace owner's inbox — surface this caveat in UI: "Connected inbox: <email>. Forward reservations here.").
+- New edge function `smart-pull-gmail`: lists last 50 messages matching `subject:(reservation OR booking OR itinerary) newer_than:90d`, passes body to existing `smart-pull` parser, writes results to review tray.
+- "Sync Gmail" button in `SmartPullInbox` header + 15-min cron (pg_cron) for background pulls.
+- Requires `standard_connectors--connect` with `google_mail` on `gmail.readonly` scope before deploy.
+
+### 6. Avatar uploads — deferred note only
+
+Workspace policy `cloud_block_public_buckets` blocks the public bucket this needs. Options for the user:
+- (a) Enable public buckets in workspace Settings → Privacy & Security, then we add `avatars` bucket + upload UI in `ProfileDrawer`.
+- (b) Keep private bucket and serve via signed URLs (works today, slightly slower image loads).
+
+No build until the user picks (a) or (b).
+
+---
+
+### Suggested execution order
+
+1. Notifications wiring (smallest, unblocks demo polish)
+2. Gap-fill / conflict apply-fix wiring (frontend-only)
+3. Bulk import dialog (UI + backend extension)
+4. Concierge persistence + streaming + tool calls (largest)
+5. Gmail connector (requires user to link connection first)
+6. Avatar uploads (after user decides on bucket policy)
+
+### Out of scope (Release 2.0)
+
+Cross-day drag inside Matrix, undo/redo stack, push/email notification delivery, Nylas multi-provider mail, screenshot OCR via dedicated Vision API (Gemini multimodal covers demo).

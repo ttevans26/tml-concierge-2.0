@@ -22,6 +22,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import CalendarStaysView from "./CalendarStaysView";
+import LocationLegDialog from "./LocationLegDialog";
+import {
+  getLegs,
+  getGhostLegsFromStays,
+  legColumnSpan,
+  legOverlaps,
+  formatLegLabel,
+  type LocationLeg,
+} from "@/lib/locationLegs";
+import { MapPin, Sparkles } from "lucide-react";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -221,6 +231,13 @@ export default function MatrixGrid() {
     category: ItineraryItem["category"];
   }>({ open: false, date: "", category: "activity" });
 
+  /* ---- Location leg dialog state ---- */
+  const [legDialog, setLegDialog] = useState<{
+    open: boolean;
+    leg: LocationLeg | null;
+    initialStart: string;
+  }>({ open: false, leg: null, initialStart: "" });
+
   // Smart Pull state
   const [smartPullOpen, setSmartPullOpen] = useState(false);
 
@@ -385,6 +402,90 @@ export default function MatrixGrid() {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
 
+  /* ---- Location legs (real + ghost-derived from stays) ---- */
+  const legs = useMemo(() => getLegs(itineraryItems), [itineraryItems]);
+  const ghostLegs = useMemo(
+    () => (activeTrip && legs.length === 0 ? getGhostLegsFromStays(activeTrip, itineraryItems) : []),
+    [activeTrip, itineraryItems, legs.length],
+  );
+  const displayedLegs: LocationLeg[] = legs.length > 0 ? legs : ghostLegs;
+
+  const handleSaveLeg = useCallback(
+    async (data: {
+      id?: string;
+      city: string;
+      state: string | null;
+      country: string | null;
+      googlePlaceId: string | null;
+      startDate: string;
+      nights: number;
+    }) => {
+      if (!activeTrip) return;
+      const endDate = format(
+        new Date(parseISO(data.startDate).getTime() + (data.nights - 1) * 86400000),
+        "yyyy-MM-dd",
+      );
+      // Block overlaps with other real legs
+      const conflict = legs.some(
+        (l) =>
+          l.id !== data.id &&
+          legOverlaps(data.startDate, endDate, l.startDate, l.endDate),
+      );
+      if (conflict) {
+        toast.error("Overlaps another location leg — adjust dates.");
+        return;
+      }
+      const title = formatLegLabel(data.city, data.state, data.country);
+      const payload: Partial<ItineraryItem> = {
+        trip_id: activeTrip.id,
+        category: "location",
+        title,
+        location_name: data.city,
+        google_place_id: data.googlePlaceId,
+        date: data.startDate,
+        approval_status: "confirmed",
+        metadata: {
+          end_date: endDate,
+          city: data.city,
+          state: data.state,
+          country: data.country,
+        },
+      };
+      if (data.id) {
+        await updateItineraryItem(data.id, payload);
+        toast.success("Location updated");
+      } else {
+        await createItineraryItem(payload);
+        toast.success("Location added");
+      }
+    },
+    [activeTrip, legs, createItineraryItem, updateItineraryItem],
+  );
+
+  const handleDeleteLeg = useCallback(
+    async (id: string) => {
+      await useTripStore.getState().deleteItineraryItem(id);
+      toast.success("Location removed");
+    },
+    [],
+  );
+
+  const confirmGhostLegs = useCallback(async () => {
+    if (!activeTrip || ghostLegs.length === 0) return;
+    for (const g of ghostLegs) {
+      await createItineraryItem({
+        trip_id: activeTrip.id,
+        category: "location",
+        title: g.city,
+        location_name: g.city,
+        date: g.startDate,
+        approval_status: "confirmed",
+        metadata: { end_date: g.endDate, city: g.city, state: null, country: null },
+      });
+    }
+    toast.success(`Confirmed ${ghostLegs.length} location ${ghostLegs.length === 1 ? "leg" : "legs"}`);
+  }, [activeTrip, ghostLegs, createItineraryItem]);
+
   if (days.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-background px-8 text-center">
@@ -504,6 +605,17 @@ export default function MatrixGrid() {
             <span className="ml-2 font-inter text-[10px] text-muted-foreground/70">
               Drag, scroll, or use arrows to pan
             </span>
+            {ghostLegs.length > 0 && (
+              <button
+                type="button"
+                onClick={confirmGhostLegs}
+                className="ml-3 inline-flex items-center gap-1 rounded-sm border border-dashed border-accent/50 px-2 py-1 font-inter text-[10px] text-accent hover:bg-accent/10"
+                title="Persist the suggested location row derived from your stays"
+              >
+                <Sparkles className="h-3 w-3" />
+                Confirm {ghostLegs.length} location {ghostLegs.length === 1 ? "leg" : "legs"}
+              </button>
+            )}
           </div>
         )}
         {activeTrip && (
@@ -579,6 +691,13 @@ export default function MatrixGrid() {
           {/* Category labels column — sticky left */}
           <div className="sticky left-0 z-20 w-24 shrink-0 border-r border-border bg-card">
             <div className="sticky top-0 z-30 h-10 border-b border-border bg-card" />
+            {/* LOCATION row label */}
+            <div className="flex h-9 items-center gap-1 border-b border-border px-3">
+              <MapPin className="h-3 w-3 text-accent" strokeWidth={1.5} />
+              <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                Location
+              </span>
+            </div>
             {CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
@@ -596,10 +715,53 @@ export default function MatrixGrid() {
             </div>
           </div>
 
+          {/* Day columns wrapper (relative — hosts the absolute leg-pill overlay) */}
+          <div className="relative flex">
+            {/* Absolute leg-pill overlay: top is below the 40px date header, height matches the location row */}
+            <div
+              className="pointer-events-none absolute left-0 top-10 z-10 h-9"
+              style={{ width: `${days.length * 176}px` }}
+            >
+              {displayedLegs.map((leg) => {
+                if (!activeTrip?.start_date) return null;
+                const { startIdx, span } = legColumnSpan(activeTrip.start_date, leg);
+                if (startIdx < 0 || startIdx >= days.length) return null;
+                const width = Math.min(span, days.length - startIdx) * 176;
+                return (
+                  <button
+                    key={leg.id}
+                    type="button"
+                    onClick={() =>
+                      setLegDialog({
+                        open: true,
+                        leg: leg.isGhost ? null : leg,
+                        initialStart: leg.startDate,
+                      })
+                    }
+                    className={`pointer-events-auto absolute top-1 flex h-7 items-center gap-1.5 truncate rounded-sm px-2.5 text-left transition-colors ${
+                      leg.isGhost
+                        ? "border border-dashed border-accent/50 bg-accent/5 italic text-accent/80 hover:bg-accent/10"
+                        : "border border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
+                    }`}
+                    style={{ left: `${startIdx * 176 + 4}px`, width: `${width - 8}px` }}
+                    title={leg.isGhost ? "Derived from stays — click to refine" : leg.label}
+                  >
+                    <MapPin className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                    <span className="truncate font-inter text-[11px] font-medium">
+                      {leg.label} · {leg.nights}n
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
           {/* Day columns */}
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
             const total = dailyTotals[dateStr] || 0;
+            const cellHasLeg = displayedLegs.some(
+              (l) => dateStr >= l.startDate && dateStr <= l.endDate,
+            );
             return (
               <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
                 <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
@@ -608,13 +770,25 @@ export default function MatrixGrid() {
                   </span>
                 </div>
 
+                {/* LOCATION cell (visible only when no leg pill covers this day) */}
+                <div className="h-9 border-b border-border bg-background/40">
+                  {!cellHasLeg && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLegDialog({ open: true, leg: null, initialStart: dateStr })
+                      }
+                      className="flex h-full w-full items-center justify-center font-inter text-[10px] text-muted-foreground/50 hover:bg-accent/5 hover:text-accent"
+                    >
+                      + Location
+                    </button>
+                  )}
+                </div>
+
                 {CATEGORIES.map((cat) => {
                   const cellItems = itineraryItems.filter(
                     (item) => item.date === dateStr && item.category === cat.key
                   );
-                  const isStay = cat.key === "stays";
-                  const stayOccupied = isStay && cellItems.length > 0;
-
                   return (
                     <div
                       key={cat.key}
@@ -631,16 +805,14 @@ export default function MatrixGrid() {
                           onApplyFix={handleApplyFix}
                         />
                       ))}
-                      {!stayOccupied && (
-                        <button
-                          onClick={() => openAdd(dateStr, cat.key)}
-                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
-                        >
-                          <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
-                            + Add
-                          </span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => openAdd(dateStr, cat.key)}
+                        className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
+                      >
+                        <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
+                          + Add
+                        </span>
+                      </button>
                     </div>
                   );
                 })}
@@ -653,6 +825,7 @@ export default function MatrixGrid() {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
       </>
@@ -668,6 +841,19 @@ export default function MatrixGrid() {
             category={dialogState.category}
           />
         </Suspense>
+      )}
+
+      {activeTrip?.start_date && activeTrip?.end_date && legDialog.open && (
+        <LocationLegDialog
+          open={legDialog.open}
+          onOpenChange={(open) => setLegDialog((s) => ({ ...s, open }))}
+          tripStart={activeTrip.start_date}
+          tripEnd={activeTrip.end_date}
+          leg={legDialog.leg}
+          initialStart={legDialog.initialStart}
+          onSave={handleSaveLeg}
+          onDelete={handleDeleteLeg}
+        />
       )}
 
       {/* Smart Pull Inbox: paste · review · history · diff · batch */}

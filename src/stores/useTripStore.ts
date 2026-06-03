@@ -6,6 +6,25 @@ import { MOCK_NETWORK_USERS } from "@/data/mockNetworkUsers";
 import { MOCK_NETWORK_TRIPS, MOCK_NETWORK_TRIP_ITEMS } from "@/data/mockNetworkTrips";
 
 /* ------------------------------------------------------------------ */
+/*  Explicit column lists (A2 data-layer audit)                       */
+/*  Avoid SELECT * so wire payloads stay tight and predictable.       */
+/* ------------------------------------------------------------------ */
+
+const TRIP_COLUMNS =
+  "id,user_id,name,description,destination,start_date,end_date,is_published,share_token,target_nightly_budget,total_trip_budget,cover_image_url,display_currency,fx_rates,created_at,updated_at";
+
+const ITINERARY_COLUMNS =
+  "id,trip_id,user_id,category,title,description,date,start_time,end_time,cost,currency,points_used,confirmation_code,cancellation_deadline,approval_status,source_reference,location_name,location_lat,location_lng,sort_order,metadata,google_place_id,source_url,api_metadata,created_at,updated_at";
+
+const FLIGHT_COLUMNS =
+  "id,trip_id,user_id,airline,flight_number,departure_airport,arrival_airport,departure_time,arrival_time,gate,terminal,status,delay_minutes,raw_data,created_at,updated_at";
+
+const PROFILE_COLUMNS =
+  "id,user_id,display_name,avatar_url,preferences,active_cards,loyalty_memberships,notification_preferences,created_at,updated_at";
+
+const PAGE_SOFT_LIMIT = 500;
+
+/* ------------------------------------------------------------------ */
 /*  Types (mirrors DB schema)                                         */
 /* ------------------------------------------------------------------ */
 

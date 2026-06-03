@@ -765,7 +765,7 @@ export default function MatrixGrid() {
               </Popover>
             )}
             {activeTrip && (
-              <Popover>
+              <Popover open={reshuffleOpen} onOpenChange={setReshuffleOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
@@ -783,10 +783,7 @@ export default function MatrixGrid() {
                     onApply={async (patches) => {
                       if (patches.length > 0) await bulkUpdateItemDates(patches);
                     }}
-                    onClose={() => {
-                      // Close handled by Radix focus return; nothing extra needed.
-                      (document.activeElement as HTMLElement | null)?.blur();
-                    }}
+                    onClose={() => setReshuffleOpen(false)}
                   />
                 </PopoverContent>
               </Popover>

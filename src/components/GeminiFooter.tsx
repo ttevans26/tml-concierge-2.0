@@ -388,21 +388,31 @@ export default function GeminiFooter() {
         </div>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.length === 0 ? (
             <div className="space-y-4">
-              <p className="font-inter text-xs leading-relaxed text-muted-foreground">
-                {activeTrip
-                  ? `Grounded in your ${activeTrip.destination ?? "trip"} itinerary. Ask anything — recommendations, gap analysis, points strategy.`
-                  : "I'm your travel advisor. Ask about destinations, hotels, points strategy, or itinerary ideas."}
-              </p>
               <div className="space-y-1.5">
-                {quickPrompts.map((q) => (
+                <p className="font-inter text-[9px] uppercase tracking-[0.28em] text-accent">
+                  {activeTrip ? "Grounded · in this trip" : "Open invitation"}
+                </p>
+                <p className="font-playfair text-[15px] italic leading-snug text-foreground">
+                  {activeTrip
+                    ? `What shall we refine for ${activeTrip.destination ?? "your trip"}?`
+                    : "Where would you like to be taken?"}
+                </p>
+                <p className="font-inter text-[11px] leading-relaxed text-muted-foreground">
+                  Recommendations, gap analysis, or points strategy — all on the table.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                {quickPrompts.map((q, i) => (
                   <button
                     key={q}
                     onClick={() => send(q)}
-                    className="block w-full rounded-[2px] border border-border bg-background px-3 py-2 text-left font-inter text-xs text-foreground hover:border-accent hover:bg-accent/5 transition-colors"
+                    className="animate-stagger-in block w-full rounded-editorial border border-foil bg-foil-soft/40 px-3 py-2 text-left font-inter text-[11px] text-foreground transition-all duration-quick ease-editorial hover:-translate-y-px hover:border-foil-strong hover:bg-foil-soft hover:shadow-paper"
+                    style={{ animationDelay: `${i * 70}ms` }}
                   >
+                    <Sparkles className="mr-1.5 inline h-2.5 w-2.5 text-accent" strokeWidth={1.75} />
                     {q}
                   </button>
                 ))}
@@ -413,7 +423,7 @@ export default function GeminiFooter() {
               if (m.role === "user") {
                 return (
                   <div key={i} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-[2px] px-3 py-2 bg-accent text-accent-foreground font-inter text-xs leading-relaxed">
+                    <div className="max-w-[85%] rounded-editorial px-3 py-2 bg-foil text-accent-foreground font-inter text-[11px] leading-relaxed shadow-paper">
                       <p className="whitespace-pre-wrap">{m.content}</p>
                     </div>
                   </div>
@@ -532,34 +542,25 @@ export default function GeminiFooter() {
           )}
           {streaming && messages[messages.length - 1]?.role === "user" && (
             <div className="flex justify-start">
-              <div className="rounded-[2px] bg-muted px-3 py-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              <div className="flex items-center gap-1 rounded-editorial border border-foil bg-foil-soft/50 px-3 py-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent/80 animate-pulse" style={{ animationDelay: "0ms" }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-accent/60 animate-pulse" style={{ animationDelay: "150ms" }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-accent/40 animate-pulse" style={{ animationDelay: "300ms" }} />
               </div>
             </div>
           )}
         </div>
 
         {/* Composer */}
-        <form
-          onSubmit={(e) => { e.preventDefault(); send(input); }}
-          className="border-t border-border p-3 flex items-center gap-2"
-        >
-          <input
+        <div className="border-t border-foil px-3 py-3 bg-background/60">
+          <AnimatedAIChat
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={setInput}
+            onSubmit={() => send(input)}
+            sending={streaming}
             placeholder="Ask the concierge…"
-            className="flex-1 rounded-[2px] border border-border bg-background px-3 py-2 font-inter text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
-            disabled={streaming}
           />
-          <Button
-            type="submit"
-            size="sm"
-            disabled={streaming || !input.trim()}
-            className="rounded-[2px] bg-accent text-accent-foreground hover:bg-accent/90 h-9 w-9 p-0"
-          >
-            {streaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-          </Button>
-        </form>
+        </div>
       </div>
     </>
   );

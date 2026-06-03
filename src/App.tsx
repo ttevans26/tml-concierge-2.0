@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
+import AppErrorBoundary from "@/components/AppErrorBoundary";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 
@@ -35,14 +36,15 @@ const RouteFallback = () => (
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
+  <AppErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -64,13 +66,14 @@ const App = () => (
                 <Route path="/network/user/:id/trip/:tripId" element={<NetworkUserTrip />} />
                 <Route path="/trip/:id" element={<TripWorkspace />} />
               </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 );
 
 export default App;

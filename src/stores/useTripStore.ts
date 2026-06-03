@@ -230,7 +230,16 @@ interface TripStore {
 
   createTrip: (
     data: Partial<Trip>,
-    options?: { seedStays?: { city: string; nights: number }[] },
+    options?: {
+      seedStays?: { city: string; nights: number }[];
+      seedLocations?: {
+        city: string;
+        state: string | null;
+        country: string | null;
+        googlePlaceId: string | null;
+        nights: number;
+      }[];
+    },
   ) => Promise<Trip | null>;
   updateTrip: (id: string, data: Partial<Trip>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;
@@ -480,6 +489,49 @@ export const useTripStore = create<TripStore>()(
               sort_order: 0,
             });
           }
+          offset += seg.nights;
+        }
+        if (rows.length) {
+          const { data: inserted } = await supabase
+            .from("itinerary_items")
+            .insert(rows)
+            .select(ITINERARY_COLUMNS);
+          if (inserted?.length) {
+            set({ itineraryItems: [...get().itineraryItems, ...(inserted as ItineraryItem[])] });
+          }
+        }
+      }
+      const seedLocations = options?.seedLocations;
+      if (seedLocations && seedLocations.length && trip.start_date) {
+        const start = new Date(trip.start_date + "T00:00:00");
+        const rows: any[] = [];
+        let offset = 0;
+        for (const seg of seedLocations) {
+          const sd = new Date(start);
+          sd.setDate(start.getDate() + offset);
+          const ed = new Date(start);
+          ed.setDate(start.getDate() + offset + seg.nights - 1);
+          const startIso = sd.toISOString().slice(0, 10);
+          const endIso = ed.toISOString().slice(0, 10);
+          const title = [seg.city, seg.state, seg.country].filter(Boolean).join(", ");
+          rows.push({
+            trip_id: trip.id,
+            user_id: uid,
+            category: "location",
+            title: title || seg.city,
+            location_name: seg.city,
+            google_place_id: seg.googlePlaceId,
+            date: startIso,
+            approval_status: "confirmed",
+            currency: "USD",
+            sort_order: 0,
+            metadata: {
+              end_date: endIso,
+              city: seg.city,
+              state: seg.state,
+              country: seg.country,
+            },
+          });
           offset += seg.nights;
         }
         if (rows.length) {

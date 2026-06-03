@@ -39,6 +39,10 @@ interface CityRow {
   id: string;
   name: string;
   nights: number;
+  city: string;
+  state: string | null;
+  country: string | null;
+  googlePlaceId: string | null;
 }
 
 function SortableCity({
@@ -138,7 +142,15 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
     if (!v) return;
     setCities((prev) => [
       ...prev,
-      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: v, nights: 1 },
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: v,
+        nights: 1,
+        city: v,
+        state: null,
+        country: null,
+        googlePlaceId: null,
+      },
     ]);
     setCityInput("");
   };
@@ -169,7 +181,17 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
     const destinationText = cities.map((c) => c.name).join(", ") || null;
     const seedStays =
       startDate && endDate && cities.length
-        ? cities.map((c) => ({ city: c.name, nights: c.nights }))
+        ? cities.map((c) => ({ city: c.city, nights: c.nights }))
+        : undefined;
+    const seedLocations =
+      startDate && endDate && cities.length
+        ? cities.map((c) => ({
+            city: c.city,
+            state: c.state,
+            country: c.country,
+            googlePlaceId: c.googlePlaceId,
+            nights: c.nights,
+          }))
         : undefined;
     await createTrip(
       {
@@ -178,7 +200,7 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
         start_date: startDate || null,
         end_date: endDate || null,
       },
-      { seedStays },
+      { seedStays, seedLocations },
     );
     setSubmitting(false);
     reset();
@@ -250,13 +272,28 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
                   value={cityInput}
                   onChange={setCityInput}
                   onSelect={(p) => {
-                    const name = p.description;
+                    const main = p.mainText || p.description.split(",")[0].trim();
+                    const parts = (p.secondaryText || "")
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    let state: string | null = null;
+                    let country: string | null = null;
+                    if (parts.length === 1) country = parts[0];
+                    else if (parts.length >= 2) {
+                      state = parts[0];
+                      country = parts[parts.length - 1];
+                    }
                     setCities((prev) => [
                       ...prev,
                       {
                         id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                        name,
+                        name: p.description,
                         nights: 1,
+                        city: main,
+                        state,
+                        country,
+                        googlePlaceId: p.placeId,
                       },
                     ]);
                     setCityInput("");

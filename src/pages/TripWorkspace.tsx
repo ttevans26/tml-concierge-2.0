@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
@@ -8,6 +8,7 @@ import StudioSidebar from "@/components/workspace/StudioSidebar";
 import MatrixGrid from "@/components/workspace/MatrixGrid";
 import BudgetSidebar from "@/components/workspace/BudgetSidebar";
 import ConciergePanel from "@/components/workspace/ConciergePanel";
+import ProximityMap from "@/components/workspace/ProximityMap";
 import TripHealthBar from "@/components/workspace/TripHealthBar";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +42,7 @@ export default function TripWorkspace() {
     }
   }, [budgetOpen]);
 
-  const [rightTab, setRightTab] = useState<"budget" | "concierge">("budget");
+  const [rightTab, setRightTab] = useState<"budget" | "concierge" | "map">("budget");
   const askConcierge = useTripStore((s) => s.askConcierge);
 
   const handleAskConcierge = (prompt: string) => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, addDays, startOfDay } from "date-fns";
 import { CheckCircle2, Globe } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -84,8 +84,13 @@ export default function SchedulingModal({ open, onOpenChange, prefill }: Props) 
   const selectedTrip = trips.find((t) => t.id === tripId) ?? null;
   const addAppointment = useTripStore((s) => s.addAppointment);
 
-  // Apply prefill when modal opens
-  useEffectOnce(() => {});
+  useEffect(() => {
+    if (open && prefill) {
+      if (prefill.agenda) setAgenda(prefill.agenda);
+      if (prefill.tripId) setTripId(prefill.tripId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const dateKey = date ? format(date, "yyyy-MM-dd") : null;
   const slotsForDate = dateKey ? AVAILABILITY[dateKey] ?? [] : [];

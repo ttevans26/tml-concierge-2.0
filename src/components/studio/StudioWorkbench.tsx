@@ -22,7 +22,6 @@ import { Layers } from "lucide-react";
 import PasteSocialDialog from "./PasteSocialDialog";
 import SocialImportsTray from "./SocialImportsTray";
 import { Share2 } from "lucide-react";
-import { MapArc, type ArcPoint } from "@/components/ui/map-arc";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -428,26 +427,6 @@ export default function StudioWorkbench() {
   };
 
   if (!activeFolder) {
-    // Pull all studio items across all folders for the atlas view
-    const allPoints: ArcPoint[] = (useStudioStore.getState().folders || [])
-      .flatMap((f) => f.items)
-      .filter((i) => i.lat != null && i.lng != null)
-      .map((i) => ({
-        id: i.id,
-        label: i.title,
-        sublabel: i.address ?? null,
-        lat: Number(i.lat),
-        lng: Number(i.lng),
-        kind:
-          i.category === "stays"
-            ? "stay"
-            : i.category === "dining"
-              ? "dining"
-              : i.category === "sites"
-                ? "site"
-                : "activity",
-      }));
-
     return (
       <div className="flex h-full flex-col gap-5 overflow-y-auto bg-surface-1 p-6 sm:p-8">
         <div>
@@ -458,10 +437,9 @@ export default function StudioWorkbench() {
             The <span className="italic-accent text-accent">atlas</span> of your ideas
           </h2>
           <p className="mt-2 max-w-md font-inter text-[12px] leading-relaxed text-muted-foreground">
-            Every saved place plotted on a single canvas. Choose a collection from the vault to begin curating, or seed it from a social link.
+            Open a collection from the vault to start curating — the atlas on the right will focus once a destination is in view. Or seed a fresh idea from a social link.
           </p>
         </div>
-        <MapArc points={allPoints} height={420} />
         <div className="flex items-center gap-2">
           <Button
             size="sm"

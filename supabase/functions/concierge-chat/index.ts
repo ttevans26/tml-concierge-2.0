@@ -232,13 +232,16 @@ serve(async (req) => {
         // Persist this round
         await supabase.from("concierge_messages").insert([
           { conversation_id: convId, user_id: user.id, role: "assistant", content: choice.content || "", tool_calls: toolCalls },
-          ...toolCalls.map((tc: { id: string; function: { name: string } }, idx: number) => ({
-            conversation_id: convId,
-            user_id: user.id,
-            role: "tool",
-            content: JSON.stringify(executedTools[executedTools.length - toolCalls.length + idx].result),
-            tool_calls: { tool_call_id: tc.id, name: tc.function?.name },
-          })),
+          ...toolCalls.map((tc: { id: string; function: { name: string; arguments?: string } }, idx: number) => {
+            const exec = executedTools[executedTools.length - toolCalls.length + idx];
+            return {
+              conversation_id: convId,
+              user_id: user.id,
+              role: "tool",
+              content: JSON.stringify(exec.result),
+              tool_calls: { tool_call_id: tc.id, name: tc.function?.name, args: exec.args },
+            };
+          }),
         ]);
         continue;
       }

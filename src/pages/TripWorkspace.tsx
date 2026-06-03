@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin, ListChecks, FileText } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin, ListChecks, FileText, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
@@ -13,6 +13,7 @@ import TripHealthBar from "@/components/workspace/TripHealthBar";
 import TripSwitcher from "@/components/workspace/TripSwitcher";
 import PackingList from "@/components/workspace/PackingList";
 import TripDocuments from "@/components/workspace/TripDocuments";
+import EditTripDialog from "@/components/workspace/EditTripDialog";
 import { cn } from "@/lib/utils";
 
 export default function TripWorkspace() {
@@ -47,6 +48,7 @@ export default function TripWorkspace() {
 
   const [rightTab, setRightTab] =
     useState<"budget" | "concierge" | "map" | "packing" | "documents">("budget");
+  const [editTripOpen, setEditTripOpen] = useState(false);
   const askConcierge = useTripStore((s) => s.askConcierge);
 
   const handleAskConcierge = (prompt: string) => {
@@ -102,7 +104,19 @@ export default function TripWorkspace() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <TripSwitcher />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={() => setEditTripOpen(true)}
+          title="Edit trip dates & segments"
+          aria-label="Edit trip"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
       </header>
+
+      <EditTripDialog open={editTripOpen} onOpenChange={setEditTripOpen} />
 
       {/* Trip Health Bar */}
       <TripHealthBar onAskConcierge={handleAskConcierge} />

@@ -93,7 +93,18 @@ serve(async (req) => {
     // to display a "Connected / Not connected" indicator without invoking
     // the full sync pipeline.
     const url = new URL(req.url);
-    if (url.searchParams.get("mode") === "status" || req.method === "GET") {
+    // Also accept JSON body `{mode:"status"}` since supabase.functions.invoke posts JSON
+    let bodyMode: string | null = null;
+    if (req.method === "POST") {
+      try {
+        const cloned = req.clone();
+        const peek = await cloned.json();
+        if (peek && typeof peek.mode === "string") bodyMode = peek.mode;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (url.searchParams.get("mode") === "status" || bodyMode === "status" || req.method === "GET") {
       if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) {
         return j({ connected: false, reason: "Gmail connector not linked" });
       }

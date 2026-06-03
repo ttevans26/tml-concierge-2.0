@@ -114,6 +114,17 @@ export default function ItineraryItemCard({ item, hasConflict = false, fix = nul
         )}
 
         <div className="relative z-10 px-2 py-1.5">
+          {/* Approval status pill (top-left) */}
+          {item.approval_status === "confirmed" && (
+            <span className="absolute left-1 top-1 rounded-sm bg-accent/15 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-accent">
+              ✓ Confirmed
+            </span>
+          )}
+          {item.approval_status === "cancelled" && (
+            <span className="absolute left-1 top-1 rounded-sm bg-muted px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-muted-foreground line-through">
+              Cancelled
+            </span>
+          )}
           {item.category === "stays" && (
             <button
               onClick={(e) => {

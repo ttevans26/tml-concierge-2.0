@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
+import ConciergeToolCard from "@/components/workspace/ConciergeToolCard";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 
@@ -110,8 +111,15 @@ export default function ConciergePanel() {
       if (!cancelled) {
         setMessages(
           (data || [])
-            .filter((m) => m.role === "user" || m.role === "assistant")
-            .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content })),
+            .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool")
+            // Hide assistant rows that only carry tool_calls with no visible content (rendered by tool cards instead)
+            .filter((m) => !(m.role === "assistant" && !m.content && m.tool_calls))
+            .map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant" | "tool",
+              content: m.content,
+              tool_calls: m.tool_calls,
+            })),
         );
         setLoadingThread(false);
       }
@@ -185,9 +193,14 @@ export default function ConciergePanel() {
       }
       const newConvId = data.conversation_id as string;
       const content = (data.content as string) || "";
-      const toolResults = (data.tool_results as { name: string; result: { ok?: boolean; item?: { title?: string } } }[]) || [];
+      const toolResults = (data.tool_results as { name: string; args?: Record<string, unknown>; result: any }[]) || [];
       if (newConvId !== activeConvId) setActiveConvId(newConvId);
-      setMessages((prev) => [...prev, { role: "assistant", content }]);
+      const toolMsgs: Msg[] = toolResults.map((tr) => ({
+        role: "tool",
+        content: JSON.stringify(tr.result ?? {}),
+        tool_calls: { name: tr.name, args: tr.args },
+      }));
+      setMessages((prev) => [...prev, ...toolMsgs, { role: "assistant", content }]);
       // Toast on side-effect tools
       for (const tr of toolResults) {
         if (tr.name === "create_itinerary_item" && tr.result?.ok) {
@@ -358,6 +371,16 @@ export default function ConciergePanel() {
                   <div className="max-w-[90%] rounded-[2px] bg-accent px-2.5 py-1.5 font-inter text-[11px] leading-relaxed text-accent-foreground whitespace-pre-wrap">
                     {m.content}
                   </div>
+                </div>
+              );
+            }
+            if (m.role === "tool") {
+              const tc = (m.tool_calls as { name?: string; args?: Record<string, unknown> } | null) || {};
+              let result: unknown = m.content;
+              try { result = JSON.parse(m.content); } catch { /* keep raw */ }
+              return (
+                <div key={i} className="pl-2">
+                  <ConciergeToolCard tc={{ name: tc.name || "tool", args: tc.args, result }} />
                 </div>
               );
             }

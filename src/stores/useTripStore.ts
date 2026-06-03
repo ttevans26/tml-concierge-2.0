@@ -209,9 +209,11 @@ interface TripStore {
   createTrip: (data: Partial<Trip>) => Promise<Trip | null>;
   updateTrip: (id: string, data: Partial<Trip>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;
+  duplicateTrip: (id: string) => Promise<Trip | null>;
 
   createItineraryItem: (data: Partial<ItineraryItem>) => Promise<ItineraryItem | null>;
   updateItineraryItem: (id: string, data: Partial<ItineraryItem>) => Promise<void>;
+  updateItemStatus: (id: string, status: ItineraryItem["approval_status"]) => Promise<void>;
   deleteItineraryItem: (id: string) => Promise<void>;
   moveItineraryItem: (id: string, patch: { date?: string | null; category?: ItineraryItem["category"] }) => Promise<void>;
   /** Apply a batch of `{id, date}` updates in a single round-trip (used by trip-editor). */
@@ -448,6 +450,44 @@ export const useTripStore = create<TripStore>()(
     }
   },
 
+  duplicateTrip: async (id) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const source = get().trips.find((t) => t.id === id);
+    if (!source) return null;
+    const { data: newTrip, error } = await supabase
+      .from("trips")
+      .insert({
+        user_id: user.id,
+        name: `${source.name} (Copy)`,
+        description: source.description,
+        destination: source.destination,
+        start_date: source.start_date,
+        end_date: source.end_date,
+        target_nightly_budget: source.target_nightly_budget,
+        total_trip_budget: source.total_trip_budget,
+        cover_image_url: source.cover_image_url,
+        is_published: false,
+      } as any)
+      .select()
+      .single();
+    if (error || !newTrip) return null;
+    // Clone itinerary items (as drafts)
+    const { data: items } = await supabase
+      .from("itinerary_items")
+      .select("*")
+      .eq("trip_id", id);
+    if (items && items.length) {
+      const clones = (items as any[]).map((i) => {
+        const { id: _id, created_at, updated_at, ...rest } = i;
+        return { ...rest, trip_id: newTrip.id, user_id: user.id, approval_status: "draft", confirmation_code: null };
+      });
+      await supabase.from("itinerary_items").insert(clones);
+    }
+    set({ trips: [newTrip as Trip, ...get().trips] });
+    return newTrip as Trip;
+  },
+
   /* ---- Itinerary items ---- */
 
   createItineraryItem: async (data) => {
@@ -473,6 +513,17 @@ export const useTripStore = create<TripStore>()(
         itineraryItems: get().itineraryItems.map((i) => (i.id === id ? { ...i, ...data } : i)),
       });
       if (before) pushHistory({ kind: "update", id, before: snapshot(before), after: { ...snapshot(before), ...data } });
+    }
+  },
+
+  updateItemStatus: async (id, status) => {
+    const before = get().itineraryItems.find((i) => i.id === id);
+    const { error } = await supabase.from("itinerary_items").update({ approval_status: status } as any).eq("id", id);
+    if (!error) {
+      set({
+        itineraryItems: get().itineraryItems.map((i) => (i.id === id ? { ...i, approval_status: status } : i)),
+      });
+      if (before) pushHistory({ kind: "update", id, before: snapshot(before), after: { ...snapshot(before), approval_status: status } });
     }
   },
 

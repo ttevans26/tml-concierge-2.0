@@ -29,6 +29,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTripStore } from "@/stores/useTripStore";
+import { useGmailConnectionStatus } from "@/hooks/useGmailConnectionStatus";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import type { ExtractedItem } from "./SmartPullTray";
 import { diffItem, splitBatch, type DiffResult } from "@/lib/smartPullDiff";
@@ -98,6 +99,7 @@ export default function SmartPullInbox({ open, onOpenChange }: SmartPullInboxPro
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [history, setHistory] = useState<PullEvent[]>([]);
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
+  const gmailStatus = useGmailConnectionStatus(open);
 
   // Load persisted state when trip changes
   useEffect(() => {
@@ -367,18 +369,47 @@ export default function SmartPullInbox({ open, onOpenChange }: SmartPullInboxPro
               <div className="flex items-center gap-2 min-w-0">
                 <Mail className="h-3.5 w-3.5 shrink-0 text-accent" />
                 <div className="min-w-0">
-                  <p className="font-inter text-[11px] font-medium text-foreground">Sync from Gmail</p>
+                  <p className="font-inter text-[11px] font-medium text-foreground flex items-center gap-1.5">
+                    Sync from Gmail
+                    <span
+                      className={
+                        "inline-block h-1.5 w-1.5 rounded-full " +
+                        (gmailStatus.state === "connected"
+                          ? "bg-emerald-500"
+                          : gmailStatus.state === "loading"
+                            ? "bg-muted-foreground animate-pulse"
+                            : "bg-amber-500")
+                      }
+                      title={
+                        gmailStatus.state === "connected"
+                          ? "Gmail connected"
+                          : gmailStatus.state === "loading"
+                            ? "Checking connection…"
+                            : (gmailStatus.reason || "Not connected")
+                      }
+                    />
+                    <span className="font-inter text-[10px] font-normal text-muted-foreground">
+                      {gmailStatus.state === "connected"
+                        ? "Connected"
+                        : gmailStatus.state === "loading"
+                          ? "Checking…"
+                          : "Not connected"}
+                    </span>
+                  </p>
                   <p className="font-inter text-[10px] text-muted-foreground truncate">
-                    Scans the connected inbox for recent travel confirmations.
+                    {gmailStatus.state === "disconnected"
+                      ? (gmailStatus.reason || "Connect a Gmail account in Settings → Connectors.")
+                      : "Scans the connected inbox for recent travel confirmations."}
                   </p>
                 </div>
               </div>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={syncingGmail || extracting}
+                disabled={syncingGmail || extracting || gmailStatus.state !== "connected"}
                 onClick={handleSyncGmail}
                 className="min-h-[36px] shrink-0"
+                title={gmailStatus.state !== "connected" ? "Connect Gmail first" : "Sync inbox"}
               >
                 {syncingGmail ? (
                   <>

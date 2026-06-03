@@ -848,6 +848,7 @@ export type Database = {
       }
     }
     Functions: {
+      bulk_update_item_dates: { Args: { patches: Json }; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

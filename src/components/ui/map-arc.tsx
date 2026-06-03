@@ -263,112 +263,191 @@ function GlobePlaceholder({
   height: number | string;
   className?: string;
 }) {
-  const VB = 400;
-  const cx = VB / 2;
-  const cy = VB / 2;
-  const R = 150;
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [land, setLand] = React.useState<Feature<Geometry> | null>(null);
+  const [countries, setCountries] = React.useState<FeatureCollection | null>(null);
 
-  // 6 meridians, each animated with a phase offset so the whole sphere
-  // appears to rotate. We animate `rx` from R → ~0.05R → R and flip the
-  // stroke opacity at the midpoint to fake the back/front of the sphere.
-  const meridians = Array.from({ length: 6 }, (_, i) => i);
-  const PERIOD = 24; // seconds for a full rotation
+  // Load world topology once.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [landMod, countriesMod] = await Promise.all([
+          import("world-atlas/land-110m.json"),
+          import("world-atlas/countries-110m.json"),
+        ]);
+        if (cancelled) return;
+        const landTopo: any = (landMod as any).default ?? landMod;
+        const countriesTopo: any = (countriesMod as any).default ?? countriesMod;
+        setLand(feature(landTopo, landTopo.objects.land) as Feature<Geometry>);
+        setCountries(
+          feature(countriesTopo, countriesTopo.objects.countries) as FeatureCollection,
+        );
+      } catch (e) {
+        // Silently fall back to empty sphere if topology unavailable.
+        console.warn("[GlobePlaceholder] world atlas failed to load", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Animated rotation + render loop.
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    const prefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let raf = 0;
+    let lambda = 20; // initial longitude rotation
+    let last = performance.now();
+    const SPEED = prefersReduced ? 0 : 6; // degrees per second
+
+    const colors = {
+      ocean: "hsl(43, 50%, 95%)",
+      oceanEdge: "hsl(36, 28%, 86%)",
+      land: "hsl(36, 35%, 78%)",
+      landStroke: "hsl(36, 45%, 42%)",
+      country: "hsla(36, 45%, 42%, 0.45)",
+      graticule: "hsla(36, 45%, 42%, 0.18)",
+      rim: "hsl(36, 45%, 42%)",
+      highlight: "rgba(255, 252, 240, 0.5)",
+    };
+
+    const resize = () => {
+      const rect = container.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(container);
+
+    const draw = () => {
+      const rect = container.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const R = Math.max(40, Math.min(w, h) / 2 - 10);
+
+      const projection = geoOrthographic()
+        .scale(R)
+        .translate([cx, cy])
+        .clipAngle(90)
+        .rotate([lambda, -15, 0]);
+      const path = geoPath(projection, ctx);
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Ocean sphere with subtle radial fill via gradient.
+      const oceanGrad = ctx.createRadialGradient(
+        cx - R * 0.35,
+        cy - R * 0.4,
+        R * 0.2,
+        cx,
+        cy,
+        R,
+      );
+      oceanGrad.addColorStop(0, "hsl(43, 71%, 99%)");
+      oceanGrad.addColorStop(0.6, colors.ocean);
+      oceanGrad.addColorStop(1, colors.oceanEdge);
+      ctx.beginPath();
+      path({ type: "Sphere" } as any);
+      ctx.fillStyle = oceanGrad;
+      ctx.fill();
+
+      // Graticule.
+      ctx.beginPath();
+      path(geoGraticule10());
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = colors.graticule;
+      ctx.stroke();
+
+      // Land fill.
+      if (land) {
+        ctx.beginPath();
+        path(land);
+        ctx.fillStyle = colors.land;
+        ctx.fill();
+        ctx.lineWidth = 0.75;
+        ctx.strokeStyle = colors.landStroke;
+        ctx.stroke();
+      }
+
+      // Country borders.
+      if (countries) {
+        ctx.beginPath();
+        for (const f of countries.features) path(f as any);
+        ctx.lineWidth = 0.4;
+        ctx.strokeStyle = colors.country;
+        ctx.stroke();
+      }
+
+      // Specular highlight (top-left).
+      const hi = ctx.createRadialGradient(
+        cx - R * 0.4,
+        cy - R * 0.45,
+        R * 0.05,
+        cx - R * 0.4,
+        cy - R * 0.45,
+        R * 0.7,
+      );
+      hi.addColorStop(0, colors.highlight);
+      hi.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.beginPath();
+      path({ type: "Sphere" } as any);
+      ctx.fillStyle = hi;
+      ctx.fill();
+
+      // Rim.
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = colors.rim;
+      ctx.globalAlpha = 0.55;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      lambda = (lambda + SPEED * dt) % 360;
+      draw();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [land, countries]);
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative w-full overflow-hidden rounded-hero border border-foil bg-cream shadow-paper",
         className,
       )}
       style={height === undefined ? undefined : { height }}
     >
-      <svg
-        viewBox={`0 0 ${VB} ${VB}`}
-        preserveAspectRatio="xMidYMid meet"
-        className="absolute inset-0 h-full w-full"
-        aria-hidden
-      >
-        <defs>
-          <radialGradient id="globeFill" cx="35%" cy="32%" r="75%">
-            <stop offset="0%" stopColor="hsl(43 71% 99%)" />
-            <stop offset="55%" stopColor="hsl(43 50% 95%)" />
-            <stop offset="100%" stopColor="hsl(36 28% 86%)" />
-          </radialGradient>
-          <radialGradient id="globeHighlight" cx="30%" cy="25%" r="40%">
-            <stop offset="0%" stopColor="hsl(43 100% 100%)" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="hsl(43 100% 100%)" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="globeRim" cx="50%" cy="50%" r="50%">
-            <stop offset="85%" stopColor="hsl(36 45% 42%)" stopOpacity="0" />
-            <stop offset="100%" stopColor="hsl(36 45% 42%)" stopOpacity="0.35" />
-          </radialGradient>
-        </defs>
-
-        {/* Sphere */}
-        <circle cx={cx} cy={cy} r={R} fill="url(#globeFill)" />
-        <circle cx={cx} cy={cy} r={R} fill="url(#globeRim)" />
-
-        {/* Latitudes (static) */}
-        {[-0.7, -0.4, 0, 0.4, 0.7].map((t, idx) => {
-          const ry = R * Math.sqrt(1 - t * t);
-          const yy = cy + R * t;
-          return (
-            <ellipse
-              key={idx}
-              cx={cx}
-              cy={yy}
-              rx={R * Math.sqrt(1 - t * t)}
-              ry={ry * 0.18}
-              fill="none"
-              stroke="hsl(36 45% 42%)"
-              strokeOpacity={t === 0 ? 0.55 : 0.28}
-              strokeWidth={t === 0 ? 0.9 : 0.6}
-            />
-          );
-        })}
-
-        {/* Meridians (animated to simulate rotation) */}
-        <g
-          className="globe-meridians"
-          style={{ transformOrigin: `${cx}px ${cy}px` }}
-        >
-          {meridians.map((i) => {
-            const delay = (-PERIOD / meridians.length) * i;
-            return (
-              <ellipse
-                key={i}
-                cx={cx}
-                cy={cy}
-                rx={R}
-                ry={R}
-                fill="none"
-                stroke="hsl(36 45% 42%)"
-                strokeOpacity={0.32}
-                strokeWidth={0.7}
-                style={{
-                  animation: `globe-meridian ${PERIOD}s linear ${delay}s infinite`,
-                  transformBox: "fill-box",
-                  transformOrigin: "center",
-                }}
-              />
-            );
-          })}
-        </g>
-
-        {/* Top-left specular highlight for dimension */}
-        <circle cx={cx} cy={cy} r={R} fill="url(#globeHighlight)" />
-
-        {/* Hairline rim */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={R}
-          fill="none"
-          stroke="hsl(36 45% 42%)"
-          strokeOpacity="0.55"
-          strokeWidth="0.9"
-        />
-      </svg>
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden />
 
       {/* Grain + vignette for paper feel */}
       <div
@@ -390,19 +469,6 @@ function GlobePlaceholder({
           )}
         </div>
       )}
-
-      <style>{`
-        @keyframes globe-meridian {
-          0%   { rx: ${R}px; stroke-opacity: 0.32; }
-          25%  { rx: ${R * 0.05}px; stroke-opacity: 0.55; }
-          50%  { rx: ${R}px; stroke-opacity: 0.32; }
-          75%  { rx: ${R * 0.05}px; stroke-opacity: 0.12; }
-          100% { rx: ${R}px; stroke-opacity: 0.32; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .globe-meridians ellipse { animation: none !important; }
-        }
-      `}</style>
     </div>
   );
 }

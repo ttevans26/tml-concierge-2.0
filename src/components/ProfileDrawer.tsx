@@ -622,6 +622,53 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
                     Sign Out of All Devices
                   </Button>
                 </div>
+
+                <Separator className="my-4" />
+
+                <div className="space-y-2">
+                  <h4 className="font-inter text-[11px] font-medium uppercase tracking-wider text-destructive">
+                    Danger Zone
+                  </h4>
+                  {!showDeleteConfirm ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="w-full justify-start gap-2.5 h-9 font-inter text-sm border-destructive/40 text-destructive hover:bg-destructive/5"
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                      Delete Account
+                    </Button>
+                  ) : (
+                    <div className="space-y-2 rounded-sm border border-destructive/40 bg-destructive/5 p-3">
+                      <p className="font-inter text-[11px] text-foreground leading-relaxed">
+                        This will permanently delete your account, trips, itineraries, and Studio content. Type <span className="font-mono font-semibold">DELETE</span> to confirm.
+                      </p>
+                      <Input
+                        value={confirmDeleteText}
+                        onChange={(e) => setConfirmDeleteText(e.target.value)}
+                        placeholder="DELETE"
+                        className="h-8 text-sm border-destructive/40"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => { setShowDeleteConfirm(false); setConfirmDeleteText(""); }}
+                          className="flex-1 h-8 text-xs"
+                          disabled={deletingAccount}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={deleteAccount}
+                          disabled={deletingAccount || confirmDeleteText !== "DELETE"}
+                          className="flex-1 h-8 text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          {deletingAccount ? <Loader2 className="h-3 w-3 animate-spin" /> : "Delete forever"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </section>
             </div>
           </>

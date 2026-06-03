@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
+import { useDeepLinks } from "@/hooks/useDeepLinks";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import AppErrorBoundary from "@/components/AppErrorBoundary";
@@ -24,6 +25,8 @@ const NetworkUserProfile = lazy(() => import("./pages/NetworkUserProfile"));
 const NetworkUserTrip = lazy(() => import("./pages/NetworkUserTrip"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PublicTripView = lazy(() => import("./pages/PublicTripView"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const ConciergeEntry = lazy(() => import("./pages/ConciergeEntry"));
 
 const RouteFallback = () => (
   <div className="flex flex-1 items-center justify-center p-12">
@@ -35,6 +38,15 @@ const RouteFallback = () => (
 
 const queryClient = new QueryClient();
 
+/**
+ * Mounts the deep-link bridge inside the router so `useNavigate` works.
+ * Renders nothing.
+ */
+const DeepLinkBridge = () => {
+  useDeepLinks();
+  return null;
+};
+
 const App = () => (
   <AppErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -43,6 +55,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <DeepLinkBridge />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
               <Route path="/login" element={<Login />} />
@@ -50,6 +63,10 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/itinerary/:token" element={<PublicTripView />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/auth/login" element={<Login />} />
+              <Route path="/auth/signup" element={<Signup />} />
+              <Route path="/concierge" element={<ConciergeEntry />} />
               <Route
                 element={
                   <ProtectedRoute>

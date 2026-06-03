@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const redirectTo = params.get("redirectTo") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,14 +29,14 @@ export default function Login() {
     if (error) {
       setError(error.message);
     } else {
-      navigate("/");
+      navigate(redirectTo, { replace: true });
     }
   };
 
   const handleGoogle = async () => {
     setOauthLoading("google");
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: getAuthRedirectUri(),
+      redirect_uri: getAuthRedirectUri(redirectTo),
     });
     if (result.error) {
       setOauthLoading(null);
@@ -42,13 +44,13 @@ export default function Login() {
       return;
     }
     if (result.redirected) return;
-    navigate("/");
+    navigate(redirectTo, { replace: true });
   };
 
   const handleApple = async () => {
     setOauthLoading("apple");
     const result = await lovable.auth.signInWithOAuth("apple", {
-      redirect_uri: getAuthRedirectUri(),
+      redirect_uri: getAuthRedirectUri(redirectTo),
     });
     if (result.error) {
       setOauthLoading(null);
@@ -56,7 +58,7 @@ export default function Login() {
       return;
     }
     if (result.redirected) return;
-    navigate("/");
+    navigate(redirectTo, { replace: true });
   };
 
   return (

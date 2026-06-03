@@ -17,12 +17,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, GripVertical, MapPin } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, MapPin, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { buildSegments, computeReorderPatches, type LocationSegment } from "@/lib/segments";
 import type { ItineraryItem, Trip } from "@/stores/useTripStore";
+import { useTripStore } from "@/stores/useTripStore";
 
 interface Props {
   trip: Trip;
@@ -35,6 +37,7 @@ export default function ReshuffleLegsList({ trip, items, onApply, onClose }: Pro
   const baseSegments = useMemo(() => buildSegments(trip, items), [trip, items]);
   const [order, setOrder] = useState<LocationSegment[]>(baseSegments);
   const [saving, setSaving] = useState(false);
+  const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -137,6 +140,24 @@ export default function ReshuffleLegsList({ trip, items, onApply, onClose }: Pro
                   total={order.length}
                   preview={preview.get(seg.id) ?? null}
                   onMove={(dir) => move(seg.id, dir)}
+                  items={items}
+                  onRename={async (label) => {
+                    const trimmed = label.trim();
+                    if (!trimmed) return;
+                    const stayIds = items
+                      .filter(
+                        (it) =>
+                          it.category === "stays" &&
+                          it.date &&
+                          it.date >= seg.startDate &&
+                          it.date <= seg.endDate,
+                      )
+                      .map((it) => it.id);
+                    await Promise.all(
+                      stayIds.map((id) => updateItineraryItem(id, { location_name: trimmed })),
+                    );
+                    toast.success(`Location set to "${trimmed}"`);
+                  }}
                 />
               ))}
             </ul>

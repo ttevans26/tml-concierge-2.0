@@ -27,32 +27,18 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
-    if (!url || typeof url !== "string") {
+    const body = await req.json();
+    const urls: string[] = Array.isArray(body?.urls)
+      ? body.urls.filter((u: unknown): u is string => typeof u === "string" && u.trim().length > 0)
+      : typeof body?.url === "string" && body.url.trim().length > 0
+        ? [body.url]
+        : [];
+
+    if (urls.length === 0) {
       return new Response(
-        JSON.stringify({ error: "A valid URL is required" }),
+        JSON.stringify({ error: "A valid URL (or urls[]) is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    // Fetch the page content
-    let pageText = "";
-    try {
-      const pageResp = await fetch(url, {
-        headers: { "User-Agent": "TML-Concierge/1.0" },
-      });
-      const html = await pageResp.text();
-      // Strip HTML tags for a rough text extraction
-      pageText = html
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 12000); // limit context
-    } catch (fetchErr) {
-      console.error("Failed to fetch URL:", fetchErr);
-      pageText = `[Could not fetch content from ${url}. Please analyze the URL itself.]`;
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -60,64 +46,40 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: `URL: ${url}\n\nPage Content:\n${pageText}`,
-            },
-          ],
-        }),
-      }
+    const results = await Promise.all(
+      urls.map((u) => processSingleUrl(u, LOVABLE_API_KEY))
     );
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    // Single-URL legacy shape preserved when only one URL was passed
+    if (urls.length === 1) {
+      const r = results[0];
+      if (r.error) {
+        return new Response(JSON.stringify({ error: r.error }), {
+          status: r.status || 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      return new Response(JSON.stringify({ items: r.items, source_url: r.url }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || "[]";
-
-    // Parse the JSON from the AI response
-    let items: any[] = [];
-    try {
-      // Handle markdown-wrapped JSON
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        items = JSON.parse(jsonMatch[0]);
-      }
-    } catch (parseErr) {
-      console.error("Failed to parse AI response:", parseErr, content);
-      items = [];
-    }
-
-    return new Response(JSON.stringify({ items, source_url: url }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Multi-URL: aggregate response with per-URL status
+    const flatItems = results.flatMap((r) =>
+      (r.items || []).map((i: any) => ({ ...i, source_url: r.url }))
+    );
+    return new Response(
+      JSON.stringify({
+        items: flatItems,
+        results: results.map((r) => ({
+          url: r.url,
+          ok: !r.error,
+          error: r.error || null,
+          count: r.items?.length ?? 0,
+        })),
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (e) {
     console.error("scrape-and-parse error:", e);
     return new Response(
@@ -126,3 +88,58 @@ serve(async (req) => {
     );
   }
 });
+
+async function processSingleUrl(url: string, apiKey: string): Promise<{
+  url: string;
+  items?: any[];
+  error?: string;
+  status?: number;
+}> {
+  // Fetch page text
+  let pageText = "";
+  try {
+    const pageResp = await fetch(url, { headers: { "User-Agent": "TML-Concierge/1.0" } });
+    const html = await pageResp.text();
+    pageText = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 12000);
+  } catch (fetchErr) {
+    console.error("Failed to fetch URL:", url, fetchErr);
+    pageText = `[Could not fetch content from ${url}. Please analyze the URL itself.]`;
+  }
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `URL: ${url}\n\nPage Content:\n${pageText}` },
+      ],
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    if (aiResponse.status === 429) return { url, error: "Rate limit exceeded", status: 429 };
+    if (aiResponse.status === 402) return { url, error: "AI credits exhausted", status: 402 };
+    const errText = await aiResponse.text();
+    console.error("AI gateway error:", aiResponse.status, errText);
+    return { url, error: `AI gateway error: ${aiResponse.status}`, status: 500 };
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content || "[]";
+  let items: any[] = [];
+  try {
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) items = JSON.parse(jsonMatch[0]);
+  } catch (parseErr) {
+    console.error("Failed to parse AI response:", parseErr, content);
+  }
+  return { url, items };
+}

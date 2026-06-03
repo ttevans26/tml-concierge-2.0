@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Loader2, ListChecks } from "lucide-react";
+import { Plus, Trash2, Loader2, ListChecks, MoreHorizontal, CheckCheck, XCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useTripStore } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
@@ -132,6 +139,35 @@ export default function PackingList() {
     }
   }
 
+  async function setAllPacked(value: boolean) {
+    if (!tripId || items.length === 0) return;
+    const prev = items;
+    setItems((p) => p.map((i) => ({ ...i, is_packed: value })));
+    const { error } = await supabase
+      .from("trip_packing_items")
+      .update({ is_packed: value })
+      .eq("trip_id", tripId);
+    if (error) {
+      setItems(prev);
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    }
+  }
+
+  async function resetList() {
+    if (!tripId || items.length === 0) return;
+    if (!confirm("Delete every item from this packing list?")) return;
+    const prev = items;
+    setItems([]);
+    const { error } = await supabase
+      .from("trip_packing_items")
+      .delete()
+      .eq("trip_id", tripId);
+    if (error) {
+      setItems(prev);
+      toast({ title: "Reset failed", description: error.message, variant: "destructive" });
+    }
+  }
+
   async function seedDefaults() {
     if (!tripId) return;
     const {
@@ -176,6 +212,34 @@ export default function PackingList() {
           <span className="ml-auto font-inter text-[11px] text-muted-foreground">
             {packed}/{total}
           </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                disabled={total === 0}
+                title="List actions"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="font-inter text-[11px]">
+              <DropdownMenuItem onClick={() => setAllPacked(true)}>
+                <CheckCheck className="mr-2 h-3 w-3" /> Mark all packed
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAllPacked(false)}>
+                <XCircle className="mr-2 h-3 w-3" /> Unpack all
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={resetList}
+                className="text-destructive focus:text-destructive"
+              >
+                <RotateCcw className="mr-2 h-3 w-3" /> Reset list
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Progress value={pct} className="mt-2 h-1.5 bg-secondary" />
       </div>

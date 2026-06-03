@@ -8,6 +8,8 @@ import {
   Download,
   Image as ImageIcon,
   FileArchive,
+  Pencil,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +60,8 @@ export default function TripDocuments() {
   const [uploading, setUploading] = useState(false);
   const [kind, setKind] = useState<string>("other");
   const fileRef = useRef<HTMLInputElement>(null);
+  const replaceRef = useRef<HTMLInputElement>(null);
+  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!tripId) return;
@@ -163,6 +167,88 @@ export default function TripDocuments() {
     }
   }
 
+  async function renameDoc(doc: Doc) {
+    const next = prompt("Rename document", doc.original_name)?.trim();
+    if (!next || next === doc.original_name) return;
+    const prev = docs;
+    setDocs((d) => d.map((x) => (x.id === doc.id ? { ...x, original_name: next } : x)));
+    const { error } = await supabase
+      .from("trip_documents")
+      .update({ original_name: next })
+      .eq("id", doc.id);
+    if (error) {
+      setDocs(prev);
+      toast({ title: "Rename failed", description: error.message, variant: "destructive" });
+    }
+  }
+
+  async function updateDocKind(doc: Doc, nextKind: string) {
+    const prev = docs;
+    setDocs((d) => d.map((x) => (x.id === doc.id ? { ...x, kind: nextKind } : x)));
+    const { error } = await supabase
+      .from("trip_documents")
+      .update({ kind: nextKind })
+      .eq("id", doc.id);
+    if (error) {
+      setDocs(prev);
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    }
+  }
+
+  function triggerReplace(docId: string) {
+    setReplaceTargetId(docId);
+    replaceRef.current?.click();
+  }
+
+  async function handleReplaceFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    const targetId = replaceTargetId;
+    setReplaceTargetId(null);
+    if (!file || !targetId || !tripId) return;
+    const target = docs.find((x) => x.id === targetId);
+    if (!target) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    setUploading(true);
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${user.id}/${tripId}/${crypto.randomUUID()}-${safeName}`;
+    const up = await supabase.storage.from("trip-documents").upload(path, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+    if (up.error) {
+      setUploading(false);
+      toast({ title: "Replace failed", description: up.error.message, variant: "destructive" });
+      return;
+    }
+    const updated = await supabase
+      .from("trip_documents")
+      .update({
+        path,
+        original_name: file.name,
+        mime_type: file.type || null,
+        size_bytes: file.size,
+      })
+      .eq("id", targetId)
+      .select("id, trip_id, path, original_name, mime_type, size_bytes, kind, notes, created_at")
+      .single();
+    setUploading(false);
+    if (updated.error) {
+      await supabase.storage.from("trip-documents").remove([path]);
+      toast({ title: "Replace failed", description: updated.error.message, variant: "destructive" });
+      return;
+    }
+    // Best-effort cleanup of old file
+    await supabase.storage.from("trip-documents").remove([target.path]);
+    if (updated.data) {
+      setDocs((d) => d.map((x) => (x.id === targetId ? (updated.data as Doc) : x)));
+      toast({ title: "Replaced", description: file.name });
+    }
+  }
+
   if (!activeTrip) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center font-inter text-xs text-muted-foreground">
@@ -204,6 +290,13 @@ export default function TripDocuments() {
           type="file"
           hidden
           onChange={handleFile}
+          accept="image/*,application/pdf,.doc,.docx,.txt,.zip"
+        />
+        <input
+          ref={replaceRef}
+          type="file"
+          hidden
+          onChange={handleReplaceFile}
           accept="image/*,application/pdf,.doc,.docx,.txt,.zip"
         />
         <Button
@@ -251,10 +344,23 @@ export default function TripDocuments() {
                     <p className="truncate font-inter text-[11px] font-medium text-foreground">
                       {d.original_name}
                     </p>
-                    <p className="mt-0.5 font-inter text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {d.kind} · {fmtSize(d.size_bytes)} ·{" "}
-                      {format(parseISO(d.created_at), "MMM d")}
-                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Select value={d.kind} onValueChange={(v) => updateDocKind(d, v)}>
+                        <SelectTrigger className="h-5 w-[88px] rounded-[2px] border-none bg-transparent px-1 py-0 font-inter text-[10px] uppercase tracking-wider text-muted-foreground hover:bg-muted">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DOC_KINDS.map((k) => (
+                            <SelectItem key={k} value={k} className="font-inter text-[11px] capitalize">
+                              {k}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="font-inter text-[10px] uppercase tracking-wider text-muted-foreground">
+                        · {fmtSize(d.size_bytes)} · {format(parseISO(d.created_at), "MMM d")}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
                     <button
@@ -270,6 +376,20 @@ export default function TripDocuments() {
                       title="Download"
                     >
                       <Download className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => renameDoc(d)}
+                      className="rounded-[2px] p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="Rename"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => triggerReplace(d.id)}
+                      className="rounded-[2px] p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="Replace file"
+                    >
+                      <RefreshCw className="h-3 w-3" />
                     </button>
                     <button
                       onClick={() => removeDoc(d)}

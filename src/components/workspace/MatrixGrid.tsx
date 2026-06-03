@@ -320,6 +320,17 @@ export default function MatrixGrid() {
         else if (studioItem.category === "activity") mappedCategory = "activity";
         else if (studioItem.category === "sites") mappedCategory = "sites_of_interest";
 
+        // Validation: warn when stay is missing geographic anchor (breaks proximity)
+        if (mappedCategory === "stays" && !studioItem.google_place_id) {
+          toast.warning("Stay added without a verified location — open the card to set it.");
+        }
+        // Validation: warn when the user dropped onto a row that doesn't match the studio category
+        if (mappedCategory !== category) {
+          toast.message(
+            `Placed in ${mappedCategory.replace("_", " ")} row — that's where ${studioItem.category} items belong.`,
+          );
+        }
+
         await createItineraryItem({
           trip_id: activeTrip.id,
           category: mappedCategory,

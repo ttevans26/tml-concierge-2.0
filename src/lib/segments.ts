@@ -41,11 +41,11 @@ export function buildSegments(trip: Trip, items: ItineraryItem[]): LocationSegme
   for (const s of stays) {
     const offset = differenceInCalendarDays(parseISO(s.date!), ts);
     if (offset >= 0 && offset < totalDays) {
-      // Group strictly by location_name (city/state/country). Stays without a
-      // location stay null so they merge with adjacent unnamed nights and the
-      // user is prompted to set a city in the Reshuffle row.
-      const label = s.location_name?.trim();
-      if (label) dayLabels[offset] = label;
+      // Prefer location_name (city). Fall back to title so stays without a
+      // city still show as their own segment — the Reshuffle row's inline
+      // rename cascades a city name to every stay in the merged window.
+      const label = (s.location_name?.trim() || s.title?.trim()) || "Stay";
+      dayLabels[offset] = label;
     }
   }
 
@@ -87,7 +87,40 @@ export function buildSegments(trip: Trip, items: ItineraryItem[]): LocationSegme
     }
   }
 
-  return segments;
+  // Post-pass: merge adjacent assigned segments whose stays share the same
+  // location_name (case-insensitive). Collapses duplicates like two distinct
+  // Paris hotels back-to-back into a single "Paris" band.
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+  const locOf = (seg: LocationSegment): string | null => {
+    for (const id of seg.itemIds) {
+      const it = itemsById.get(id);
+      if (it?.category === "stays" && it.location_name?.trim()) {
+        return norm(it.location_name);
+      }
+    }
+    return null;
+  };
+  const merged: LocationSegment[] = [];
+  for (const seg of segments) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      !prev.isUnassigned &&
+      !seg.isUnassigned &&
+      locOf(prev) &&
+      locOf(prev) === locOf(seg)
+    ) {
+      prev.endDate = seg.endDate;
+      prev.nights += seg.nights;
+      prev.itemIds.push(...seg.itemIds);
+      for (const [k, v] of Object.entries(seg.counts)) {
+        prev.counts[k] = (prev.counts[k] ?? 0) + v;
+      }
+    } else {
+      merged.push(seg);
+    }
+  }
+  return merged;
 }
 
 /**

@@ -723,7 +723,10 @@ export default function MatrixGrid() {
             {CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
-                className="flex h-28 items-center border-b border-border px-3"
+                className="flex items-center border-b border-border px-3"
+                style={{
+                  height: cat.key === "stays" ? `${staysRowHeight}px` : "112px",
+                }}
               >
                 <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
                   {cat.label}

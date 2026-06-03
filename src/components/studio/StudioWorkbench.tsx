@@ -435,7 +435,7 @@ export default function StudioWorkbench() {
       .map((i) => ({
         id: i.id,
         label: i.title,
-        sublabel: i.location ?? null,
+        sublabel: i.address ?? null,
         lat: Number(i.lat),
         lng: Number(i.lng),
         kind:

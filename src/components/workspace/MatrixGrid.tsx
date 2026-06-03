@@ -34,7 +34,7 @@ import {
   type StayPill,
   type LocationLeg,
 } from "@/lib/locationLegs";
-import { MapPin, Sparkles, Bed, CalendarIcon, GripVertical } from "lucide-react";
+import { MapPin, Sparkles, Bed, CalendarIcon, GripVertical, Plus } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildSegments, computeReorderPatches } from "@/lib/segments";

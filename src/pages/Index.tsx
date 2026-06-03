@@ -1,9 +1,26 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, MapPin, Calendar, Wallet, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, MapPin, Calendar, Wallet, ChevronUp, ChevronDown, MoreHorizontal, Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore, Trip } from "@/stores/useTripStore";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import CreateTripDialog from "@/components/CreateTripDialog";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
@@ -79,6 +96,32 @@ function CountdownPanel({ startDate, endDate }: { startDate?: string | null; end
 /* ------------------------------------------------------------------ */
 
 function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
+  const navigate = useNavigate();
+  const duplicateTrip = useTripStore((s) => s.duplicateTrip);
+  const deleteTrip = useTripStore((s) => s.deleteTrip);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const handleDuplicate = async () => {
+    setBusy(true);
+    const copy = await duplicateTrip(trip.id);
+    setBusy(false);
+    if (copy) {
+      toast.success(`Duplicated "${trip.name}"`);
+      navigate(`/trip/${copy.id}`);
+    } else {
+      toast.error("Could not duplicate trip");
+    }
+  };
+
+  const handleDelete = async () => {
+    setBusy(true);
+    await deleteTrip(trip.id);
+    setBusy(false);
+    setConfirmDelete(false);
+    toast.success(`Deleted "${trip.name}"`);
+  };
+
   const dateRange =
     trip.start_date && trip.end_date
       ? `${format(new Date(trip.start_date), "MMM d")} — ${format(new Date(trip.end_date), "MMM d, yyyy")}`
@@ -111,7 +154,56 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   }, [trip.id, trip.destination]);
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md">
+    <div className="group relative flex flex-col overflow-hidden rounded-sm border-thin border-border bg-card transition-shadow hover:shadow-md">
+      {/* Actions menu */}
+      <div className="absolute right-2 top-2 z-10" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 min-h-[44px] min-w-[44px] text-muted-foreground hover:text-foreground"
+              disabled={busy}
+              aria-label="Trip actions"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleDuplicate} disabled={busy}>
+              <Copy className="mr-2 h-4 w-4" /> Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setConfirmDelete(true)}
+              disabled={busy}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{trip.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the trip and all its itinerary items. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex">
         <div
           onClick={onClick}

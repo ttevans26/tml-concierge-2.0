@@ -174,6 +174,18 @@ export default function TripWorkspace() {
                 Concierge
               </button>
               <button
+                onClick={() => setRightTab("map")}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
+                  rightTab === "map"
+                    ? "border-b-2 border-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <MapPin className="h-3 w-3" />
+                Map
+              </button>
+              <button
                 onClick={() => setBudgetOpen(false)}
                 className="flex items-center justify-center px-2 text-muted-foreground hover:text-foreground"
                 title="Collapse panel"
@@ -182,11 +194,11 @@ export default function TripWorkspace() {
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
-              {rightTab === "budget" ? (
+              {rightTab === "budget" && (
                 <BudgetSidebar embedded onCollapse={() => setBudgetOpen(false)} />
-              ) : (
-                <ConciergePanel />
               )}
+              {rightTab === "concierge" && <ConciergePanel />}
+              {rightTab === "map" && <ProximityMap />}
             </div>
           </div>
         ) : (

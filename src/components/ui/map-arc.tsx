@@ -1,6 +1,9 @@
 import * as React from "react";
 import { MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { geoOrthographic, geoPath, geoGraticule10 } from "d3-geo";
+import { feature } from "topojson-client";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
 
 export interface ArcPoint {
   id: string;

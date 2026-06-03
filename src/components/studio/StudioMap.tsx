@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { MapPin, Compass, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
+import { MapPin, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
 import { useStudioStore, StudioItem } from "@/stores/useStudioStore";
 import {
   loadGoogleMapsScript,
@@ -8,6 +8,7 @@ import {
   type GoogleMapsDiagnostics,
 } from "@/lib/googleMaps";
 import { toast } from "sonner";
+import { MapArc } from "@/components/ui/map-arc";
 
 const PIN_HEX: Record<string, string> = {
   stays: "#5B6B8A",
@@ -187,14 +188,24 @@ export default function StudioMap() {
       {/* Map area */}
       <div className="relative flex flex-1 flex-col">
         {!activeFolder ? (
-          <div className="flex flex-1 items-center justify-center px-6 bg-secondary/30">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border-thin border-border bg-background">
-                <Compass className="h-5 w-5 text-accent" strokeWidth={1.5} />
-              </div>
-              <p className="font-playfair text-sm font-semibold text-foreground">World View</p>
-              <p className="mt-1 mx-auto max-w-[200px] font-inter text-[10px] leading-relaxed text-muted-foreground">
-                Select a collection to see a proximity view of your saved locations.
+          <div className="relative flex flex-1 flex-col">
+            <div className="relative flex-1 min-h-0">
+              <MapArc
+                mode="globe"
+                points={[]}
+                height={9999}
+                className="h-full w-full rounded-none border-0 shadow-none"
+              />
+            </div>
+            <div className="border-t border-border bg-card/80 px-4 py-3 text-center backdrop-blur-sm">
+              <p className="font-inter text-[9px] font-semibold uppercase tracking-[0.3em] text-accent">
+                World View
+              </p>
+              <p className="mt-1 font-playfair italic-accent text-sm text-foreground">
+                Awaiting a destination
+              </p>
+              <p className="mx-auto mt-1 max-w-[220px] font-inter text-[10px] leading-relaxed text-muted-foreground">
+                Choose a collection from the vault to focus the atlas.
               </p>
             </div>
           </div>

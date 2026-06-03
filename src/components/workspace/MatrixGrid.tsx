@@ -933,6 +933,16 @@ export default function MatrixGrid() {
           <SmartPullInbox open={smartPullOpen} onOpenChange={setSmartPullOpen} />
         </Suspense>
       )}
+
+      {stayEdit.open && stayEdit.item && (
+        <Suspense fallback={null}>
+          <EditItemDialog
+            open={stayEdit.open}
+            onOpenChange={(open) => setStayEdit((s) => ({ ...s, open }))}
+            item={stayEdit.item}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

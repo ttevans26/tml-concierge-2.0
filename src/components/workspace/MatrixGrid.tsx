@@ -7,6 +7,7 @@ import TripSettingsModal from "./TripSettingsModal";
 import SmartPullInbox from "./SmartPullInbox";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "sonner";
+import { suggestFixesForConflicts, type ConflictFix } from "@/lib/conflictResolution";
 import { Inbox, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import { Undo2, Redo2 } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
@@ -243,6 +244,28 @@ export default function MatrixGrid() {
   }, [activeTrip?.start_date, activeTrip?.end_date]);
 
   const conflictIds = useMemo(() => detectConflicts(itineraryItems), [itineraryItems]);
+
+  const conflictFixes = useMemo(() => {
+    const m = new Map<string, ConflictFix>();
+    for (const f of suggestFixesForConflicts(itineraryItems)) m.set(f.itemId, f);
+    return m;
+  }, [itineraryItems]);
+
+  const handleApplyFix = useCallback(
+    async (fix: ConflictFix) => {
+      if (fix.kind === "shift_time") {
+        await updateItineraryItem(fix.itemId, {
+          start_time: fix.newStart,
+          end_time: fix.newEnd,
+        });
+        toast.success("Conflict resolved", { description: fix.reason });
+      } else if (fix.kind === "move_day") {
+        await updateItineraryItem(fix.itemId, { date: fix.newDate });
+        toast.success("Conflict resolved", { description: fix.reason });
+      }
+    },
+    [updateItineraryItem],
+  );
 
   const dailyTotals = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -578,7 +601,13 @@ export default function MatrixGrid() {
                       onDrop={(e) => handleDrop(e, dateStr, cat.key)}
                     >
                       {cellItems.map((item) => (
-                        <ItineraryItemCard key={item.id} item={item} hasConflict={conflictIds.has(item.id)} />
+                        <ItineraryItemCard
+                          key={item.id}
+                          item={item}
+                          hasConflict={conflictIds.has(item.id)}
+                          fix={conflictFixes.get(item.id) ?? null}
+                          onApplyFix={handleApplyFix}
+                        />
                       ))}
                       {!stayOccupied && (
                         <button

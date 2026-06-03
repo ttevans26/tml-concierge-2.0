@@ -371,7 +371,7 @@ function ReshuffleRow({
       style={style}
       className={`flex items-stretch gap-1 rounded-sm border border-border bg-card ${
         disabled ? "opacity-60" : ""
-      }`}
+      } ${removed ? "opacity-50 line-through" : ""}`}
     >
       <button
         type="button"
@@ -435,7 +435,7 @@ function ReshuffleRow({
         <button
           type="button"
           onClick={() => onMove(-1)}
-          disabled={disabled || index === 0}
+          disabled={disabled || removed || index === 0}
           className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
           aria-label="Move up"
         >
@@ -444,13 +444,57 @@ function ReshuffleRow({
         <button
           type="button"
           onClick={() => onMove(1)}
-          disabled={disabled || index === total - 1}
+          disabled={disabled || removed || index === total - 1}
           className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
           aria-label="Move down"
         >
           <ArrowDown className="h-3 w-3" />
         </button>
       </div>
+
+      {!disabled && (
+        <div className="flex items-center pr-1.5">
+          {removed ? (
+            <button
+              type="button"
+              onClick={onRestore}
+              className="rounded-sm px-1.5 py-0.5 font-inter text-[10px] text-accent hover:bg-accent/10"
+              aria-label="Undo remove"
+            >
+              Undo
+            </button>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Remove location"
+                  title="Remove this location"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove this location?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Removing this location will delete its {segment.nights} night
+                    {segment.nights === 1 ? "" : "s"} and every stay, dining, agenda and
+                    logistics item scheduled within that window. Later locations will shift
+                    earlier and the trip end date will shrink. This takes effect when you
+                    press Apply.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep</AlertDialogCancel>
+                  <AlertDialogAction onClick={onRemove}>Remove</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      )}
     </li>
   );
 }

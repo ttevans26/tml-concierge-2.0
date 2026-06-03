@@ -832,6 +832,19 @@ export default function MatrixGrid() {
         </Suspense>
       )}
 
+      {activeTrip?.start_date && activeTrip?.end_date && legDialog.open && (
+        <LocationLegDialog
+          open={legDialog.open}
+          onOpenChange={(open) => setLegDialog((s) => ({ ...s, open }))}
+          tripStart={activeTrip.start_date}
+          tripEnd={activeTrip.end_date}
+          leg={legDialog.leg}
+          initialStart={legDialog.initialStart}
+          onSave={handleSaveLeg}
+          onDelete={handleDeleteLeg}
+        />
+      )}
+
       {/* Smart Pull Inbox: paste · review · history · diff · batch */}
       {smartPullOpen && (
         <Suspense fallback={null}>

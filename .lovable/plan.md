@@ -50,6 +50,50 @@
 
 Deferred to next turn. AppErrorBoundary at root already exists; remaining work is route-level boundaries, skip-link, ARIA passes, and i18n stub.
 
+---
+
+# A5 — Observability (SHIPPED scaffold)
+
+- New `src/lib/observability/`:
+  - `types.ts` — provider-agnostic `ErrorReporter` / `Analytics` / `WebVitalSample` contracts.
+  - `index.ts` — `obs` singleton + `registerErrorReporter` / `registerAnalytics` + `initWebVitals` (CLS/INP/LCP/FCP/TTFB via `web-vitals`). No-op providers by default so the app keeps working without DSN/keys.
+  - `sentry.ts` — opt-in adapter; uses dynamic import so `@sentry/react` stays out of the bundle until installed.
+  - `posthog.ts` — opt-in adapter; same pattern for `posthog-js`.
+- `main.tsx` boots providers when `VITE_SENTRY_DSN` / `VITE_POSTHOG_KEY` are present and wires `window.error` + `unhandledrejection` into `obs.captureException`.
+- `AppErrorBoundary.componentDidCatch` now reports through `obs` (no-op until Sentry is wired).
+
+### How to activate later
+- `bun add @sentry/react posthog-js`
+- Add `VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, optional `VITE_POSTHOG_HOST` to env. No code changes required.
+- For native (Capacitor), swap `sentry.ts` for `@sentry/capacitor` inside `createSentryReporter`; the rest of the app keeps calling `obs.*`.
+
+---
+
+# A7 — Accessibility & i18n baseline (SHIPPED scaffold)
+
+- `src/i18n/` with `i18next` + `react-i18next` + browser language detector, English bundle at `src/i18n/locales/en.json` (common/errors/nav namespaces).
+- Initialized from `main.tsx`. Migration is incremental — components without `t()` keep their literal strings.
+- Skip-to-content link + route-level `AppErrorBoundary` already shipped under A6.
+
+### Follow-ups
+- Run axe/Lighthouse a11y pass on Matrix Grid + Studio (0.5px borders are the likely contrast failure; need to validate against WCAG AA at small sizes).
+- Migrate user-visible strings in `AppErrorBoundary`, nav, and common dialogs to `t()` keys first; then ship `es.json` / `fr.json` lazily via `i18next` HTTP backend.
+- Add `aria-live` regions to Matrix drag feedback and toast queue.
+
+---
+
+# A8 — Build pipeline (SHIPPED config, requires GitHub repo settings)
+
+- `.github/workflows/ci.yml` — typecheck, lint (warn-only baseline), `vitest run`, build, dist artifact upload, optional Supabase DB lint, Lighthouse CI on PRs.
+- `.lighthouserc.json` — desktop preset, a11y ≥ 0.9 enforced, perf/best-practices/SEO warn-only baseline.
+- `renovate.json` — weekly Monday cadence, grouped Radix/types updates, react/supabase/capacitor groups gated on manual review, lockfile maintenance enabled.
+- `.github/dependabot.yml` — fallback if user prefers Dependabot over Renovate (do not enable both).
+
+### Required GitHub settings before workflow does real work
+- Add `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_ID` repo secrets to enable the `supabase-lint` job.
+- Install Renovate GitHub App OR enable Dependabot in repo settings.
+- Set branch protection on `main` to require the `verify` check.
+
 Goal: make the database safe, fast, and portable before we widen the user base or move toward iOS. No new features — only schema, indexes, GRANTs, query shape, and Realtime scoping.
 
 ---

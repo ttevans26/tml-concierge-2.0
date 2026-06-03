@@ -14,6 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      concierge_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          title: string
+          trip_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          title?: string
+          trip_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          title?: string
+          trip_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      concierge_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+          tool_calls: Json | null
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+          tool_calls?: Json | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+          tool_calls?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "concierge_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "concierge_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       flight_tracking: {
         Row: {
           airline: string | null
@@ -188,6 +253,51 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          due_at: string | null
+          id: string
+          is_dismissed: boolean
+          is_read: boolean
+          item_id: string | null
+          kind: string
+          metadata: Json
+          title: string
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          is_dismissed?: boolean
+          is_read?: boolean
+          item_id?: string | null
+          kind: string
+          metadata?: Json
+          title: string
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          is_dismissed?: boolean
+          is_read?: boolean
+          item_id?: string | null
+          kind?: string
+          metadata?: Json
+          title?: string
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active_cards: Json | null
@@ -196,6 +306,7 @@ export type Database = {
           display_name: string | null
           id: string
           loyalty_memberships: Json | null
+          notification_preferences: Json
           preferences: Json | null
           updated_at: string
           user_id: string
@@ -207,6 +318,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           loyalty_memberships?: Json | null
+          notification_preferences?: Json
           preferences?: Json | null
           updated_at?: string
           user_id: string
@@ -218,6 +330,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           loyalty_memberships?: Json | null
+          notification_preferences?: Json
           preferences?: Json | null
           updated_at?: string
           user_id?: string

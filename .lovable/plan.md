@@ -1,67 +1,92 @@
+## Goal
 
-# Location Row in Matrix Grid
+Mirror the Location row's pill UI on the Stays row. A hotel stay should render as a single pill that spans every night it covers (just like a location leg spans its dates), instead of one card per day cell. The Location row already shows city/state/country correctly — no changes there.
 
-Add a new top row, "Location", that defines the geographic context (city, state, country) for each leg of the trip, decoupled from Stays. Stays no longer enforce one-per-night.
+## Behavior
 
-## Data model
+- A stay item already has a check-in date (`date`) and check-out via `metadata.end_date` (or `metadata.checkout_date`). The pill spans from check-in day through the night before check-out (i.e. last-night cell), matching the existing "X nights" semantics used by `buildSegments`.
+- Pills render as an absolutely-positioned overlay over the Stays row, identical styling system to Location pills (thin border, accent tint, truncate, rounded-sm, height fits row).
+- Multiple stays may overlap the same night (we already removed the 1-stay lockout). Overlapping pills stack vertically inside the Stays row; row height grows to fit (min height preserved).
+- Empty day cells in the Stays row still show the "+ Add" affordance so users can add a new stay on any uncovered day.
+- Clicking a pill opens the existing `EditItemDialog` for that stay (same dialog used today when you click a stay card).
+- Hover shows hotel name + date range + nights in `title` tooltip.
 
-- New itinerary category enum value: `location` (added to the `category` USER-DEFINED type on `itinerary_items`).
-- A Location item represents a leg and **spans a date range**, encoded as:
-  - `date` = leg start (yyyy-MM-dd)
-  - `metadata.end_date` = leg end (inclusive, yyyy-MM-dd)
-  - `metadata.city`, `metadata.state`, `metadata.country` — structured fields
-  - `title` = formatted label, e.g. `"Paris, Île-de-France, France"` (denormalized for list views and back-compat)
-  - `location_name`, `google_place_id`, `location_lat`, `location_lng` — populated from Google Places (reusing `PlaceAutocomplete` with `types="cities"`).
-- No schema changes beyond the enum value. Leg ranges live in JSONB; this keeps the change minimal and avoids a parallel table.
+## Out of scope (Stays row only — other rows untouched)
 
-## Migration
+- Dining, Activity, Logistics rows keep their per-cell card layout.
+- No drag-to-resize on the pills (matches current Location pill behavior).
+- No schema changes.
 
-Single migration: `ALTER TYPE category ADD VALUE IF NOT EXISTS 'location';`
+## Technical Plan
 
-No data backfill is written — see "Auto-derive" below.
+**Files to edit**
 
-## Matrix grid
+- `src/components/workspace/MatrixGrid.tsx`
+- `src/lib/locationLegs.ts` (extend with a generic `stayColumnSpan` helper, or add a sibling `getStayPills` util — see below)
 
-```text
-            Aug 21   Aug 22   Aug 23   Aug 24   Aug 25
-LOCATION   [────── Paris, FR ──────][── Lyon, FR ─]
-STAYS       Le Bristol  Le Bristol  Ritz   Cour    Cour
-LOGISTICS   …           …           train  …       …
-DINING      …
-ACTIVITY    …
-DAILY $
+**New helper: `getStayPills(items, tripStart)`**
+
+In `src/lib/locationLegs.ts` (or a new `src/lib/stayPills.ts` if cleaner), export:
+
+```ts
+interface StayPill {
+  id: string;           // itinerary_items.id
+  startDate: string;    // check-in (yyyy-MM-dd)
+  endDate: string;      // last night occupied (yyyy-MM-dd) — checkout minus 1
+  nights: number;
+  title: string;
+  item: ItineraryItem;
+}
 ```
 
-- Row height ~36px (slimmer than 112px category rows).
-- A leg renders as a **single absolutely-positioned pill** sitting on top of the day grid, width = `nights × dayWidth`, label centered, truncated.
-- Clicking an empty span opens a quick-create popover (city autocomplete → infers state/country from Google Places `address_components`). Clicking an existing pill opens an edit popover (rename, change place, delete) with drag handles on the left/right edges to resize the leg by whole days. Dragging the body moves the leg.
-- Validation: legs cannot overlap. If a new leg overlaps an existing one, trim the existing leg(s) to make room (with a toast). Legs may have gaps (the grid just shows an empty Location row segment with a faint "+ Add location" affordance).
+Logic:
+- Filter `category === "stays"` with a `date`.
+- `endDate = metadata.end_date ?? metadata.checkout_date ?? date`; if it's a checkout date (exclusive), subtract 1 day to get the last-night cell. Fallback to `date` (1-night stay) if metadata missing.
+- Sort by `startDate`.
 
-## Auto-derive from existing stays
+Reuse the existing `legColumnSpan(tripStart, { startDate, endDate })` for positioning math — it's already generic.
 
-On every load (pure, no DB writes):
-- If a trip has zero Location items, `buildSegments` (in `src/lib/segments.ts`) already collapses consecutive same-`location_name` stays into segments. We render those segments as **ghost** Location pills (italic label, dashed border, "Derived from stays" tooltip).
-- A "Confirm legs" inline button persists the ghost pills as real Location items in one batch. Until then they remain read-only suggestions and don't block stays editing.
+**MatrixGrid changes**
 
-## Stays row changes
+1. Compute `stayPills = useMemo(() => getStayPills(itineraryItems, activeTrip?.start_date), [...])`.
+2. Compute lane assignment to stack overlapping pills:
+   - Greedy: for each pill (sorted by start), pick the lowest lane index whose last pill's `endDate < this.startDate`.
+   - Track `maxLane`; Stays row height = `Math.max(112, (maxLane + 1) * 28 + 8)` (currently `h-28` = 112px).
+3. Render a second absolute overlay (sibling to the existing leg overlay) positioned over the Stays row. The Stays row's `top` offset within the day-columns wrapper = header(40) + location(36) = 76px. Height matches the dynamic Stays row height.
+4. Inside the Stays row's per-day cell loop:
+   - Remove the per-day stay cards from the cell render (skip rendering for `cat.key === "stays"` cellItems).
+   - Keep the "+ Add" button so users can still seed a new stay on any day.
+   - Keep the cell background (`bg-[hsl(var(--cell-stays))]`) intact.
+5. Pills are styled like location pills:
+   - `border border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25 rounded-sm px-2.5`
+   - Height ~24-26px, vertical gap 2px between lanes
+   - Icon: `Bed` (lucide) instead of `MapPin`
+   - Label: `{title} · {nights}n`
+6. Click → set state opening `EditItemDialog` with that item. (Dialog is already lazy-loaded elsewhere in the app; import + wire a small local state for it here.)
 
-- Drop the `stayOccupied` lockout in `MatrixGrid.tsx` so multiple stays can stack per night cell.
-- Existing conflict-detection (`src/lib/conflictResolution.ts`) keeps flagging overlapping bookings as non-blocking warnings.
-- The "+ Add" affordance always shows in the Stays cell regardless of occupancy.
+**Visual diagram**
 
-## Files touched
+```
+┌──────────┬─────────┬─────────┬─────────┬─────────┐
+│ LOCATION │ [────── Paris, IDF, FR · 3n ──────]   │  ← existing
+├──────────┼─────────┼─────────┼─────────┼─────────┤
+│ STAYS    │ [── Hôtel Bourg · 3n ──]              │  ← new spanning pill
+│          │ + Add    + Add    + Add    + Add      │
+├──────────┼─────────┼─────────┼─────────┼─────────┤
+│ LOGISTICS│  …per-cell cards (unchanged)…         │
+└──────────┴─────────┴─────────┴─────────┴─────────┘
+```
 
-- `supabase/migrations/<new>.sql` — add `location` enum value.
-- `src/components/workspace/MatrixGrid.tsx` — insert LOCATION row above CATEGORIES; render spanning pills; remove `stayOccupied` gating; handle drop targets per leg.
-- `src/components/workspace/LocationLegBar.tsx` (new) — pill component with drag-to-move, edge-to-resize, edit popover.
-- `src/components/workspace/LocationLegDialog.tsx` (new) — create/edit form using `PlaceAutocomplete` (`types="cities"`); parses Google `address_components` for city/state/country.
-- `src/lib/locationLegs.ts` (new) — pure helpers: `getLegs(items, trip)`, `getGhostLegsFromStays(items, trip)` (wraps `buildSegments`), `legOverlaps`, `trimOnConflict`, `formatLegLabel`.
-- `src/stores/useTripStore.ts` — typing tweak so `ItineraryItem["category"]` includes `"location"`; helper `createLocationLeg`, `updateLocationLeg`, `confirmGhostLegs` (batch insert).
-- `src/components/workspace/ItineraryItemCard.tsx` — hide Location items from non-Location rows (filter by `category !== "location"` where iterating all items).
-- `src/lib/segments.ts` — extend `buildSegments` to prefer real Location items over stay-derived ones when present; falls back to current behavior otherwise. Used by `SegmentCard`, orphan detection, Trip Editor.
+**Edge cases**
 
-## Out of scope
+- Stay extending past trip end: clip `width` using the same `Math.min(span, days.length - startIdx)` logic as legs.
+- Stay starting before trip start: skip (consistent with current leg overlay behavior).
+- Stays without `metadata.end_date`: render as 1-night pill spanning just `date`.
+- Conflict highlight: if `conflictIds.has(item.id)`, add a red ring (`ring-1 ring-destructive/60`) on the pill.
 
-- Sub-city granularity (neighborhoods).
-- Mobile reflow of the spanning pill (will stack as a horizontally scrollable strip — same as today's grid).
-- Migrating the New Journey seed flow to write Location items instead of (or in addition to) Stays. Currently it seeds Stays; we'll auto-derive ghost Location pills from them. A follow-up can move seeding directly to Location.
+## Validation
+
+- Existing Location pill row continues to render unchanged.
+- Adding a stay via the existing AddItemDialog flow produces a pill spanning the correct nights.
+- Clicking the pill opens the edit dialog and saves correctly.
+- Other category rows (Dining/Logistics/Activity) are visually unchanged.

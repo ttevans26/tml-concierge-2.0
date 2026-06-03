@@ -17,6 +17,39 @@
 - Cursor pagination UI (Phase B).
 - Service-layer migration of `itineraryItems` / `notifications` (A4).
 
+---
+
+# A3 — Edge function discipline (SHIPPED)
+
+- New `supabase/functions/_shared/`: `cors.ts`, `logger.ts` (structured JSON), `validate.ts` (zero-dep schema lib), `rate-limit.ts` (in-isolate token bucket), `handler.ts` (CORS/rate-limit/error envelope).
+- Applied to `aviationstack-lookup` (30 req/min/IP, IATA + date schema) and `ingest-social-post` (10 imports/min/IP, URL + note schema).
+- Echoes `x-request-id` on every response for client-side correlation.
+- Removed hardcoded Aviationstack fallback API key and stopped echoing upstream error bodies to clients.
+
+### Follow-ups (apply same pattern, copy-paste)
+- `concierge-chat`, `scrape-and-parse`, `smart-pull*`, `get-concierge-suggestions`, `cancellation-scan`, `fetch-fx-rates`, `delete-account`.
+- For strict global rate limits, back the bucket with a Postgres `rate_limits` table or Upstash.
+
+---
+
+# A4 — Service-layer scaffolding (SHIPPED, adoption in-flight)
+
+- Fixed `services/trips.ts` column list to match live schema (`name`, `display_currency` etc.).
+- Added `services/itineraryItems.ts`, `services/notifications.ts`, `services/profile.ts`, `services/flights.ts`. All export explicit column constants and use `wrapError` → `ServiceError`.
+- `services/itineraryItems.bulkUpdateDates` wraps the new RPC.
+- Migrated `NotificationsPopover` off direct `supabase.from("notifications")` calls — reference adoption pattern.
+- `src/services/index.ts` exposes the new namespaces.
+
+### Follow-ups
+- Migrate `useTripStore` (~13 call sites), `useStudioStore` (~5 call sites), `PackingList`, `TripDocuments`, `ConciergePanel`, `SocialImportsTray` to import from `@/services`.
+- Goal: only services files contain `from "@/integrations/supabase/client"`.
+
+---
+
+# A6 — Resilience + a11y/i18n
+
+Deferred to next turn. AppErrorBoundary at root already exists; remaining work is route-level boundaries, skip-link, ARIA passes, and i18n stub.
+
 Goal: make the database safe, fast, and portable before we widen the user base or move toward iOS. No new features — only schema, indexes, GRANTs, query shape, and Realtime scoping.
 
 ---

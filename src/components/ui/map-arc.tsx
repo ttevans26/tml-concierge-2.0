@@ -17,6 +17,8 @@ export interface MapArcProps {
   subtitle?: string;
   height?: number;
   className?: string;
+  /** Visual mode: editorial arc atlas, or a slowly rotating wireframe globe placeholder. */
+  mode?: "arc" | "globe";
 }
 
 /**
@@ -35,7 +37,19 @@ export function MapArc({
   subtitle,
   height = 360,
   className,
+  mode = "arc",
 }: MapArcProps) {
+  if (mode === "globe") {
+    return (
+      <GlobePlaceholder
+        title={title}
+        subtitle={subtitle}
+        height={height}
+        className={className}
+      />
+    );
+  }
+
   const valid = React.useMemo(
     () => points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)),
     [points],

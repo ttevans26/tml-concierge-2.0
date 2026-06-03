@@ -13,29 +13,16 @@ export type Trip = Tables<"trips">;
 export type TripInsert = TablesInsert<"trips">;
 export type TripUpdate = TablesUpdate<"trips">;
 
-/** Explicit column list — no `select *`. Tightens payload and unlocks future column-level grants. */
-const TRIP_COLUMNS = [
-  "id",
-  "user_id",
-  "title",
-  "destination",
-  "start_date",
-  "end_date",
-  "total_trip_budget",
-  "target_nightly_budget",
-  "currency",
-  "is_published",
-  "share_token",
-  "cover_image_url",
-  "created_at",
-  "updated_at",
-].join(",");
+/** Explicit column list — no `select *`. Tightens payload and matches the live schema. */
+export const TRIP_COLUMNS =
+  "id,user_id,name,description,destination,start_date,end_date,is_published,share_token,target_nightly_budget,total_trip_budget,cover_image_url,display_currency,fx_rates,created_at,updated_at";
 
 export async function listMyTrips(): Promise<Trip[]> {
   const { data, error } = await supabase
     .from("trips")
     .select(TRIP_COLUMNS)
-    .order("start_date", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) wrapError("listMyTrips", error);
   return (data ?? []) as unknown as Trip[];
 }

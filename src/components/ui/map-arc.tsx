@@ -280,9 +280,9 @@ function GlobePlaceholder({
         if (cancelled) return;
         const landTopo: any = (landMod as any).default ?? landMod;
         const countriesTopo: any = (countriesMod as any).default ?? countriesMod;
-        setLand(feature(landTopo, landTopo.objects.land) as Feature<Geometry>);
+        setLand(feature(landTopo, landTopo.objects.land) as unknown as Feature<Geometry>);
         setCountries(
-          feature(countriesTopo, countriesTopo.objects.countries) as FeatureCollection,
+          feature(countriesTopo, countriesTopo.objects.countries) as unknown as FeatureCollection,
         );
       } catch (e) {
         // Silently fall back to empty sphere if topology unavailable.

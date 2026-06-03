@@ -1,12 +1,16 @@
 import { useState, useMemo } from "react";
 import { Pencil, ExternalLink, Anchor, CreditCard, Navigation, AlertTriangle, Star, MapPin } from "lucide-react";
+import { Wand2 } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import { haversineDistance, formatDistance } from "@/lib/distance";
 import EditItemDialog from "./EditItemDialog";
+import type { ConflictFix } from "@/lib/conflictResolution";
 
 interface ItineraryItemCardProps {
   item: ItineraryItem;
   hasConflict?: boolean;
+  fix?: ConflictFix | null;
+  onApplyFix?: (fix: ConflictFix) => void | Promise<void>;
 }
 
 /** Compute match level against global travel preferences stored in profile */
@@ -52,7 +56,7 @@ function computeMatch(
   return "partial";
 }
 
-export default function ItineraryItemCard({ item, hasConflict = false }: ItineraryItemCardProps) {
+export default function ItineraryItemCard({ item, hasConflict = false, fix = null, onApplyFix }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);
@@ -136,6 +140,18 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
             <span className="mb-0.5 inline-block rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">
               Conflict
             </span>
+          )}
+          {hasConflict && fix && onApplyFix && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onApplyFix(fix);
+              }}
+              title={fix.reason}
+              className="mb-0.5 ml-0.5 inline-flex items-center gap-0.5 rounded-sm border-thin border-accent/40 bg-accent/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-accent hover:bg-accent/20"
+            >
+              <Wand2 className="h-2 w-2" /> Apply fix
+            </button>
           )}
           {overBudget && (
             <span className="mb-0.5 ml-0.5 inline-flex items-center gap-0.5 rounded-sm bg-destructive/10 px-1 py-0.5 font-inter text-[8px] font-semibold uppercase tracking-wider text-destructive">

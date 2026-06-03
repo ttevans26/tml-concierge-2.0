@@ -577,16 +577,12 @@ export default function MatrixGrid() {
         new Date(parseISO(data.startDate).getTime() + (data.nights - 1) * 86400000),
         "yyyy-MM-dd",
       );
-      // Block overlaps with other real legs
-      const conflict = legs.some(
+      // Non-blocking overlap notice — let the user save and resolve gaps/conflicts visually.
+      const conflictLeg = legs.find(
         (l) =>
           l.id !== data.id &&
           legOverlaps(data.startDate, endDate, l.startDate, l.endDate),
       );
-      if (conflict) {
-        toast.error("Overlaps another location leg — adjust dates.");
-        return;
-      }
       const title = formatLegLabel(data.city, data.state, data.country);
       const payload: Partial<ItineraryItem> = {
         trip_id: activeTrip.id,

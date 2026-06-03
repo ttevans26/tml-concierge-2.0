@@ -7,6 +7,7 @@ import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
 import ConciergeToolCard from "@/components/workspace/ConciergeToolCard";
+import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 
@@ -468,29 +469,27 @@ export default function ConciergePanel() {
       </div>
 
       {/* Input */}
-      <form
-        className="flex shrink-0 items-center gap-1.5 border-t border-border bg-background/50 p-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-      >
-        <input
+      <div className="shrink-0 border-t border-foil bg-surface-2/60 p-2.5">
+        <AnimatedAIChat
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask the concierge…"
-          disabled={sending}
-          className="flex-1 rounded-[2px] border border-border bg-background px-2 py-1.5 font-inter text-[11px] text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none"
+          onChange={setInput}
+          onSubmit={() => send(input)}
+          sending={sending}
+          placeholder={
+            activeTrip
+              ? `Ask about ${activeTrip.destination || activeTrip.name}…`
+              : "Ask the Concierge…"
+          }
+          quickPrompts={
+            messages.length === 0
+              ? quickPrompts.map((q) => ({
+                  label: q.split(/[.?]/)[0].slice(0, 36),
+                  value: q,
+                }))
+              : undefined
+          }
         />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={sending || !input.trim()}
-          className="h-7 w-7 rounded-[2px] bg-accent text-accent-foreground hover:bg-accent/90"
-        >
-          <Send className="h-3 w-3" />
-        </Button>
-      </form>
+      </div>
       </div>
       {editItem && (
         <EditItemDialog

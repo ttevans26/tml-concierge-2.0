@@ -1,10 +1,19 @@
 import { useEffect, useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
-import { Wifi } from "lucide-react";
+import { Wifi, KeyRound, Loader2, Check } from "lucide-react";
 
 interface PublicItem {
   id: string;
@@ -44,11 +53,15 @@ const CELL_BG: Record<string, string> = {
 
 export default function PublicTripView() {
   const { token } = useParams<{ token: string }>();
+  const { user } = useAuth();
   const [trip, setTrip] = useState<PublicTrip | null>(null);
   const [items, setItems] = useState<PublicItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastSync, setLastSync] = useState<Date>(new Date());
+  const [requestState, setRequestState] = useState<"idle" | "submitting" | "submitted">("idle");
+  const [requestMessage, setRequestMessage] = useState("");
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const fetchData = async (shareToken: string) => {
     // Lookup trip by share_token
@@ -90,6 +103,37 @@ export default function PublicTripView() {
     return () => clearInterval(interval);
   }, [token]);
 
+  // Check whether the signed-in viewer already requested access to this trip
+  useEffect(() => {
+    if (!user || !trip?.id) return;
+    supabase
+      .from("trip_access_requests")
+      .select("status")
+      .eq("trip_id", trip.id)
+      .eq("requester_user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setRequestState("submitted");
+      });
+  }, [user, trip?.id]);
+
+  const submitAccessRequest = async () => {
+    if (!token || !user) return;
+    setRequestState("submitting");
+    const { error } = await supabase.rpc("request_trip_access", {
+      p_share_token: token,
+      p_message: requestMessage.trim() || null,
+    });
+    if (error) {
+      toast.error(error.message || "Could not submit request");
+      setRequestState("idle");
+      return;
+    }
+    toast.success("Access request sent to the owner");
+    setRequestState("submitted");
+    setPopoverOpen(false);
+  };
+
   const days = useMemo(() => {
     if (!trip?.start_date || !trip?.end_date) return [];
     try {
@@ -123,7 +167,7 @@ export default function PublicTripView() {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="border-b border-border px-6 py-5">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-playfair text-xl font-semibold text-foreground">{trip.name}</h1>
             {trip.destination && (
@@ -138,12 +182,71 @@ export default function PublicTripView() {
               View-only · Costs and confirmation codes redacted
             </p>
           </div>
-          {/* Live Sync Indicator */}
-          <div className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-3 py-1.5">
-            <Wifi className="h-3 w-3 text-green-500 animate-pulse" />
-            <span className="font-inter text-[9px] font-medium text-muted-foreground">
-              Live · {format(lastSync, "h:mm a")}
-            </span>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-3 py-1.5">
+              <Wifi className="h-3 w-3 text-green-500 animate-pulse" />
+              <span className="font-inter text-[9px] font-medium text-muted-foreground">
+                Live · {format(lastSync, "h:mm a")}
+              </span>
+            </div>
+            {user ? (
+              requestState === "submitted" ? (
+                <span className="inline-flex items-center gap-1 font-inter text-[10px] uppercase tracking-widest text-accent">
+                  <Check className="h-3 w-3" /> Access requested
+                </span>
+              ) : (
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-[2px] font-inter text-[11px]"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      Request access
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-72 space-y-2 p-3">
+                    <p className="font-playfair text-sm font-semibold text-foreground">
+                      Request full access
+                    </p>
+                    <p className="font-inter text-[11px] text-muted-foreground">
+                      The owner will see your message and can approve or decline.
+                    </p>
+                    <Textarea
+                      value={requestMessage}
+                      onChange={(e) => setRequestMessage(e.target.value)}
+                      placeholder="Optional note (e.g., joining for the Florence leg)"
+                      maxLength={280}
+                      className="min-h-[64px] font-inter text-[11px]"
+                    />
+                    <Button
+                      size="sm"
+                      className="w-full rounded-[2px] font-inter text-[11px]"
+                      disabled={requestState === "submitting"}
+                      onClick={submitAccessRequest}
+                    >
+                      {requestState === "submitting" ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : null}
+                      Send request
+                    </Button>
+                  </PopoverContent>
+                </Popover>
+              )
+            ) : (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-[2px] font-inter text-[11px]"
+              >
+                <Link to={`/login?next=/itinerary/${token}`}>
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Sign in to request access
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>

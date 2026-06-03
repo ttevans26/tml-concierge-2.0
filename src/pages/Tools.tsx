@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Compass, Plus } from "lucide-react";
 import { useTripStore } from "@/stores/useTripStore";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 import PreparednessChecklist from "@/components/tools/PreparednessChecklist";
 import TravelWarningsFeed from "@/components/tools/TravelWarningsFeed";
 import UpcomingAppointments from "@/components/tools/UpcomingAppointments";
@@ -12,14 +16,15 @@ import {
 } from "@/components/ui/select";
 
 export default function Tools() {
+  const { user } = useAuth();
   const trips = useTripStore((s) => s.trips);
   const activeTrip = useTripStore((s) => s.activeTrip);
   const fetchTrips = useTripStore((s) => s.fetchTrips);
   const fetchItineraryItems = useTripStore((s) => s.fetchItineraryItems);
 
   useEffect(() => {
-    if (trips.length === 0) fetchTrips();
-  }, [trips.length, fetchTrips]);
+    if (user && trips.length === 0) fetchTrips();
+  }, [user, trips.length, fetchTrips]);
 
   // Default: activeTrip, else next upcoming, else first.
   const defaultTripId = useMemo(() => {
@@ -81,11 +86,30 @@ export default function Tools() {
         </div>
       </header>
 
-      <UpcomingAppointments />
+      {trips.length === 0 ? (
+        <div className="rounded-sm border-thin border-foreground/30 bg-card px-6 py-10 text-center">
+          <Compass className="mx-auto h-6 w-6 text-accent" strokeWidth={1.5} />
+          <h2 className="mt-3 font-playfair text-lg text-foreground">
+            No trips to prepare for — yet.
+          </h2>
+          <p className="mx-auto mt-1 max-w-md font-inter text-xs text-muted-foreground">
+            Preparedness checklists, travel advisories, and appointment surfacing all rely on an
+            active itinerary. Create your first trip to unlock these tools.
+          </p>
+          <Button asChild size="sm" className="mt-4 rounded-[2px] font-inter text-xs">
+            <Link to="/">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Create a trip
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <UpcomingAppointments />
+      )}
 
-      <div className="border-t-thin border-foreground/15 mb-6" />
+      {trips.length > 0 && <div className="border-t-thin border-foreground/15 mb-6" />}
 
-      {!selectedTrip ? (
+      {trips.length === 0 ? null : !selectedTrip ? (
         <div className="border-thin border-foreground/40 rounded-sm p-6 text-center">
           <p className="font-playfair italic text-foreground/70">
             Select a trip to surface tailored preparedness and advisories.

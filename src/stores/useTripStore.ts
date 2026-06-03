@@ -22,6 +22,8 @@ export interface Trip {
   target_nightly_budget: number | null;
   total_trip_budget: number | null;
   cover_image_url: string | null;
+  display_currency: string | null;
+  fx_rates: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }

@@ -88,6 +88,38 @@ serve(async (req) => {
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY");
+
+    // Status mode — lightweight credential check used by the Smart Pull Inbox
+    // to display a "Connected / Not connected" indicator without invoking
+    // the full sync pipeline.
+    const url = new URL(req.url);
+    if (url.searchParams.get("mode") === "status" || req.method === "GET") {
+      if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) {
+        return j({ connected: false, reason: "Gmail connector not linked" });
+      }
+      try {
+        const verify = await fetch(
+          "https://connector-gateway.lovable.dev/api/v1/verify_credentials",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "X-Connection-Api-Key": GOOGLE_MAIL_API_KEY,
+            },
+          },
+        );
+        if (!verify.ok) {
+          const txt = await verify.text();
+          return j({ connected: false, reason: `Gateway ${verify.status}: ${txt.slice(0, 200)}` });
+        }
+        const data = await verify.json().catch(() => ({}));
+        const ok = data?.outcome === "verified" || data?.outcome === "skipped";
+        return j({ connected: ok, outcome: data?.outcome, reason: data?.error });
+      } catch (e) {
+        return j({ connected: false, reason: e instanceof Error ? e.message : "verify failed" });
+      }
+    }
+
     if (!LOVABLE_API_KEY) return j({ error: "AI key missing" }, 500);
     if (!GOOGLE_MAIL_API_KEY) return j({ error: "Gmail connector not linked" }, 500);
 

@@ -1,13 +1,27 @@
-import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Loader2, RotateCcw, Plus, Pencil } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Sparkles, Send, Loader2, Plus, Pencil, MessagesSquare, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow } from "date-fns";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = {
+  id?: string;
+  role: "user" | "assistant" | "tool";
+  content: string;
+  tool_calls?: unknown;
+};
+
+interface Conversation {
+  id: string;
+  title: string;
+  trip_id: string | null;
+  updated_at: string;
+}
 
 interface Suggestion {
   title: string;
@@ -17,8 +31,6 @@ interface Suggestion {
   estimated_cost?: number;
   target: "studio" | "itinerary";
 }
-
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/concierge-chat`;
 
 function parseSuggestions(content: string): { text: string; suggestions: Suggestion[] } {
   const regex = /```suggestions\s*([\s\S]*?)\s*```/;
@@ -45,11 +57,14 @@ function parseSuggestions(content: string): { text: string; suggestions: Suggest
 export default function ConciergePanel() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
+  const [sending, setSending] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [editItem, setEditItem] = useState<ItineraryItem | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loadingThread, setLoadingThread] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
@@ -62,11 +77,53 @@ export default function ConciergePanel() {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, streaming]);
+  }, [messages, sending]);
+
+  // Load conversations on mount / trip change
+  const loadConversations = useCallback(async () => {
+    const { data } = await supabase
+      .from("concierge_conversations")
+      .select("id, title, trip_id, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(50);
+    setConversations((data || []) as Conversation[]);
+  }, []);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations, activeTrip?.id]);
+
+  // Load messages for active conversation
+  useEffect(() => {
+    if (!activeConvId) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingThread(true);
+      const { data } = await supabase
+        .from("concierge_messages")
+        .select("id, role, content, tool_calls")
+        .eq("conversation_id", activeConvId)
+        .order("created_at", { ascending: true });
+      if (!cancelled) {
+        setMessages(
+          (data || [])
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({ id: m.id, role: m.role as "user" | "assistant", content: m.content })),
+        );
+        setLoadingThread(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConvId]);
 
   // Cross-component prompt injection (e.g. from TripHealthBar "Ask concierge")
   useEffect(() => {
-    if (pendingConciergePrompt && !streaming) {
+    if (pendingConciergePrompt && !sending) {
       const p = consumeConciergePrompt();
       if (p) send(p);
     }
@@ -94,98 +151,69 @@ export default function ConciergePanel() {
   }
 
   const quickPrompts = [
-    "What's missing from this itinerary?",
+    "What's missing from this itinerary? Use get_trip_summary first.",
     activeAnchor ? `Dining near ${activeAnchor.title}` : "Standout dinner ideas",
-    "Points-optimization plays I'm missing",
+    "Schedule a sunset cocktail bar near my anchor",
   ];
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || streaming) return;
+    if (!trimmed || sending) return;
     const userMsg: Msg = { role: "user", content: trimmed };
-    const next = [...messages, userMsg];
-    setMessages(next);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setStreaming(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    let assistantSoFar = "";
-
-    const pushAssistant = (chunk: string) => {
-      assistantSoFar += chunk;
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant") {
-          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
-        }
-        return [...prev, { role: "assistant", content: assistantSoFar }];
-      });
-    };
+    setSending(true);
 
     try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      const { data, error } = await supabase.functions.invoke("concierge-chat", {
+        body: {
+          conversation_id: activeConvId,
+          trip_id: activeTrip?.id || null,
+          message: trimmed,
+          context: buildContext(),
         },
-        body: JSON.stringify({ messages: next, context: buildContext() }),
       });
-      if (!resp.ok || !resp.body) {
-        if (resp.status === 429)
+      if (error || data?.error) {
+        const status = (error as { context?: { status?: number } })?.context?.status;
+        if (status === 429)
           toast({ title: "Concierge is warming up", description: "Try again in a moment." });
-        else if (resp.status === 402)
+        else if (status === 402)
           toast({ title: "AI credits exhausted", description: "Add funds in Settings → Workspace → Usage.", variant: "destructive" });
-        else toast({ title: "Concierge unavailable", description: "Please try again shortly." });
-        setStreaming(false);
+        else toast({ title: "Concierge unavailable", description: data?.error || "Please try again shortly." });
+        setMessages((prev) => prev.slice(0, -1));
         return;
       }
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let done = false;
-      while (!done) {
-        const { done: d, value } = await reader.read();
-        if (d) break;
-        buf += decoder.decode(value, { stream: true });
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          let line = buf.slice(0, nl);
-          buf = buf.slice(nl + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line || line.startsWith(":") || !line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") {
-            done = true;
-            break;
-          }
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content: string | undefined = parsed.choices?.[0]?.delta?.content;
-            if (content) pushAssistant(content);
-          } catch {
-            buf = line + "\n" + buf;
-            break;
-          }
+      const newConvId = data.conversation_id as string;
+      const content = (data.content as string) || "";
+      const toolResults = (data.tool_results as { name: string; result: { ok?: boolean; item?: { title?: string } } }[]) || [];
+      if (newConvId !== activeConvId) setActiveConvId(newConvId);
+      setMessages((prev) => [...prev, { role: "assistant", content }]);
+      // Toast on side-effect tools
+      for (const tr of toolResults) {
+        if (tr.name === "create_itinerary_item" && tr.result?.ok) {
+          toast({ title: "Added to itinerary", description: tr.result.item?.title || "" });
+          if (activeTrip) fetchItineraryItems(activeTrip.id);
         }
       }
-    } catch (e: any) {
-      if (e?.name !== "AbortError") {
-        console.error(e);
-        toast({ title: "Concierge error", description: "Connection interrupted.", variant: "destructive" });
-      }
+      loadConversations();
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Concierge error", description: "Connection interrupted.", variant: "destructive" });
+      setMessages((prev) => prev.slice(0, -1));
     } finally {
-      setStreaming(false);
-      abortRef.current = null;
+      setSending(false);
     }
   }
 
-  function reset() {
-    abortRef.current?.abort();
+  function newConversation() {
+    setActiveConvId(null);
     setMessages([]);
-    setStreaming(false);
+  }
+
+  async function deleteConversation(id: string) {
+    await supabase.from("concierge_conversations").delete().eq("id", id);
+    if (activeConvId === id) newConversation();
+    loadConversations();
   }
 
   async function handleAddToItinerary(suggestion: Suggestion, msgIndex: number, openEditor = false) {
@@ -216,35 +244,99 @@ export default function ConciergePanel() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-card">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
-          <p className="font-playfair text-[13px] font-semibold text-foreground">Concierge</p>
-          {activeTrip && (
-            <span className="font-inter text-[10px] text-muted-foreground truncate max-w-[120px]">
-              · {activeTrip.destination || activeTrip.name}
-            </span>
-          )}
+    <div className="flex h-full bg-card">
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <aside className="flex w-[160px] shrink-0 flex-col border-r border-border bg-background/40">
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-2 py-2">
+            <button
+              onClick={newConversation}
+              className="flex items-center gap-1 rounded-[2px] bg-accent px-2 py-1 font-inter text-[10px] uppercase tracking-wider text-accent-foreground hover:bg-accent/90"
+              title="New conversation"
+            >
+              <Plus className="h-3 w-3" /> New
+            </button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="rounded-[2px] p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Collapse"
+            >
+              <PanelLeftClose className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto py-1">
+            {conversations.length === 0 ? (
+              <p className="px-2 py-2 font-inter text-[10px] text-muted-foreground">No threads yet.</p>
+            ) : (
+              conversations.map((c) => (
+                <div
+                  key={c.id}
+                  className={cn(
+                    "group flex items-center justify-between gap-1 px-2 py-1.5 cursor-pointer border-l-2",
+                    activeConvId === c.id
+                      ? "border-accent bg-accent/5"
+                      : "border-transparent hover:bg-muted/50",
+                  )}
+                  onClick={() => setActiveConvId(c.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-inter text-[11px] text-foreground">{c.title}</p>
+                    <p className="font-inter text-[9px] text-muted-foreground">
+                      {formatDistanceToNow(new Date(c.updated_at), { addSuffix: true })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteConversation(c.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 rounded-[2px] p-0.5 text-muted-foreground hover:text-destructive"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+      )}
+
+      {/* Thread pane */}
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-[2px] p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Show conversations"
+              >
+                <PanelLeftOpen className="h-3 w-3" />
+              </button>
+            )}
+            <Sparkles className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
+            <p className="font-playfair text-[13px] font-semibold text-foreground">Concierge</p>
+            {activeTrip && (
+              <span className="font-inter text-[10px] text-muted-foreground truncate">
+                · {activeTrip.destination || activeTrip.name}
+              </span>
+            )}
+          </div>
         </div>
-        {messages.length > 0 && (
-          <button
-            onClick={reset}
-            className="rounded-[2px] p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="New conversation"
-          >
-            <RotateCcw className="h-3 w-3" />
-          </button>
-        )}
-      </div>
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-        {messages.length === 0 ? (
+        {loadingThread ? (
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span className="font-inter text-[11px]">Loading thread…</span>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="space-y-3">
             <p className="font-inter text-[11px] leading-relaxed text-muted-foreground">
-              Grounded in this trip. Ask about gaps, recs, or points strategy.
+              Grounded in this trip. Ask about gaps, recs, or points strategy. I can also schedule items directly.
             </p>
             <div className="space-y-1">
               {quickPrompts.map((q) => (
@@ -344,7 +436,7 @@ export default function ConciergePanel() {
             );
           })
         )}
-        {streaming && messages[messages.length - 1]?.role !== "assistant" && (
+        {sending && (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
             <span className="font-inter text-[11px]">Thinking…</span>
@@ -364,18 +456,19 @@ export default function ConciergePanel() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask the concierge…"
-          disabled={streaming}
+          disabled={sending}
           className="flex-1 rounded-[2px] border border-border bg-background px-2 py-1.5 font-inter text-[11px] text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none"
         />
         <Button
           type="submit"
           size="icon"
-          disabled={streaming || !input.trim()}
+          disabled={sending || !input.trim()}
           className="h-7 w-7 rounded-[2px] bg-accent text-accent-foreground hover:bg-accent/90"
         >
           <Send className="h-3 w-3" />
         </Button>
       </form>
+      </div>
       {editItem && (
         <EditItemDialog
           open={!!editItem}

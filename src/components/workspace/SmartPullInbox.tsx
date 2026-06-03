@@ -24,6 +24,7 @@ import {
   Sparkles,
   CopyCheck,
   Trash2,
+  Mail,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -93,6 +94,7 @@ export default function SmartPullInbox({ open, onOpenChange }: SmartPullInboxPro
   const [tab, setTab] = useState<"paste" | "review" | "history">("paste");
   const [emailText, setEmailText] = useState("");
   const [extracting, setExtracting] = useState(false);
+  const [syncingGmail, setSyncingGmail] = useState(false);
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [history, setHistory] = useState<PullEvent[]>([]);
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
@@ -290,6 +292,50 @@ export default function SmartPullInbox({ open, onOpenChange }: SmartPullInboxPro
     setHistory([]);
   }, []);
 
+  /* ---- Sync from Gmail ---- */
+  const handleSyncGmail = useCallback(async () => {
+    if (!tripId) return;
+    setSyncingGmail(true);
+    const eventId = `gmail-${Date.now()}`;
+    try {
+      const { data, error } = await supabase.functions.invoke("smart-pull-gmail", {
+        body: { maxResults: 10 },
+      });
+      if (error || data?.error) {
+        throw new Error(error?.message || data?.error || "Gmail sync failed");
+      }
+      const items = (data?.items || []) as Omit<ExtractedItem, "id">[];
+      const scanned = Number(data?.scanned ?? 0);
+      if (items.length === 0) {
+        toast.info(`Scanned ${scanned} Gmail message${scanned !== 1 ? "s" : ""}, no travel items found.`);
+        return;
+      }
+      const newPending: PendingItem[] = items.map((item, idx) => ({
+        ...item,
+        id: `${eventId}-${idx}`,
+        eventId,
+      }));
+      setPending((prev) => [...prev, ...newPending]);
+      const event: PullEvent = {
+        id: eventId,
+        trip_id: tripId,
+        source_preview: `Gmail · ${scanned} message${scanned !== 1 ? "s" : ""} scanned`,
+        chunk_count: scanned,
+        extracted_count: items.length,
+        applied_ids: [],
+        dismissed_ids: [],
+        created_at: Date.now(),
+      };
+      setHistory((prev) => [event, ...prev].slice(0, MAX_HISTORY));
+      setTab("review");
+      toast.success(`Pulled ${items.length} item${items.length !== 1 ? "s" : ""} from Gmail`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gmail sync failed");
+    } finally {
+      setSyncingGmail(false);
+    }
+  }, [tripId]);
+
   /* ---- Render ---- */
 
   return (
@@ -317,6 +363,36 @@ export default function SmartPullInbox({ open, onOpenChange }: SmartPullInboxPro
 
           {/* PASTE */}
           <TabsContent value="paste" className="flex-1 flex flex-col gap-3 mt-3 min-h-0">
+            <div className="flex items-center justify-between gap-2 rounded-[2px] border border-border bg-muted/30 px-3 py-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Mail className="h-3.5 w-3.5 shrink-0 text-accent" />
+                <div className="min-w-0">
+                  <p className="font-inter text-[11px] font-medium text-foreground">Sync from Gmail</p>
+                  <p className="font-inter text-[10px] text-muted-foreground truncate">
+                    Scans the connected inbox for recent travel confirmations.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={syncingGmail || extracting}
+                onClick={handleSyncGmail}
+                className="min-h-[36px] shrink-0"
+              >
+                {syncingGmail ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Scanning…
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-1.5 h-3.5 w-3.5" />
+                    Sync Gmail
+                  </>
+                )}
+              </Button>
+            </div>
             <Textarea
               placeholder={"Paste one or more confirmation emails.\nSeparate multiple with a line containing only ---"}
               className="min-h-[220px] flex-1 font-inter text-xs"

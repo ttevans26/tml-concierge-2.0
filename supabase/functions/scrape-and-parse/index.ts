@@ -34,9 +34,16 @@ serve(async (req) => {
         ? [body.url]
         : [];
 
-    if (urls.length === 0) {
+    const files: Array<{ filename?: string; mime: string; dataBase64: string }> = Array.isArray(body?.files)
+      ? body.files.filter(
+          (f: any) =>
+            f && typeof f.dataBase64 === "string" && typeof f.mime === "string",
+        )
+      : [];
+
+    if (urls.length === 0 && files.length === 0) {
       return new Response(
-        JSON.stringify({ error: "A valid URL (or urls[]) is required" }),
+        JSON.stringify({ error: "Provide urls[] or files[]" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -46,12 +53,16 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const results = await Promise.all(
+    const urlResults = await Promise.all(
       urls.map((u) => processSingleUrl(u, LOVABLE_API_KEY))
     );
+    const fileResults = await Promise.all(
+      files.map((f) => processSingleFile(f, LOVABLE_API_KEY))
+    );
+    const results = [...urlResults, ...fileResults];
 
     // Single-URL legacy shape preserved when only one URL was passed
-    if (urls.length === 1) {
+    if (urls.length === 1 && files.length === 0) {
       const r = results[0];
       if (r.error) {
         return new Response(JSON.stringify({ error: r.error }), {
@@ -64,15 +75,15 @@ serve(async (req) => {
       });
     }
 
-    // Multi-URL: aggregate response with per-URL status
+    // Multi: aggregate response with per-source status
     const flatItems = results.flatMap((r) =>
-      (r.items || []).map((i: any) => ({ ...i, source_url: r.url }))
+      (r.items || []).map((i: any) => ({ ...i, source_url: r.url ?? null }))
     );
     return new Response(
       JSON.stringify({
         items: flatItems,
         results: results.map((r) => ({
-          url: r.url,
+          source: r.url ?? r.filename ?? "file",
           ok: !r.error,
           error: r.error || null,
           count: r.items?.length ?? 0,

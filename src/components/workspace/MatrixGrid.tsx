@@ -545,7 +545,7 @@ export default function MatrixGrid() {
         return;
       }
       await bulkUpdateItemDates(patches);
-      toast.success("Legs reshuffled");
+      toast.success("Locations reshuffled");
     },
     [activeTrip, itineraryItems, displayedLegs, bulkUpdateItemDates],
   );

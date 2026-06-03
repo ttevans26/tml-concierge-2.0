@@ -516,6 +516,17 @@ export const useTripStore = create<TripStore>()(
     }
   },
 
+  updateItemStatus: async (id, status) => {
+    const before = get().itineraryItems.find((i) => i.id === id);
+    const { error } = await supabase.from("itinerary_items").update({ approval_status: status } as any).eq("id", id);
+    if (!error) {
+      set({
+        itineraryItems: get().itineraryItems.map((i) => (i.id === id ? { ...i, approval_status: status } : i)),
+      });
+      if (before) pushHistory({ kind: "update", id, before: snapshot(before), after: { ...snapshot(before), approval_status: status } });
+    }
+  },
+
   deleteItineraryItem: async (id) => {
     const before = get().itineraryItems.find((i) => i.id === id);
     const { error } = await supabase.from("itinerary_items").delete().eq("id", id);

@@ -1,0 +1,19 @@
+# Fallback for repos that prefer Dependabot over Renovate.
+# Do not enable both at the same time — you'll get duplicate PRs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      radix-ui:
+        patterns: ["@radix-ui/*"]
+      types:
+        patterns: ["@types/*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

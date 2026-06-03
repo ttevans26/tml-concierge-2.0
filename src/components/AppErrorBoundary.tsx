@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { obs } from "@/lib/observability";
 
 interface Props {
   children: ReactNode;
@@ -28,6 +29,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // eslint-disable-next-line no-console
     console.error("[AppErrorBoundary]", error, info.componentStack);
+    obs.captureException(error, { componentStack: info.componentStack });
   }
 
   private handleReload = () => {

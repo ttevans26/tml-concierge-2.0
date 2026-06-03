@@ -75,7 +75,8 @@ export function MapArc({
   }, [valid]);
 
   const W = 1000;
-  const H = 1000 * (height / 1000) * 1.4; // keep aspect roughly 5:7
+  const heightNum = typeof height === "number" ? height : 360;
+  const H = 1000 * (heightNum / 1000) * 1.4; // keep aspect roughly 5:7
 
   const project = (p: ArcPoint) => {
     if (!proj) return { x: W / 2, y: H / 2 };

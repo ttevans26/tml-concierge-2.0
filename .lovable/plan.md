@@ -1,6 +1,22 @@
 
 # A2 — Data Layer Audit & Hardening
 
+## Status: SHIPPED (turn N)
+
+- Migration applied: 15 hot-path indexes, `bulk_update_item_dates(jsonb)` RPC, GRANT realignment.
+- GRANT fix: `anon` SELECT removed from 13 auth-only tables; granted only on `trips` and `itinerary_items` (needed for public share links). Service-role and authenticated explicit.
+- `useTripStore`: replaced every `SELECT *` with explicit column lists (`TRIP_COLUMNS`, `ITINERARY_COLUMNS`, `FLIGHT_COLUMNS`, `PROFILE_COLUMNS`); soft cap `.limit(500)` with console warning on `fetchTrips` / `fetchItineraryItems`; `bulkUpdateItemDates` now a single RPC call.
+- `useStudioStore`: explicit columns + 2000 limit on items.
+- `ConciergePanel`: messages capped at 200 per thread.
+- `SocialImportsTray`: Realtime channel scoped with `filter: user_id=eq.<uid>`.
+- `NotificationsPopover`: already scoped & limited.
+- Linter: only the two pre-existing intentional SECURITY DEFINER warnings remain (`has_role`, `request_trip_access`).
+
+### Deferred to follow-up turns
+- Caching `auth.uid()` in store to avoid `supabase.auth.getUser()` per mutation (A1 turn).
+- Cursor pagination UI (Phase B).
+- Service-layer migration of `itineraryItems` / `notifications` (A4).
+
 Goal: make the database safe, fast, and portable before we widen the user base or move toward iOS. No new features — only schema, indexes, GRANTs, query shape, and Realtime scoping.
 
 ---

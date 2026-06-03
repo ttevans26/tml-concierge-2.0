@@ -209,9 +209,11 @@ interface TripStore {
   createTrip: (data: Partial<Trip>) => Promise<Trip | null>;
   updateTrip: (id: string, data: Partial<Trip>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;
+  duplicateTrip: (id: string) => Promise<Trip | null>;
 
   createItineraryItem: (data: Partial<ItineraryItem>) => Promise<ItineraryItem | null>;
   updateItineraryItem: (id: string, data: Partial<ItineraryItem>) => Promise<void>;
+  updateItemStatus: (id: string, status: ItineraryItem["approval_status"]) => Promise<void>;
   deleteItineraryItem: (id: string) => Promise<void>;
   moveItineraryItem: (id: string, patch: { date?: string | null; category?: ItineraryItem["category"] }) => Promise<void>;
   /** Apply a batch of `{id, date}` updates in a single round-trip (used by trip-editor). */

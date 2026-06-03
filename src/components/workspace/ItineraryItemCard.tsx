@@ -269,3 +269,6 @@ function ItineraryItemCardBase({ item, hasConflict = false, fix = null, onApplyF
     </>
   );
 }
+
+const ItineraryItemCard = memo(ItineraryItemCardBase);
+export default ItineraryItemCard;

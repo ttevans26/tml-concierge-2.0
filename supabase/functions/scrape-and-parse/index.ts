@@ -154,3 +154,51 @@ async function processSingleUrl(url: string, apiKey: string): Promise<{
   }
   return { url, items };
 }
+
+async function processSingleFile(
+  file: { filename?: string; mime: string; dataBase64: string },
+  apiKey: string,
+): Promise<{ url?: string; filename?: string; items?: any[]; error?: string; status?: number }> {
+  const dataUrl = `data:${file.mime};base64,${file.dataBase64}`;
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Source file: ${file.filename ?? "uploaded"} (${file.mime}). ` +
+                `Extract all travel items as a JSON array as specified.`,
+            },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    if (aiResponse.status === 429) return { filename: file.filename, error: "Rate limit exceeded", status: 429 };
+    if (aiResponse.status === 402) return { filename: file.filename, error: "AI credits exhausted", status: 402 };
+    const errText = await aiResponse.text();
+    console.error("AI gateway error (file):", aiResponse.status, errText);
+    return { filename: file.filename, error: `AI gateway error: ${aiResponse.status}`, status: 500 };
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content || "[]";
+  let items: any[] = [];
+  try {
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) items = JSON.parse(jsonMatch[0]);
+  } catch (parseErr) {
+    console.error("Failed to parse AI file response:", parseErr, content);
+  }
+  return { filename: file.filename, items };
+}

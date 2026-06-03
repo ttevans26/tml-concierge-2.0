@@ -438,6 +438,22 @@ export default function StudioWorkbench() {
         <p className="mt-2 max-w-xs text-center font-inter text-xs leading-relaxed text-muted-foreground">
           Select a collection from the Ideas Vault to view and curate your research cards.
         </p>
+        <div className="mt-5 flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={() => setPasteSocialOpen(true)}
+          >
+            <Share2 className="h-3 w-3" /> Paste Social Link
+          </Button>
+          <SocialImportsTray refreshKey={socialRefreshKey} />
+        </div>
+        <PasteSocialDialog
+          open={pasteSocialOpen}
+          onOpenChange={setPasteSocialOpen}
+          onImported={() => setSocialRefreshKey((k) => k + 1)}
+        />
       </div>
     );
   }

@@ -22,15 +22,17 @@ export default function AppHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-[72px] shrink-0 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur-sm sm:h-24 sm:px-6">
+      <header className="sticky top-0 z-40 flex h-[72px] shrink-0 items-center justify-between border-b border-foil bg-surface-1/85 px-4 backdrop-blur-md sm:h-24 sm:px-8">
         {/* Left — Brand: Luxury Seal */}
         <button
           onClick={() => navigate("/")}
-          className="group shrink-0 border-thin border-accent/60 px-4 py-2 transition-colors hover:border-accent sm:px-5 sm:py-2.5"
+          className="group relative shrink-0 px-2 py-2 transition-all duration-quick ease-editorial sm:px-3 sm:py-2.5"
         >
-          <span className="font-playfair text-xl font-semibold tracking-[0.1em] text-accent sm:text-2xl">
-            TML <span className="font-normal italic">Concierge</span>
+          <span className="font-playfair text-2xl font-bold tracking-[0.04em] text-ink sm:text-[28px]">
+            TML
+            <span className="ml-1.5 italic-accent text-accent font-medium">Concierge</span>
           </span>
+          <span className="pointer-events-none absolute -bottom-0.5 left-2 right-2 h-px scale-x-0 origin-left bg-foil transition-transform duration-soft ease-editorial group-hover:scale-x-100" />
         </button>
 
         {/* Center — Nav */}
@@ -42,15 +44,15 @@ export default function AppHeader() {
                 key={item.label}
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  "relative px-5 py-2 font-playfair text-base transition-colors sm:px-6 sm:text-lg",
+                  "relative px-5 py-2 font-playfair text-base transition-colors duration-quick ease-editorial sm:px-6 sm:text-[17px]",
                   active
-                    ? "bg-accent/10 text-accent font-semibold"
-                    : "text-muted-foreground hover:text-foreground font-medium"
+                    ? "text-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-medium",
                 )}
               >
-                {item.label}
+                <span className={cn(active && "italic-accent text-accent font-semibold")}>{item.label}</span>
                 {active && (
-                  <span className="absolute inset-x-3 -bottom-px h-[2px] bg-accent" />
+                  <span className="absolute inset-x-4 -bottom-1 h-[2px] bg-foil" />
                 )}
               </button>
             );

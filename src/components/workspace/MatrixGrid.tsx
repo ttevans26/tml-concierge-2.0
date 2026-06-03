@@ -680,6 +680,13 @@ export default function MatrixGrid() {
           {/* Category labels column — sticky left */}
           <div className="sticky left-0 z-20 w-24 shrink-0 border-r border-border bg-card">
             <div className="sticky top-0 z-30 h-10 border-b border-border bg-card" />
+            {/* LOCATION row label */}
+            <div className="flex h-9 items-center gap-1 border-b border-border px-3">
+              <MapPin className="h-3 w-3 text-accent" strokeWidth={1.5} />
+              <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                Location
+              </span>
+            </div>
             {CATEGORIES.map((cat) => (
               <div
                 key={cat.key}
@@ -697,10 +704,53 @@ export default function MatrixGrid() {
             </div>
           </div>
 
+          {/* Day columns wrapper (relative — hosts the absolute leg-pill overlay) */}
+          <div className="relative flex">
+            {/* Absolute leg-pill overlay: top is below the 40px date header, height matches the location row */}
+            <div
+              className="pointer-events-none absolute left-0 top-10 z-10 h-9"
+              style={{ width: `${days.length * 176}px` }}
+            >
+              {displayedLegs.map((leg) => {
+                if (!activeTrip?.start_date) return null;
+                const { startIdx, span } = legColumnSpan(activeTrip.start_date, leg);
+                if (startIdx < 0 || startIdx >= days.length) return null;
+                const width = Math.min(span, days.length - startIdx) * 176;
+                return (
+                  <button
+                    key={leg.id}
+                    type="button"
+                    onClick={() =>
+                      setLegDialog({
+                        open: true,
+                        leg: leg.isGhost ? null : leg,
+                        initialStart: leg.startDate,
+                      })
+                    }
+                    className={`pointer-events-auto absolute top-1 flex h-7 items-center gap-1.5 truncate rounded-sm px-2.5 text-left transition-colors ${
+                      leg.isGhost
+                        ? "border border-dashed border-accent/50 bg-accent/5 italic text-accent/80 hover:bg-accent/10"
+                        : "border border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
+                    }`}
+                    style={{ left: `${startIdx * 176 + 4}px`, width: `${width - 8}px` }}
+                    title={leg.isGhost ? "Derived from stays — click to refine" : leg.label}
+                  >
+                    <MapPin className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                    <span className="truncate font-inter text-[11px] font-medium">
+                      {leg.label} · {leg.nights}n
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
           {/* Day columns */}
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
             const total = dailyTotals[dateStr] || 0;
+            const cellHasLeg = displayedLegs.some(
+              (l) => dateStr >= l.startDate && dateStr <= l.endDate,
+            );
             return (
               <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
                 <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
@@ -709,13 +759,25 @@ export default function MatrixGrid() {
                   </span>
                 </div>
 
+                {/* LOCATION cell (visible only when no leg pill covers this day) */}
+                <div className="h-9 border-b border-border bg-background/40">
+                  {!cellHasLeg && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLegDialog({ open: true, leg: null, initialStart: dateStr })
+                      }
+                      className="flex h-full w-full items-center justify-center font-inter text-[10px] text-muted-foreground/50 hover:bg-accent/5 hover:text-accent"
+                    >
+                      + Location
+                    </button>
+                  )}
+                </div>
+
                 {CATEGORIES.map((cat) => {
                   const cellItems = itineraryItems.filter(
                     (item) => item.date === dateStr && item.category === cat.key
                   );
-                  const isStay = cat.key === "stays";
-                  const stayOccupied = isStay && cellItems.length > 0;
-
                   return (
                     <div
                       key={cat.key}
@@ -732,16 +794,14 @@ export default function MatrixGrid() {
                           onApplyFix={handleApplyFix}
                         />
                       ))}
-                      {!stayOccupied && (
-                        <button
-                          onClick={() => openAdd(dateStr, cat.key)}
-                          className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
-                        >
-                          <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
-                            + Add
-                          </span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => openAdd(dateStr, cat.key)}
+                        className="flex shrink-0 items-center justify-center rounded-sm border border-dashed border-border/60 py-1 min-h-[44px] transition-colors hover:border-accent/50 hover:bg-accent/5 touch-manipulation"
+                      >
+                        <span className="font-inter text-[10px] text-muted-foreground/60 hover:text-accent">
+                          + Add
+                        </span>
+                      </button>
                     </div>
                   );
                 })}
@@ -754,6 +814,7 @@ export default function MatrixGrid() {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
       </>

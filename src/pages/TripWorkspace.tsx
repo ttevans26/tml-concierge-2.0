@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin, ListChecks, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTripStore } from "@/stores/useTripStore";
@@ -10,6 +10,9 @@ import BudgetSidebar from "@/components/workspace/BudgetSidebar";
 import ConciergePanel from "@/components/workspace/ConciergePanel";
 import ProximityMap from "@/components/workspace/ProximityMap";
 import TripHealthBar from "@/components/workspace/TripHealthBar";
+import TripSwitcher from "@/components/workspace/TripSwitcher";
+import PackingList from "@/components/workspace/PackingList";
+import TripDocuments from "@/components/workspace/TripDocuments";
 import { cn } from "@/lib/utils";
 
 export default function TripWorkspace() {
@@ -42,7 +45,8 @@ export default function TripWorkspace() {
     }
   }, [budgetOpen]);
 
-  const [rightTab, setRightTab] = useState<"budget" | "concierge" | "map">("budget");
+  const [rightTab, setRightTab] =
+    useState<"budget" | "concierge" | "map" | "packing" | "documents">("budget");
   const askConcierge = useTripStore((s) => s.askConcierge);
 
   const handleAskConcierge = (prompt: string) => {

@@ -193,9 +193,14 @@ export default function ConciergePanel() {
       }
       const newConvId = data.conversation_id as string;
       const content = (data.content as string) || "";
-      const toolResults = (data.tool_results as { name: string; result: { ok?: boolean; item?: { title?: string } } }[]) || [];
+      const toolResults = (data.tool_results as { name: string; args?: Record<string, unknown>; result: any }[]) || [];
       if (newConvId !== activeConvId) setActiveConvId(newConvId);
-      setMessages((prev) => [...prev, { role: "assistant", content }]);
+      const toolMsgs: Msg[] = toolResults.map((tr) => ({
+        role: "tool",
+        content: JSON.stringify(tr.result ?? {}),
+        tool_calls: { name: tr.name, args: tr.args },
+      }));
+      setMessages((prev) => [...prev, ...toolMsgs, { role: "assistant", content }]);
       // Toast on side-effect tools
       for (const tr of toolResults) {
         if (tr.name === "create_itinerary_item" && tr.result?.ok) {

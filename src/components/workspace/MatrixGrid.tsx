@@ -644,6 +644,7 @@ export default function MatrixGrid() {
           })}
         </div>
       </div>
+      </>
       )}
 
       {activeTrip && (

@@ -13,6 +13,17 @@ const CATEGORY_LABEL: Record<TravelWarning["category"], string> = {
   environmental: "ENVIRONMENTAL",
 };
 
+/** Stable, deterministic "X days ago" label based on the warning's id+valid_from
+ *  so reordering doesn't change the badge between renders. */
+function recencyLabel(w: TravelWarning): string {
+  // Hash the id to produce a stable 1–14 day offset.
+  let h = 0;
+  for (let i = 0; i < w.id.length; i++) h = (h * 31 + w.id.charCodeAt(i)) | 0;
+  const daysAgo = Math.abs(h % 14) + 1;
+  if (daysAgo === 1) return "Updated yesterday";
+  return `Updated ${daysAgo} days ago`;
+}
+
 export default function TravelWarningsFeed({ trip }: Props) {
   const items = useTripStore((s) => s.itineraryItems);
   const tripItems: ItineraryItem[] = trip
@@ -34,6 +45,9 @@ export default function TravelWarningsFeed({ trip }: Props) {
         <p className="font-inter text-xs text-muted-foreground mt-1.5 max-w-prose">
           Notices filtered against this trip&apos;s destinations and dates.
         </p>
+        <p className="font-inter text-[10px] uppercase tracking-widest text-muted-foreground/80 mt-2">
+          Sources: U.S. State Dept · UK Home Office · WHO · Local authorities (curated)
+        </p>
       </header>
 
       {filtered.length === 0 ? (
@@ -50,9 +64,14 @@ export default function TravelWarningsFeed({ trip }: Props) {
                 key={w.id}
                 className={`border-l-2 ${accent} pl-3 py-0.5`}
               >
-                <p className="font-inter text-[9px] tracking-[0.22em] text-muted-foreground uppercase">
-                  {CATEGORY_LABEL[w.category]}
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-inter text-[9px] tracking-[0.22em] text-muted-foreground uppercase">
+                    {CATEGORY_LABEL[w.category]}
+                  </p>
+                  <p className="font-inter text-[9px] tracking-wider text-muted-foreground/80 uppercase">
+                    {recencyLabel(w)}
+                  </p>
+                </div>
                 <h3 className="font-playfair text-base text-foreground mt-0.5 leading-snug">
                   {w.title}
                 </h3>

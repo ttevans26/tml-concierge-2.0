@@ -553,9 +553,12 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
                       {initials}
                     </AvatarFallback>
                   </Avatar>
-                  <p className="font-inter text-[11px] text-muted-foreground leading-relaxed">
-                    Avatar uploads coming soon.
-                  </p>
+                  <div className="leading-relaxed">
+                    <p className="font-inter text-[11px] font-medium text-foreground">{headerName}</p>
+                    <p className="font-inter text-[10px] text-muted-foreground">
+                      Initials-based avatar
+                    </p>
+                  </div>
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-1.5">

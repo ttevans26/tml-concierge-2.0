@@ -134,6 +134,9 @@ export default function PublicTripView() {
                 {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")} · {days.length} days
               </p>
             )}
+            <p className="mt-2 font-inter text-[10px] uppercase tracking-widest text-muted-foreground">
+              View-only · Costs and confirmation codes redacted
+            </p>
           </div>
           {/* Live Sync Indicator */}
           <div className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-3 py-1.5">

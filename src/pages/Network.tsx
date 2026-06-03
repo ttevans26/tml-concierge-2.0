@@ -147,6 +147,9 @@ export default function Network() {
         onConfirm={handleConfirmRequest}
         onCancel={() => setPendingTarget(null)}
       />
+      <p className="mx-auto max-w-5xl px-4 pb-8 sm:px-6 font-inter text-[10px] uppercase tracking-widest text-muted-foreground">
+        Curated demo network · Live social graph arrives in Release 2.0
+      </p>
     </div>
   );
 }

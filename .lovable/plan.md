@@ -1,16 +1,37 @@
-## Problem
-In `MatrixGrid.tsx` `handleSaveLeg`, when a user increases Nights for an existing location leg, the new end date overlaps the *next* leg. The current code blocks the save with a hard `toast.error("Overlaps another location leg — adjust dates.")` and returns early — so Nights never updates.
+## Goal
+Let users extend the trip end date directly from the Matrix Grid header in two ways:
 
-## Fix (frontend only — `src/components/workspace/MatrixGrid.tsx`)
+1. **End-date pill** next to the existing "Trip starts:" pill — click → calendar popover → updates `trips.end_date`.
+2. **Sheets-style "+" column** at the right edge of the day columns — click → appends one day (sets `end_date = lastDay + 1`). Hold-friendly (multiple clicks = multiple days).
 
-1. **Remove the hard overlap block.** Replace the early-return with an informational `toast.warning` (or `toast` with a warning icon) that says e.g. `"Overlaps {OtherCity} — review your plan."` and then proceed with the save. No blocking.
-2. **Keep the conflict detection,** but only to surface a *non-blocking* notice. Still compute `conflicts` so we can name the overlapping leg in the toast.
-3. **Gaps:** Detection of *gaps* between legs already lives in the Reshuffle / segments layer; no new logic required here. The dialog change is purely about un-blocking.
+## Changes (frontend only — `src/components/workspace/MatrixGrid.tsx`)
+
+### 1. End-date pill (header strip)
+Right after the existing "Trip starts:" Popover (~line 798):
+- Add a sibling `Popover` showing `Trip ends: {format(end_date, "MMM d, yyyy")}` with a `CalendarIcon` + `ChevronDown`.
+- `<Calendar mode="single">` with `disabled={{ before: parseISO(activeTrip.start_date) }}` so the end can never precede the start.
+- On select: `await updateTrip(activeTrip.id, { end_date: format(d, "yyyy-MM-dd") })`, then toast `"Trip extended through MMM d"` / `"Trip shortened to MMM d"` based on delta.
+- If shrinking would orphan items, the existing `OrphanItemsBanner` already handles surfacing them — no extra logic needed.
+
+### 2. Trailing "+ Add day" column (Google Sheets style)
+At the end of the `days.map(...)` loop (after the closing `})}` around line 1187), render one additional column sized identically to a day column (`w-44 shrink-0`):
+- Replace the day-header cell with a centered ghost button: `+ Add day`.
+- Body rows show subtle empty placeholders (dashed border or muted bg) so it visually matches but reads as inactive.
+- Click handler:
+  ```ts
+  const nextEnd = format(addDays(parseISO(activeTrip.end_date), 1), "yyyy-MM-dd");
+  await updateTrip(activeTrip.id, { end_date: nextEnd });
+  toast.success(`Added ${format(addDays(parseISO(activeTrip.end_date), 1), "MMM d")}`);
+  ```
+- Also extend the overlay widths (`days.length * 176`) automatically since `days` recomputes from the new `end_date`.
+
+### 3. Header subtitle
+The line `{days.length} day{days.length !== 1 ? "s" : ""} · {format(days[0], "MMM d")} — {format(days[days.length - 1], "MMM d, yyyy")}` stays — it updates automatically once `end_date` changes.
 
 ## Out of scope
-- Reshuffle / segment merging logic (untouched).
-- LocationLegDialog UI (already updated to calendar picker).
-- Any business-rule changes to Stays category (overnight stays still keep their own validation).
+- No prepend ("+" at the start) — start-date pill already covers shifting / extending backwards via the existing trip-shift flow.
+- No new business rules; orphan handling is already wired.
+- No backend / migration changes; `trips.end_date` already exists and `updateTrip` is already in `useTripStore`.
 
 ## Files
-- `src/components/workspace/MatrixGrid.tsx` — soften `handleSaveLeg` overlap guard from blocking error to non-blocking warning toast.
+- `src/components/workspace/MatrixGrid.tsx` (single edit)

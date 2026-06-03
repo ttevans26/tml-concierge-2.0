@@ -17,10 +17,21 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, GripVertical, MapPin, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, MapPin, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { buildSegments, computeReorderPatches, type LocationSegment } from "@/lib/segments";
 import type { ItineraryItem, Trip } from "@/stores/useTripStore";
@@ -39,8 +50,11 @@ interface Props {
 export default function ReshuffleLegsList({ trip, items, legs, onApply, onClose }: Props) {
   const baseSegments = useMemo(() => buildSegments(trip, items), [trip, items]);
   const [order, setOrder] = useState<LocationSegment[]>(baseSegments);
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
+  const deleteItineraryItem = useTripStore((s) => s.deleteItineraryItem);
+  const updateTrip = useTripStore((s) => s.updateTrip);
 
   /**
    * Match a segment to the Matrix-Grid leg covering the same window.
@@ -93,33 +107,64 @@ export default function ReshuffleLegsList({ trip, items, legs, onApply, onClose 
     [order, baseSegments],
   );
 
-  // Live preview dates as if applied
+  const hasRemovals = removedIds.size > 0;
+  const assignedRemaining = order.filter((s) => !s.isUnassigned).length;
+
+  // Live preview dates as if applied (skips removed segments)
   const preview = useMemo(() => {
     if (!trip.start_date) return new Map<string, { start: string; end: string }>();
     const ts = parseISO(trip.start_date);
     let cursor = 0;
     const m = new Map<string, { start: string; end: string }>();
     for (const seg of order) {
+      if (removedIds.has(seg.id)) continue;
       const start = format(addDays(ts, cursor), "yyyy-MM-dd");
       const end = format(addDays(ts, cursor + seg.nights - 1), "yyyy-MM-dd");
       m.set(seg.id, { start, end });
       cursor += seg.nights;
     }
     return m;
-  }, [order, trip.start_date]);
+  }, [order, trip.start_date, removedIds]);
 
-  const totalNights = order.reduce((sum, s) => sum + s.nights, 0);
+  const totalNights = order
+    .filter((s) => !removedIds.has(s.id))
+    .reduce((sum, s) => sum + s.nights, 0);
 
   const handleApply = async () => {
-    if (!orderChanged) {
+    if (!orderChanged && !hasRemovals) {
       toast.message("Order unchanged.");
       return;
     }
+    if (assignedRemaining === 0) {
+      toast.error("A trip needs at least one location.");
+      return;
+    }
     setSaving(true);
-    const patches = computeReorderPatches(trip, order, items);
+    // 1) Delete items inside removed segments
+    const removedItemIds: string[] = [];
+    for (const seg of order) {
+      if (removedIds.has(seg.id)) removedItemIds.push(...seg.itemIds);
+    }
+    await Promise.all(removedItemIds.map((id) => deleteItineraryItem(id)));
+
+    // 2) Build patches from remaining order only
+    const remaining = order.filter((s) => !removedIds.has(s.id));
+    const patches = computeReorderPatches(trip, remaining, items)
+      .filter((p) => !removedItemIds.includes(p.id));
     await onApply(patches);
+
+    // 3) Shrink trip end_date if we removed nights
+    if (hasRemovals && trip.start_date) {
+      const newEndIso = format(
+        addDays(parseISO(trip.start_date), totalNights - 1),
+        "yyyy-MM-dd",
+      );
+      if (newEndIso !== trip.end_date) {
+        await updateTrip(trip.id, { end_date: newEndIso });
+      }
+    }
     setSaving(false);
-    toast.success("Locations reshuffled");
+    toast.success(hasRemovals ? "Locations updated" : "Locations reshuffled");
     onClose();
   };
 
@@ -157,7 +202,22 @@ export default function ReshuffleLegsList({ trip, items, legs, onApply, onClose 
                   index={idx}
                   total={order.length}
                   preview={preview.get(seg.id) ?? null}
+                  removed={removedIds.has(seg.id)}
                   onMove={(dir) => move(seg.id, dir)}
+                  onRemove={() =>
+                    setRemovedIds((prev) => {
+                      const next = new Set(prev);
+                      next.add(seg.id);
+                      return next;
+                    })
+                  }
+                  onRestore={() =>
+                    setRemovedIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(seg.id);
+                      return next;
+                    })
+                  }
                   items={items}
                   leg={legForSegment(seg)}
                   onRename={async (label) => {
@@ -206,8 +266,13 @@ export default function ReshuffleLegsList({ trip, items, legs, onApply, onClose 
           <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleApply} disabled={!orderChanged || saving}>
-            {saving ? "Applying…" : "Apply reshuffle"}
+          <Button
+            size="sm"
+            onClick={handleApply}
+            disabled={(!orderChanged && !hasRemovals) || assignedRemaining === 0 || saving}
+            title={assignedRemaining === 0 ? "A trip needs at least one location" : undefined}
+          >
+            {saving ? "Applying…" : hasRemovals ? "Apply changes" : "Apply reshuffle"}
           </Button>
         </div>
       </div>
@@ -220,13 +285,28 @@ interface RowProps {
   index: number;
   total: number;
   preview: { start: string; end: string } | null;
+  removed: boolean;
   onMove: (dir: -1 | 1) => void;
+  onRemove: () => void;
+  onRestore: () => void;
   items: ItineraryItem[];
   leg: LocationLeg | null;
   onRename: (label: string) => Promise<void> | void;
 }
 
-function ReshuffleRow({ segment, index, total, preview, onMove, items, leg, onRename }: RowProps) {
+function ReshuffleRow({
+  segment,
+  index,
+  total,
+  preview,
+  removed,
+  onMove,
+  onRemove,
+  onRestore,
+  items,
+  leg,
+  onRename,
+}: RowProps) {
   const disabled = segment.isUnassigned;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: segment.id,

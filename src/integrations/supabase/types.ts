@@ -855,6 +855,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      request_trip_access: {
+        Args: { p_message?: string; p_share_token: string }
+        Returns: string
+      }
     }
     Enums: {
       access_request_status: "pending" | "approved" | "denied"

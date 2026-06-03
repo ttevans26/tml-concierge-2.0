@@ -94,7 +94,7 @@ export default function TripWorkspace() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Top bar */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+      <header className="flex shrink-0 items-center gap-3 border-b border-foil bg-surface-1 px-5 py-3">
         <Button
           variant="ghost"
           size="icon"
@@ -103,7 +103,9 @@ export default function TripWorkspace() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <TripSwitcher />
+        <div className="flex min-w-0 flex-1 items-baseline gap-3">
+          <TripSwitcher />
+        </div>
         <Button
           variant="ghost"
           size="icon"

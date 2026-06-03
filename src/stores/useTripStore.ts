@@ -230,7 +230,16 @@ interface TripStore {
 
   createTrip: (
     data: Partial<Trip>,
-    options?: { seedStays?: { city: string; nights: number }[] },
+    options?: {
+      seedStays?: { city: string; nights: number }[];
+      seedLocations?: {
+        city: string;
+        state: string | null;
+        country: string | null;
+        googlePlaceId: string | null;
+        nights: number;
+      }[];
+    },
   ) => Promise<Trip | null>;
   updateTrip: (id: string, data: Partial<Trip>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;

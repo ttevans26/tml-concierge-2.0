@@ -1004,12 +1004,49 @@ export default function MatrixGrid() {
             const cellHasLeg = displayedLegs.some(
               (l) => dateStr >= l.startDate && dateStr <= l.endDate,
             );
+            const isFirstDay = !!activeTrip?.start_date && dateStr === activeTrip.start_date;
             return (
               <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
                 <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
-                  <span className="font-inter text-[11px] font-medium text-foreground">
-                    {format(day, "EEE, MMM d")}
-                  </span>
+                  {isFirstDay ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          title="Click to shift entire trip to a new start date"
+                          className="group inline-flex items-center gap-1 rounded-sm px-2 py-0.5 font-inter text-[11px] font-medium text-foreground decoration-dotted underline-offset-4 hover:bg-accent/10 hover:text-accent hover:underline"
+                        >
+                          {format(day, "EEE, MMM d")}
+                          <Pencil className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={parseISO(activeTrip!.start_date!)}
+                          onSelect={async (d) => {
+                            if (!d || !activeTrip?.start_date) return;
+                            const delta = differenceInCalendarDays(d, parseISO(activeTrip.start_date));
+                            if (delta === 0) return;
+                            const ok = await shiftTripDates(activeTrip.id, delta);
+                            if (ok) {
+                              toast.success(
+                                `Trip shifted ${delta > 0 ? "+" : ""}${delta} day${
+                                  Math.abs(delta) === 1 ? "" : "s"
+                                }`,
+                              );
+                            }
+                          }}
+                          initialFocus
+                          className="p-3 pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <span className="font-inter text-[11px] font-medium text-foreground">
+                      {format(day, "EEE, MMM d")}
+                    </span>
+                  )}
                 </div>
 
                 {/* LOCATION cell (visible only when no leg pill covers this day) */}

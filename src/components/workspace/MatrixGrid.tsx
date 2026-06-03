@@ -29,9 +29,13 @@ import {
   legColumnSpan,
   legOverlaps,
   formatLegLabel,
+  getStayPills,
+  assignLanes,
+  type StayPill,
   type LocationLeg,
 } from "@/lib/locationLegs";
-import { MapPin, Sparkles } from "lucide-react";
+import { MapPin, Sparkles, Bed } from "lucide-react";
+const EditItemDialog = lazy(() => import("./EditItemDialog"));
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {

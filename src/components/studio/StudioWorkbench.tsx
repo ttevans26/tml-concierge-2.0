@@ -17,6 +17,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 import { classifyPlace, CATEGORY_LABEL } from "@/lib/placeCategory";
+import BulkImportDialog, { type ImportedPendingItem } from "./BulkImportDialog";
+import { Layers } from "lucide-react";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -64,6 +66,7 @@ export default function StudioWorkbench() {
   const [scraping, setScraping] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [prefillTitle, setPrefillTitle] = useState<string>("");
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   /* Find-a-Place (Google Places autocomplete) state */
   const [placeQuery, setPlaceQuery] = useState("");
@@ -599,6 +602,17 @@ export default function StudioWorkbench() {
               <Sparkles className="h-3 w-3" />
             )}
             {scraping ? "Scraping…" : "Scrape"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={() => setBulkOpen(true)}
+            disabled={scraping}
+            title="Bulk import URLs, PDFs, or screenshots"
+          >
+            <Layers className="h-3 w-3" />
+            Bulk
           </Button>
         </div>
       </div>

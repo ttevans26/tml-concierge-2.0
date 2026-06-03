@@ -1,27 +1,30 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { createHandler } from "../_shared/handler.ts";
+import { obj, str, optional } from "../_shared/validate.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const InputSchema = obj({
+  flight_iata: str({ min: 2, max: 16, pattern: /^[A-Za-z0-9 ]+$/ }),
+  flight_date: optional(str({ pattern: /^\d{4}-\d{2}-\d{2}$/ })),
+});
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+serve(
+  createHandler(
+    {
+      fn: "aviationstack-lookup",
+      // 30 requests/min per IP. External API has per-day quota; this guards
+      // against accidental loops in the client more than abuse.
+      rateLimit: { capacity: 30, refillPerSec: 0.5 },
+    },
+    async ({ req, log }) => {
+      const body = await req.json().catch(() => ({}));
+      const { flight_iata, flight_date } = InputSchema.parse(body);
 
-  try {
-    const { flight_iata, flight_date } = await req.json();
-
-    if (!flight_iata || typeof flight_iata !== "string") {
-      return new Response(
-        JSON.stringify({ error: "flight_iata is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const apiKey = Deno.env.get("AVIATIONSTACK_API_KEY") || "20599670d86658c1b36c06d12a14dc9f";
+      const apiKey = Deno.env.get("AVIATIONSTACK_API_KEY");
+      if (!apiKey) {
+        log.error("missing_api_key");
+        return jsonResponse({ error: "Flight provider not configured" }, 500);
+      }
 
     const sanitizedIata = String(flight_iata).replace(/\s+/g, "").toUpperCase();
 
@@ -36,46 +39,37 @@ serve(async (req) => {
     }
 
     const url = `http://api.aviationstack.com/v1/flights?${params.toString()}`;
-    console.log("Aviationstack request URL (key redacted):", url.replace(apiKey, "REDACTED"));
+    log.info("aviationstack_request", { iata: sanitizedIata, hasDate: !!flight_date });
 
     let resp: Response;
     try {
       resp = await fetch(url);
     } catch (fetchErr) {
-      console.error("Aviationstack fetch failed:", fetchErr);
-      return new Response(
-        JSON.stringify({ error: "Failed to connect to flight data provider" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      log.error("aviationstack_fetch_failed", { err: String(fetchErr) });
+      return jsonResponse({ error: "Failed to connect to flight data provider" }, 502);
     }
 
     const bodyText = await resp.text();
 
     if (!resp.ok) {
-      console.error("Aviationstack non-2xx:", resp.status, bodyText);
+      log.warn("aviationstack_non_2xx", { status: resp.status });
 
       // If we got a 403 with flight_date, retry without it (free plan restriction)
       if (resp.status === 403 && flight_date) {
-        console.log("Retrying without flight_date (free plan fallback)...");
+        log.info("aviationstack_retry_without_date");
         params.delete("flight_date");
         const retryUrl = `http://api.aviationstack.com/v1/flights?${params.toString()}`;
         try {
           const retryResp = await fetch(retryUrl);
           const retryBody = await retryResp.text();
           if (!retryResp.ok) {
-            console.error("Aviationstack retry also failed:", retryResp.status, retryBody);
-            return new Response(
-              JSON.stringify({ error: `Flight API error: ${retryBody}` }),
-              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            log.error("aviationstack_retry_failed", { status: retryResp.status });
+            return jsonResponse({ error: "Flight provider unavailable" }, 502);
           }
           // Use retry body for parsing below
           const retryData = JSON.parse(retryBody);
           if (!retryData.data || retryData.data.length === 0) {
-            return new Response(
-              JSON.stringify({ error: "Flight details not found. Please enter manually." }),
-              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return jsonResponse({ error: "Flight details not found. Please enter manually." }, 200);
           }
           const flight = retryData.data[0];
           const result = {
@@ -89,36 +83,25 @@ serve(async (req) => {
             flight_status: flight.flight_status || null,
             delay_minutes: flight.departure?.delay || 0,
           };
-          return new Response(JSON.stringify({ flight: result }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return jsonResponse({ flight: result });
         } catch (retryErr) {
-          console.error("Retry fetch error:", retryErr);
+          log.error("aviationstack_retry_exception", { err: String(retryErr) });
         }
       }
 
-      return new Response(
-        JSON.stringify({ error: `Flight API error (${resp.status}): ${bodyText}` }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Flight provider error" }, 502);
     }
 
     let data: any;
     try {
       data = JSON.parse(bodyText);
     } catch {
-      console.error("Failed to parse Aviationstack response:", bodyText);
-      return new Response(
-        JSON.stringify({ error: "Invalid response from flight data provider" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      log.error("aviationstack_invalid_json");
+      return jsonResponse({ error: "Invalid response from flight data provider" }, 502);
     }
 
     if (!data.data || data.data.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "No flight found", results: [] }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "No flight found", results: [] }, 200);
     }
 
     const flight = data.data[0];
@@ -134,14 +117,7 @@ serve(async (req) => {
       delay_minutes: flight.departure?.delay || 0,
     };
 
-    return new Response(JSON.stringify({ flight: result }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("aviationstack-lookup error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return jsonResponse({ flight: result });
+    },
+  ),
+);

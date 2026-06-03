@@ -22,7 +22,6 @@ import { Layers } from "lucide-react";
 import PasteSocialDialog from "./PasteSocialDialog";
 import SocialImportsTray from "./SocialImportsTray";
 import { Share2 } from "lucide-react";
-import { MapArc, type ArcPoint } from "@/components/ui/map-arc";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;

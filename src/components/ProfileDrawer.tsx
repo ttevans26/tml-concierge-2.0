@@ -1,4 +1,4 @@
-import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe, CalendarClock, ShieldCheck, KeyRound, ChevronRight } from "lucide-react";
+import { LogOut, Settings, Users, ChevronLeft, Save, Loader2, Lock, Globe, CalendarClock, ShieldCheck, KeyRound, ChevronRight, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useTripStore } from "@/stores/useTripStore";
@@ -91,6 +91,9 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [confirmDeleteText, setConfirmDeleteText] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadPrefs = useCallback(async () => {
     if (!user) return;
@@ -203,6 +206,28 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
     else {
       toast.success("Signed out of all devices");
       onOpenChange(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (confirmDeleteText !== "DELETE") {
+      toast.error("Type DELETE to confirm");
+      return;
+    }
+    setDeletingAccount(true);
+    try {
+      const { error } = await supabase.functions.invoke("delete-account");
+      if (error) {
+        toast.error("Could not delete account");
+        setDeletingAccount(false);
+        return;
+      }
+      await supabase.auth.signOut();
+      toast.success("Account deleted");
+      window.location.href = "/login";
+    } catch {
+      toast.error("Could not delete account");
+      setDeletingAccount(false);
     }
   };
 

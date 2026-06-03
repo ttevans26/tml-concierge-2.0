@@ -8,6 +8,7 @@ import SmartPullInbox from "./SmartPullInbox";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "sonner";
 import { Inbox, Lock, Globe, ChevronLeft, ChevronRight } from "lucide-react";
+import { Undo2, Redo2 } from "lucide-react";
 import type { StudioItem } from "@/stores/useStudioStore";
 import ShareControls from "./ShareControls";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,11 @@ export default function MatrixGrid() {
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);
   const updateTrip = useTripStore((s) => s.updateTrip);
+  const moveItineraryItem = useTripStore((s) => s.moveItineraryItem);
+  const undo = useTripStore((s) => s.undo);
+  const redo = useTripStore((s) => s.redo);
+  const canUndo = useTripStore((s) => s.canUndo());
+  const canRedo = useTripStore((s) => s.canRedo());
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ active: boolean; startX: number; startLeft: number; moved: boolean }>({
@@ -257,6 +263,18 @@ export default function MatrixGrid() {
 
   const handleDrop = useCallback(
     async (e: React.DragEvent, dateStr: string, category: ItineraryItem["category"]) => {
+      // In-grid move (cross-day or cross-category)
+      const itemId = e.dataTransfer.getData("application/itinerary-item");
+      if (itemId && activeTrip) {
+        e.preventDefault();
+        const existing = itineraryItems.find((i) => i.id === itemId);
+        if (!existing) return;
+        if (existing.date === dateStr && existing.category === category) return;
+        await moveItineraryItem(itemId, { date: dateStr, category });
+        toast.success(`Moved "${existing.title}" to ${format(parseISO(dateStr), "MMM d")}`);
+        return;
+      }
+
       const raw = e.dataTransfer.getData("application/studio-item");
       if (!raw || !activeTrip) return;
       e.preventDefault();
@@ -297,15 +315,33 @@ export default function MatrixGrid() {
         toast.error("Failed to drop item");
       }
     },
-    [activeTrip, createItineraryItem]
+    [activeTrip, createItineraryItem, moveItineraryItem, itineraryItems]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/studio-item")) {
+    if (
+      e.dataTransfer.types.includes("application/studio-item") ||
+      e.dataTransfer.types.includes("application/itinerary-item")
+    ) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
+      e.dataTransfer.dropEffect = e.dataTransfer.types.includes("application/itinerary-item")
+        ? "move"
+        : "copy";
     }
   }, []);
+
+  // Keyboard shortcuts: ⌘Z / ⇧⌘Z (or Ctrl on win)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   if (days.length === 0) {
     return (
@@ -364,6 +400,28 @@ export default function MatrixGrid() {
               <Inbox className="h-4 w-4" />
               <span className="font-inter text-xs">Smart Pull</span>
             </Button>
+            <div className="hidden sm:flex items-center gap-1 border-l border-border pl-2 ml-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={!canUndo}
+                onClick={() => undo()}
+                title="Undo (⌘Z)"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={!canRedo}
+                onClick={() => redo()}
+                title="Redo (⇧⌘Z)"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             <ShareControls />
             <TripSettingsModal />
           </div>

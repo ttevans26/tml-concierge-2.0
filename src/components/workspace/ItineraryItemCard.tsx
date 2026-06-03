@@ -89,6 +89,11 @@ export default function ItineraryItemCard({ item, hasConflict = false }: Itinera
   return (
     <>
       <div
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("application/itinerary-item", item.id);
+          e.dataTransfer.effectAllowed = "move";
+        }}
         className={`group relative cursor-pointer rounded-sm border-thin overflow-hidden transition-shadow hover:shadow-sm ${isAnchor ? "ring-1 ring-accent" : ""} ${hasConflict ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-card`}
         onClick={() => setEditing(true)}
       >

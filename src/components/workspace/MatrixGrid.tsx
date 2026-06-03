@@ -454,6 +454,7 @@ export default function MatrixGrid() {
               </Button>
             </div>
             <ShareControls />
+            <EditTripButton />
             <TripSettingsModal />
           </div>
         </div>

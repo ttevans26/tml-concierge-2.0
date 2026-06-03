@@ -1,39 +1,33 @@
 ## Goal
+Make the sticky-footer Gemini Concierge button + popup feel like a first-class editorial AI surface, reusing the `AnimatedAIChat` composer (already wired into the in-workspace `ConciergePanel`) so the experience is consistent across the app.
 
-When no folder is selected in Studio, the center display should not show the atlas map. Instead, the **right-side Proximity Map** should show a slowly rotating globe (a "world view" loop) since the destination/context is undefined.
+## Changes — `src/components/GeminiFooter.tsx` only
 
-## Changes
+### 1. Footer trigger button — "Concierge call bell"
+Replace the plain bronze `<Button>` with a richer trigger:
+- Pill-shaped (`rounded-editorial`), thin foil border (`border-foil`), bronze-gradient fill (`bg-gradient-bronze`) with `shadow-foil` on hover.
+- Animated foil sweep along the perimeter on hover (1.2s loop, reuses `@keyframes foil-sweep` already in `index.css`); a slow `pulse` halo behind the icon when the panel is closed so it feels "alive".
+- Sparkles icon swaps to a small AI "orb" — bronze radial dot with a soft glow ring (pure CSS, no new deps).
+- Label uses Playfair italic small-caps "Concierge" with a hairline divider and an Inter micro-label "Ask Gemini" beneath at `text-[9px]`.
+- Active/open state: button collapses to a compact "Close" pill (X icon, muted) so it doubles as the dismiss control.
+- Min 44px touch target preserved.
 
-### 1. `src/components/studio/StudioWorkbench.tsx` — remove center atlas
-In the `!activeFolder` branch (lines ~430–483):
-- Remove the `<MapArc points={allPoints} height={420} />` render and the `allPoints` aggregation block.
-- Remove the `MapArc` / `ArcPoint` import.
-- Keep the editorial intro copy ("Design Lab / The atlas of your ideas"), the Paste Social Link button, and `SocialImportsTray`.
-- Replace the copy line ("Every saved place plotted on a single canvas…") with a shorter prompt directing the user to pick a collection from the vault on the left, hinting the globe on the right is awaiting a destination.
+### 2. Popup panel — editorial restage
+- Wrap the panel in the same `rounded-hero` + `border-foil` + `shadow-paper` + grain overlay used by Studio/Matrix cards (so it matches the overhaul language).
+- Header: Playfair "Gemini Concierge" + Inter eyebrow ("AI Travel Advisor"); the bronze sparkles icon gets the same orb treatment as the trigger.
+- Quick-prompt chips restyled with the `AnimatedAIChat` chip aesthetic (`bg-foil-soft`, stagger-in animation).
+- Replace the bottom `<textarea>` + Send button block with the existing `<AnimatedAIChat />` component, wiring `value`, `onChange`, `onSubmit={() => send(input)}`, `sending={streaming}`, `quickPrompts` (only when `messages.length === 0` we keep the in-body prompt list; otherwise the composer's own chips can be hidden by passing no `quickPrompts`).
+- Streaming state: subtle bronze "typing" shimmer under the latest assistant bubble (3-dot pulse) instead of the plain `Loader2`.
+- Entrance: replace the `translate-y-2 opacity-0` open transition with a `scale-in` + `fade-in` combo from the bottom-right origin (transform-origin set on the panel) so it visually "blooms" from the trigger.
 
-### 2. `src/components/ui/map-arc.tsx` — add rotating globe mode
-Add an optional prop `mode?: "arc" | "globe"` (default `"arc"` — non-breaking). When `mode === "globe"`:
-- Render a centered circular SVG "globe" with:
-  - Cream sphere fill + bronze hairline equator and 2 latitude rings.
-  - 6 longitude meridians as ellipses.
-  - A subtle radial highlight (top-left) and bronze rim shadow for dimension.
-- Wrap the meridian/lat group in a `<g>` whose CSS transforms apply `rotate-y` via a 24s linear keyframe animation (`globe-spin`) — pure SVG `transform: rotateY` won't render in all browsers, so simulate rotation by animating the meridian ellipses' `rx` between `R` and `~0.2R` with phase-offset delays, producing a believable rotating-wireframe globe.
-- Keep grain + vignette overlay for paper feel.
-- Honor `prefers-reduced-motion` (pause animation).
-- Title/subtitle slot still respected if provided.
-
-### 3. `src/components/studio/StudioMap.tsx` — show globe in the empty state
-In the `!activeFolder` branch (currently the "World View" Compass placeholder, lines ~189–200):
-- Replace the placeholder block with `<MapArc mode="globe" points={[]} height={undefined} className="flex-1 rounded-none border-0 shadow-none" />` filling the panel.
-- Below the globe (still inside the panel), keep a small editorial caption: small uppercase eyebrow "World View" + Playfair line "Awaiting a destination" + 1-line muted helper "Choose a collection from the vault to focus the atlas."
-- When a folder IS selected, behavior is unchanged (Google Map renders as today).
-
-### Scope / non-goals
-- No changes to data, store, routes, or the Trip Workspace's `ProximityMap`.
-- No tile-provider integration; the globe is decorative SVG only.
+### 3. No behavioral changes
+- All existing logic (SSE stream parsing, suggestion cards, add-to-itinerary/studio, reset, abort) is preserved verbatim.
+- No new dependencies, no edits to `ConciergePanel.tsx`, no schema or store changes.
 - Reverts cleanly via History.
 
 ## Files touched
-- `src/components/ui/map-arc.tsx` (add `globe` mode)
-- `src/components/studio/StudioWorkbench.tsx` (remove center atlas, tighten copy)
-- `src/components/studio/StudioMap.tsx` (render rotating globe in empty state)
+- `src/components/GeminiFooter.tsx` — trigger restyle, panel restage, swap composer to `AnimatedAIChat`.
+
+## Out of scope
+- The in-workspace `ConciergePanel` (already uses `AnimatedAIChat`).
+- Mobile bottom nav, app shell, or routing changes.

@@ -1,11 +1,11 @@
-import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import { lazy, Suspense, useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useTripStore } from "@/stores/useTripStore";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import ItineraryItemCard from "./ItineraryItemCard";
-import AddItemDialog from "./AddItemDialog";
+const AddItemDialog = lazy(() => import("./AddItemDialog"));
 import TripSettingsModal from "./TripSettingsModal";
-import SmartPullInbox from "./SmartPullInbox";
-import EditTripDialog from "./EditTripDialog";
+const SmartPullInbox = lazy(() => import("./SmartPullInbox"));
+const EditTripDialog = lazy(() => import("./EditTripDialog"));
 import OrphanItemsBanner from "./OrphanItemsBanner";
 import type { ItineraryItem } from "@/stores/useTripStore";
 import { toast } from "sonner";
@@ -658,18 +658,24 @@ export default function MatrixGrid() {
       </>
       )}
 
-      {activeTrip && (
-        <AddItemDialog
-          open={dialogState.open}
-          onOpenChange={(open) => setDialogState((s) => ({ ...s, open }))}
-          tripId={activeTrip.id}
-          date={dialogState.date}
-          category={dialogState.category}
-        />
+      {activeTrip && dialogState.open && (
+        <Suspense fallback={null}>
+          <AddItemDialog
+            open={dialogState.open}
+            onOpenChange={(open) => setDialogState((s) => ({ ...s, open }))}
+            tripId={activeTrip.id}
+            date={dialogState.date}
+            category={dialogState.category}
+          />
+        </Suspense>
       )}
 
       {/* Smart Pull Inbox: paste · review · history · diff · batch */}
-      <SmartPullInbox open={smartPullOpen} onOpenChange={setSmartPullOpen} />
+      {smartPullOpen && (
+        <Suspense fallback={null}>
+          <SmartPullInbox open={smartPullOpen} onOpenChange={setSmartPullOpen} />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -689,7 +695,11 @@ function EditTripButton() {
         <Pencil className="h-3 w-3" />
         Edit Trip
       </Button>
-      <EditTripDialog open={open} onOpenChange={setOpen} />
+      {open && (
+        <Suspense fallback={null}>
+          <EditTripDialog open={open} onOpenChange={setOpen} />
+        </Suspense>
+      )}
     </>
   );
 }

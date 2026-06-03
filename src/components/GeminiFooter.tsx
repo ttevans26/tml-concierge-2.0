@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Sparkles, X, Loader2, RotateCcw, Bookmark, CalendarDays } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+const ReactMarkdown = lazy(() => import("react-markdown"));
 import { cn } from "@/lib/utils";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { useTripStore } from "@/stores/useTripStore";
@@ -57,6 +57,7 @@ function stripTrailingRule(text: string): string {
 
 export default function GeminiFooter() {
   const [open, setOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -288,7 +289,7 @@ export default function GeminiFooter() {
 
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => { setHasOpened(true); setOpen((o) => !o); }}
           aria-expanded={open}
           aria-label={open ? "Close Gemini Concierge" : "Open Gemini Concierge"}
           className={cn(
@@ -332,6 +333,7 @@ export default function GeminiFooter() {
       </footer>
 
       {/* Chat Panel */}
+      {hasOpened && (
       <div
         className={cn(
           "fixed z-50 flex flex-col rounded-hero border border-foil bg-card shadow-foil overflow-hidden",
@@ -439,7 +441,9 @@ export default function GeminiFooter() {
                     {/* Markdown text */}
                     <div className="rounded-[2px] bg-muted px-3 py-2 text-foreground">
                       <div className="prose prose-xs max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-strong:text-foreground">
-                        <ReactMarkdown>{displayText || "…"}</ReactMarkdown>
+                        <Suspense fallback={<span className="text-muted-foreground">…</span>}>
+                          <ReactMarkdown>{displayText || "…"}</ReactMarkdown>
+                        </Suspense>
                       </div>
                     </div>
 
@@ -562,6 +566,7 @@ export default function GeminiFooter() {
           />
         </div>
       </div>
+      )}
     </>
   );
 }

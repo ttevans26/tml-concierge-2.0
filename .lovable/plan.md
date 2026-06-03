@@ -1,33 +1,51 @@
 ## Goal
-Make the sticky-footer Gemini Concierge button + popup feel like a first-class editorial AI surface, reusing the `AnimatedAIChat` composer (already wired into the in-workspace `ConciergePanel`) so the experience is consistent across the app.
 
-## Changes — `src/components/GeminiFooter.tsx` only
+Make every interaction feel instant. Profiling on `/` shows 1.5 MB JS up-front (195 script chunks), 3.9 s DOMContentLoaded, and the largest user-land modules (StudioWorkbench 41 KB, TripDocuments 16 KB, MatrixGrid 28 KB, GeminiFooter 24 KB) are loaded even when not used. Several hot components also subscribe to the **entire** Zustand store, so any unrelated update re-renders huge trees.
 
-### 1. Footer trigger button — "Concierge call bell"
-Replace the plain bronze `<Button>` with a richer trigger:
-- Pill-shaped (`rounded-editorial`), thin foil border (`border-foil`), bronze-gradient fill (`bg-gradient-bronze`) with `shadow-foil` on hover.
-- Animated foil sweep along the perimeter on hover (1.2s loop, reuses `@keyframes foil-sweep` already in `index.css`); a slow `pulse` halo behind the icon when the panel is closed so it feels "alive".
-- Sparkles icon swaps to a small AI "orb" — bronze radial dot with a soft glow ring (pure CSS, no new deps).
-- Label uses Playfair italic small-caps "Concierge" with a hairline divider and an Inter micro-label "Ask Gemini" beneath at `text-[9px]`.
-- Active/open state: button collapses to a compact "Close" pill (X icon, muted) so it doubles as the dismiss control.
-- Min 44px touch target preserved.
+## Fix plan (frontend only — no behavior changes)
 
-### 2. Popup panel — editorial restage
-- Wrap the panel in the same `rounded-hero` + `border-foil` + `shadow-paper` + grain overlay used by Studio/Matrix cards (so it matches the overhaul language).
-- Header: Playfair "Gemini Concierge" + Inter eyebrow ("AI Travel Advisor"); the bronze sparkles icon gets the same orb treatment as the trigger.
-- Quick-prompt chips restyled with the `AnimatedAIChat` chip aesthetic (`bg-foil-soft`, stagger-in animation).
-- Replace the bottom `<textarea>` + Send button block with the existing `<AnimatedAIChat />` component, wiring `value`, `onChange`, `onSubmit={() => send(input)}`, `sending={streaming}`, `quickPrompts` (only when `messages.length === 0` we keep the in-body prompt list; otherwise the composer's own chips can be hidden by passing no `quickPrompts`).
-- Streaming state: subtle bronze "typing" shimmer under the latest assistant bubble (3-dot pulse) instead of the plain `Loader2`.
-- Entrance: replace the `translate-y-2 opacity-0` open transition with a `scale-in` + `fade-in` combo from the bottom-right origin (transform-origin set on the panel) so it visually "blooms" from the trigger.
+### 1. Lazy-load all non-critical routes (`src/App.tsx`)
 
-### 3. No behavioral changes
-- All existing logic (SSE stream parsing, suggestion cards, add-to-itinerary/studio, reset, abort) is preserved verbatim.
-- No new dependencies, no edits to `ConciergePanel.tsx`, no schema or store changes.
-- Reverts cleanly via History.
+Currently every page is a static import, so Studio/Tools/Network/Today/Trip/Public bundles ship on first load of `/`. Convert to `React.lazy` + `<Suspense>` with a lightweight fallback. Keep `Login`, `Signup`, `ProtectedRoute`, `AppLayout`, and `Index` eager so the landing path stays fast. Expected: ~40–60% smaller initial JS, FCP closer to 1.5 s.
 
-## Files touched
-- `src/components/GeminiFooter.tsx` — trigger restyle, panel restage, swap composer to `AnimatedAIChat`.
+### 2. Scope global store subscriptions
+
+Replace bare `useTripStore()` (re-renders on any state change) with field selectors in:
+- `src/pages/TripWorkspace.tsx` (line 23 — currently subscribes to whole store while just bootstrapping)
+- `src/pages/Today.tsx` (uses 4 fields — split into 4 selectors)
+- `src/pages/Index.tsx` (3 fields)
+- `src/components/workspace/IdeasVault.tsx` (`activeTrip` only)
+
+Result: typing in a dialog or moving a card no longer re-renders unrelated pages.
+
+### 3. Memoize hot workspace components
+
+- `src/components/workspace/MatrixGrid.tsx` — wrap day-cell + item-card render in `useMemo` keyed on `(items, dragState)`; wrap `ItineraryItemCard` with `React.memo`. Move date-range computation behind `useMemo`. Replace inline `() => …` handlers passed to many cells with stable `useCallback`s.
+- `src/components/workspace/ItineraryItemCard.tsx` — `React.memo` with shallow prop compare; pre-format currency/time once.
+- `src/components/workspace/BudgetSidebar.tsx` — already uses selectors; add `useMemo` for the formatted progress strings.
+- `src/components/workspace/ProximityMap.tsx` — memoize the haversine/sorted list; gate the heavy SVG render behind `useDeferredValue` so dragging on the Matrix doesn't stall the map.
+- `src/components/studio/StudioWorkbench.tsx` — split into the top toolbar (eager) and the list/map (lazy via `React.lazy`); memoize list filtering.
+
+### 4. Defer heavy non-critical UI
+
+- `GeminiFooter.tsx` — keep the trigger button eager but `React.lazy` the chat panel (loads `AnimatedAIChat`, `react-markdown` ~70 KB) only after the user opens it.
+- `TripDocuments.tsx`, `SmartPullInbox.tsx`, `PackingList.tsx`, `ShareControls.tsx`, `TripSettingsModal.tsx`, `EditItemDialog.tsx`, `AddItemDialog.tsx` — convert to `React.lazy` and mount on first open (same pattern already applied to `SchedulingModal`/`ProfileDrawer`).
+- `react-day-picker` (106 KB) — already isolated via lazy SchedulingModal; audit any remaining eager calendar usage in `EditTripDialog`/`TripSettingsModal` and lazy-load those too.
+
+### 5. Reduce render-blocking + asset cost
+
+- Add `rel="preconnect"` for `fonts.gstatic.com` in `index.html` alongside existing fonts link to cut TTF latency.
+- Confirm Tailwind/Vite is tree-shaking `lucide-react` (157 KB dev chunk). Replace any `import * as Icons from "lucide-react"` style imports with named imports.
+- Audit `NotificationsPopover` realtime subscription is created once at idle (already done) — extend the same `requestIdleCallback` pattern to `useTripStore.fetchTrips` initial call on `Index`.
+
+### 6. Verify
+
+After each batch, run `browser--performance_profile` on `/` and `/trip/:id`, then `start_profiling` → interact (drag a card, open Concierge, open profile) → `stop_profiling`. Target: INP < 100 ms on all primary interactions, initial JS payload under ~800 KB on `/`.
 
 ## Out of scope
-- The in-workspace `ConciergePanel` (already uses `AnimatedAIChat`).
-- Mobile bottom nav, app shell, or routing changes.
+
+No backend, schema, or business-logic changes. No design refactors. Component APIs preserved.
+
+## Risk / rollback
+
+All changes are local to listed files. Each step is independently revertable via History. Lazy-loaded chunks fall back to a small spinner; if a Suspense boundary triggers a visible flash, swap to `startTransition` for that route.

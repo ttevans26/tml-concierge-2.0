@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { lazy, memo, Suspense, useState, useMemo } from "react";
 import { Pencil, ExternalLink, Anchor, CreditCard, Navigation, AlertTriangle, Star, MapPin } from "lucide-react";
 import { Wand2 } from "lucide-react";
 import { ItineraryItem, useTripStore } from "@/stores/useTripStore";
 import { haversineDistance, formatDistance } from "@/lib/distance";
-import EditItemDialog from "./EditItemDialog";
+const EditItemDialog = lazy(() => import("./EditItemDialog"));
 import { MarkerPopup } from "@/components/ui/marker-popup";
 import type { ConflictFix } from "@/lib/conflictResolution";
 
@@ -57,7 +57,7 @@ function computeMatch(
   return "partial";
 }
 
-export default function ItineraryItemCard({ item, hasConflict = false, fix = null, onApplyFix }: ItineraryItemCardProps) {
+function ItineraryItemCardBase({ item, hasConflict = false, fix = null, onApplyFix }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);
@@ -258,12 +258,17 @@ export default function ItineraryItemCard({ item, hasConflict = false, fix = nul
       </MarkerPopup>
 
       {editing && (
-        <EditItemDialog
-          open={editing}
-          onOpenChange={setEditing}
-          item={item}
-        />
+        <Suspense fallback={null}>
+          <EditItemDialog
+            open={editing}
+            onOpenChange={setEditing}
+            item={item}
+          />
+        </Suspense>
       )}
     </>
   );
 }
+
+const ItineraryItemCard = memo(ItineraryItemCardBase);
+export default ItineraryItemCard;

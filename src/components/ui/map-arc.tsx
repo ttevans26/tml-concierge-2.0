@@ -243,3 +243,162 @@ export function MapArc({
 }
 
 export default MapArc;
+
+/* -------------------------------------------------------------------------- */
+/*  Rotating wireframe globe — used when context is undefined (no folder).    */
+/* -------------------------------------------------------------------------- */
+
+function GlobePlaceholder({
+  title,
+  subtitle,
+  height,
+  className,
+}: {
+  title?: string;
+  subtitle?: string;
+  height: number;
+  className?: string;
+}) {
+  const VB = 400;
+  const cx = VB / 2;
+  const cy = VB / 2;
+  const R = 150;
+
+  // 6 meridians, each animated with a phase offset so the whole sphere
+  // appears to rotate. We animate `rx` from R → ~0.05R → R and flip the
+  // stroke opacity at the midpoint to fake the back/front of the sphere.
+  const meridians = Array.from({ length: 6 }, (_, i) => i);
+  const PERIOD = 24; // seconds for a full rotation
+
+  return (
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-hero border border-foil bg-cream shadow-paper",
+        className,
+      )}
+      style={{ height }}
+    >
+      <svg
+        viewBox={`0 0 ${VB} ${VB}`}
+        preserveAspectRatio="xMidYMid meet"
+        className="absolute inset-0 h-full w-full"
+        aria-hidden
+      >
+        <defs>
+          <radialGradient id="globeFill" cx="35%" cy="32%" r="75%">
+            <stop offset="0%" stopColor="hsl(43 71% 99%)" />
+            <stop offset="55%" stopColor="hsl(43 50% 95%)" />
+            <stop offset="100%" stopColor="hsl(36 28% 86%)" />
+          </radialGradient>
+          <radialGradient id="globeHighlight" cx="30%" cy="25%" r="40%">
+            <stop offset="0%" stopColor="hsl(43 100% 100%)" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="hsl(43 100% 100%)" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="globeRim" cx="50%" cy="50%" r="50%">
+            <stop offset="85%" stopColor="hsl(36 45% 42%)" stopOpacity="0" />
+            <stop offset="100%" stopColor="hsl(36 45% 42%)" stopOpacity="0.35" />
+          </radialGradient>
+        </defs>
+
+        {/* Sphere */}
+        <circle cx={cx} cy={cy} r={R} fill="url(#globeFill)" />
+        <circle cx={cx} cy={cy} r={R} fill="url(#globeRim)" />
+
+        {/* Latitudes (static) */}
+        {[-0.7, -0.4, 0, 0.4, 0.7].map((t, idx) => {
+          const ry = R * Math.sqrt(1 - t * t);
+          const yy = cy + R * t;
+          return (
+            <ellipse
+              key={idx}
+              cx={cx}
+              cy={yy}
+              rx={R * Math.sqrt(1 - t * t)}
+              ry={ry * 0.18}
+              fill="none"
+              stroke="hsl(36 45% 42%)"
+              strokeOpacity={t === 0 ? 0.55 : 0.28}
+              strokeWidth={t === 0 ? 0.9 : 0.6}
+            />
+          );
+        })}
+
+        {/* Meridians (animated to simulate rotation) */}
+        <g
+          className="globe-meridians"
+          style={{ transformOrigin: `${cx}px ${cy}px` }}
+        >
+          {meridians.map((i) => {
+            const delay = (-PERIOD / meridians.length) * i;
+            return (
+              <ellipse
+                key={i}
+                cx={cx}
+                cy={cy}
+                rx={R}
+                ry={R}
+                fill="none"
+                stroke="hsl(36 45% 42%)"
+                strokeOpacity={0.32}
+                strokeWidth={0.7}
+                style={{
+                  animation: `globe-meridian ${PERIOD}s linear ${delay}s infinite`,
+                  transformBox: "fill-box",
+                  transformOrigin: "center",
+                }}
+              />
+            );
+          })}
+        </g>
+
+        {/* Top-left specular highlight for dimension */}
+        <circle cx={cx} cy={cy} r={R} fill="url(#globeHighlight)" />
+
+        {/* Hairline rim */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={R}
+          fill="none"
+          stroke="hsl(36 45% 42%)"
+          strokeOpacity="0.55"
+          strokeWidth="0.9"
+        />
+      </svg>
+
+      {/* Grain + vignette for paper feel */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "var(--gradient-vignette)" }}
+      />
+
+      {(title || subtitle) && (
+        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center p-6 text-center">
+          {subtitle && (
+            <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
+              {subtitle}
+            </p>
+          )}
+          {title && (
+            <h2 className="mt-1 font-playfair italic-accent text-base text-foreground">
+              {title}
+            </h2>
+          )}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes globe-meridian {
+          0%   { rx: ${R}px; stroke-opacity: 0.32; }
+          25%  { rx: ${R * 0.05}px; stroke-opacity: 0.55; }
+          50%  { rx: ${R}px; stroke-opacity: 0.32; }
+          75%  { rx: ${R * 0.05}px; stroke-opacity: 0.12; }
+          100% { rx: ${R}px; stroke-opacity: 0.32; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .globe-meridians ellipse { animation: none !important; }
+        }
+      `}</style>
+    </div>
+  );
+}

@@ -605,6 +605,17 @@ export default function MatrixGrid() {
             <span className="ml-2 font-inter text-[10px] text-muted-foreground/70">
               Drag, scroll, or use arrows to pan
             </span>
+            {ghostLegs.length > 0 && (
+              <button
+                type="button"
+                onClick={confirmGhostLegs}
+                className="ml-3 inline-flex items-center gap-1 rounded-sm border border-dashed border-accent/50 px-2 py-1 font-inter text-[10px] text-accent hover:bg-accent/10"
+                title="Persist the suggested location row derived from your stays"
+              >
+                <Sparkles className="h-3 w-3" />
+                Confirm {ghostLegs.length} location {ghostLegs.length === 1 ? "leg" : "legs"}
+              </button>
+            )}
           </div>
         )}
         {activeTrip && (

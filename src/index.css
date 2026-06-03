@@ -65,6 +65,15 @@
     --cell-activity: 38 30% 94%;
     --cell-sites: 280 25% 94%;
 
+    /* Location leg rainbow palette (vertical column tints by leg order) */
+    --leg-1: 0 70% 55%;
+    --leg-2: 25 80% 55%;
+    --leg-3: 45 85% 55%;
+    --leg-4: 140 50% 45%;
+    --leg-5: 185 60% 45%;
+    --leg-6: 220 65% 55%;
+    --leg-7: 280 50% 55%;
+
     /* Travel warning accents */
     --warning-forest: 145 30% 15%;
     --warning-amber: 38 55% 50%;

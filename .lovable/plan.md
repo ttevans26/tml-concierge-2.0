@@ -1,71 +1,81 @@
-## Deferred Batch — Implementation Plan
+# Social Post Ingest → Studio Vault
 
-Scope: ship the 6 deferred items from the demo-readiness audit. Avatar uploads are blocked by workspace policy (public buckets disabled) — included as a deferred note, not built.
+Add the ability to paste an Instagram or TikTok URL into TML Concierge, extract location + recommended places from the public caption, and stage results in a review tray that creates/uses a Studio folder named after the detected destination.
 
----
+iOS share-sheet wiring (PWA Web Share Target + Capacitor Share Extension) is deferred; the ingest pipeline is built so that a future share entry point just POSTs to the same endpoint.
 
-### 1. Concierge chat persistence + tool-calling rewrite
+## User flow
 
-Tables `concierge_conversations` and `concierge_messages` already exist with RLS. The current `ConciergePanel` + `concierge-chat` edge function is a stateless one-shot.
+1. In **Studio**, a new **"Paste Social Link"** button opens a small dialog (URL + optional note).
+2. Backend resolves the URL via **oEmbed** (Instagram `/oembed`, TikTok `/oembed`) → returns caption, author, thumbnail.
+3. Gemini parses the caption and returns structured JSON: `{ destination, confidence, items: [{ title, category, address?, note }] }`.
+4. Results land in a **Pending Social Imports** tray (modeled after Smart Pull Inbox) with:
+   - Detected destination + suggested folder (existing match or "Create new: {Destination}").
+   - Editable list of extracted items, each with category dropdown (Stay / Dining / Activity / Site) and keep/discard toggle.
+   - Source preview (thumbnail + caption + link back).
+5. **Commit** creates the folder if needed, runs each kept item through the existing Google Places validation (reuses entity validation flow to populate `google_place_id`, `lat/lng`, `address`, photo) and inserts into `studio_items`.
 
-- Refactor `concierge-chat` to accept `conversation_id`, load prior messages, append new user message, stream Gemini response (SSE), persist assistant reply + `tool_calls` JSON.
-- Define a small tool schema: `create_itinerary_item`, `search_studio_items`, `suggest_anchor`, `get_trip_summary`. Execute tool calls server-side against the trip via service role with `user_id` from JWT.
-- Rewrite `ConciergePanel`: conversation list sidebar (new / rename / delete), threaded message view with `react-markdown`, streaming indicator, tool-call chips ("Added Aman Venice to Day 3").
-- Persist active `conversation_id` per trip in `useTripStore`.
+## Scope
 
-### 2. Bulk Import dialog + PDF/image OCR
+- `studio_social_imports` table (staging) so review state survives reloads and the future share target can drop rows here directly.
+- Edge function `ingest-social-post` (URL in → oEmbed fetch → Gemini extract → row in `studio_social_imports` with `status='pending'`).
+- Studio UI: paste dialog + tray drawer + commit handler.
+- Reuse existing `validate-place` / Google Places lookup for each committed item.
+- Toast + notification on completion.
 
-`scrape-and-parse` already accepts arrays. UI is single-URL.
+## Out of scope (this batch)
 
-- New `BulkImportDialog` opened from Studio header: tabs for **URLs** (textarea, one per line), **PDF/Image** (drop zone, multi-file).
-- For PDFs/images: upload to a new private `import-uploads` bucket, call extended `scrape-and-parse` with `{ type: 'file', storage_path }`. Backend uses Gemini multimodal (vision) to extract structured items — no separate OCR service.
-- Progress list with per-item status (queued / parsing / done / failed), bulk "Send to Review Tray".
+- iOS native share sheet (Capacitor share extension).
+- PWA `share_target` manifest wiring.
+- Scraping comments, video transcription, or visual analysis of the post.
+- YouTube / Pinterest / Threads (same pipeline can extend later).
 
-### 3. NotificationsPopover → real `notifications` table
+## Technical details
 
-Currently mocked. Schema exists; `cancellation-scan` already writes rows.
+**Schema** (new migration):
+```
+studio_social_imports (
+  id uuid pk, user_id uuid, source_url text, platform text,  -- 'instagram' | 'tiktok'
+  caption text, thumbnail_url text, author text,
+  detected_destination text, suggested_folder_id uuid null,
+  extracted_items jsonb,         -- array of {title, category, address, note, keep}
+  status text default 'pending', -- pending | committed | discarded | failed
+  error text null,
+  created_at, updated_at
+)
+```
+RLS: user-owned, standard CRUD policies + GRANTs to `authenticated` and `service_role`.
 
-- Replace mock data with Supabase query: `select * from notifications where is_dismissed = false order by created_at desc limit 50`.
-- Realtime subscription on `notifications` filtered by `user_id`.
-- Actions: mark read (`is_read = true`), dismiss (`is_dismissed = true`), click → route to trip/item.
-- Unread badge count from query.
+**Edge function `ingest-social-post`** (`verify_jwt` default):
+- Validate body `{ url, note? }` with Zod; reject non-IG/TikTok hosts.
+- Detect platform from hostname; call oEmbed:
+  - IG: `https://graph.facebook.com/v18.0/instagram_oembed?url=...` *(requires app token — fallback to public `https://www.instagram.com/api/v1/oembed/?url=...` which still serves caption for public posts; if both fail, save row with `status='failed'` and surface caption-less preview)*.
+  - TikTok: `https://www.tiktok.com/oembed?url=...` (no auth needed).
+- Send caption + author to Gemini (`google/gemini-2.5-flash`) with tool schema `extract_travel_post` → `{ destination, items[] }`.
+- Insert row, return `import_id`.
 
-### 4. Gap-fill → SchedulingModal + conflict "Apply fix"
+**Frontend**:
+- `src/components/studio/PasteSocialDialog.tsx` — URL input + submit.
+- `src/components/studio/SocialImportsTray.tsx` — list pending imports, expand to edit/keep items, "Create folder & add" CTA.
+- Hook into `StudioWorkbench` header next to Bulk Import.
+- Realtime subscription on `studio_social_imports` so the tray badge updates when a row finishes processing (sets the stage for share-sheet drops later).
 
-`SchedulingModal` and `conflictResolution.ts` exist but aren't wired.
+**Future share entry point** (designed for, not built):
+- Same `ingest-social-post` endpoint will accept POSTs from the Capacitor share extension and from a PWA `share_target` route at `/share-in`. No backend changes needed when that batch lands — just a thin auth-aware wrapper that calls the function and redirects to the tray.
 
-- In `MatrixGrid`, gap-detection action buttons currently insert drafts directly — change to open `SchedulingModal` pre-filled with `{ date, category, suggestion }`.
-- In `ItineraryItemCard` conflict badge, add **Apply fix** button. Reads suggested resolution from `conflictResolution.ts` (shift time, move day, drop overlap) and applies via `updateItineraryItem`.
-- Toast with undo on both actions.
+## Files
 
-### 5. Gmail connector for Smart Pull
+New:
+- `supabase/functions/ingest-social-post/index.ts`
+- `src/components/studio/PasteSocialDialog.tsx`
+- `src/components/studio/SocialImportsTray.tsx`
+- migration: `studio_social_imports` table + RLS + GRANTs
 
-Today: paste-only into `SmartPullInbox`.
+Edited:
+- `src/components/studio/StudioWorkbench.tsx` (add buttons + tray mount)
+- `src/integrations/supabase/types.ts` (auto-regen after migration)
+- `mem://index.md` + new `mem://features/social-post-ingest`
 
-- Use the **Google Mail** App connector (workspace owner's inbox — surface this caveat in UI: "Connected inbox: <email>. Forward reservations here.").
-- New edge function `smart-pull-gmail`: lists last 50 messages matching `subject:(reservation OR booking OR itinerary) newer_than:90d`, passes body to existing `smart-pull` parser, writes results to review tray.
-- "Sync Gmail" button in `SmartPullInbox` header + 15-min cron (pg_cron) for background pulls.
-- Requires `standard_connectors--connect` with `google_mail` on `gmail.readonly` scope before deploy.
+## Open question
 
-### 6. Avatar uploads — deferred note only
-
-Workspace policy `cloud_block_public_buckets` blocks the public bucket this needs. Options for the user:
-- (a) Enable public buckets in workspace Settings → Privacy & Security, then we add `avatars` bucket + upload UI in `ProfileDrawer`.
-- (b) Keep private bucket and serve via signed URLs (works today, slightly slower image loads).
-
-No build until the user picks (a) or (b).
-
----
-
-### Suggested execution order
-
-1. Notifications wiring (smallest, unblocks demo polish)
-2. Gap-fill / conflict apply-fix wiring (frontend-only)
-3. Bulk import dialog (UI + backend extension)
-4. Concierge persistence + streaming + tool calls (largest)
-5. Gmail connector (requires user to link connection first)
-6. Avatar uploads (after user decides on bucket policy)
-
-### Out of scope (Release 2.0)
-
-Cross-day drag inside Matrix, undo/redo stack, push/email notification delivery, Nylas multi-provider mail, screenshot OCR via dedicated Vision API (Gemini multimodal covers demo).
+Instagram's public oEmbed endpoint has been progressively locked down; for posts where it returns 401, the import will land with caption empty and we'll fall back to "user pastes/edits caption" inline in the tray. Acceptable for v1?

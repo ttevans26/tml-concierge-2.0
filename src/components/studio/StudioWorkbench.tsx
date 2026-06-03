@@ -19,6 +19,9 @@ import { useGooglePlaces } from "@/hooks/useGooglePlaces";
 import { classifyPlace, CATEGORY_LABEL } from "@/lib/placeCategory";
 import BulkImportDialog, { type ImportedPendingItem } from "./BulkImportDialog";
 import { Layers } from "lucide-react";
+import PasteSocialDialog from "./PasteSocialDialog";
+import SocialImportsTray from "./SocialImportsTray";
+import { Share2 } from "lucide-react";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -67,6 +70,8 @@ export default function StudioWorkbench() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [prefillTitle, setPrefillTitle] = useState<string>("");
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [pasteSocialOpen, setPasteSocialOpen] = useState(false);
+  const [socialRefreshKey, setSocialRefreshKey] = useState(0);
 
   /* Find-a-Place (Google Places autocomplete) state */
   const [placeQuery, setPlaceQuery] = useState("");
@@ -433,6 +438,22 @@ export default function StudioWorkbench() {
         <p className="mt-2 max-w-xs text-center font-inter text-xs leading-relaxed text-muted-foreground">
           Select a collection from the Ideas Vault to view and curate your research cards.
         </p>
+        <div className="mt-5 flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={() => setPasteSocialOpen(true)}
+          >
+            <Share2 className="h-3 w-3" /> Paste Social Link
+          </Button>
+          <SocialImportsTray refreshKey={socialRefreshKey} />
+        </div>
+        <PasteSocialDialog
+          open={pasteSocialOpen}
+          onOpenChange={setPasteSocialOpen}
+          onImported={() => setSocialRefreshKey((k) => k + 1)}
+        />
       </div>
     );
   }
@@ -474,6 +495,7 @@ export default function StudioWorkbench() {
               {sortByProximity ? "Proximity ✓" : "Sort by Proximity"}
             </Button>
           )}
+          <SocialImportsTray refreshKey={socialRefreshKey} />
         </div>
       </div>
 
@@ -614,6 +636,17 @@ export default function StudioWorkbench() {
             <Layers className="h-3 w-3" />
             Bulk
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-thin font-inter text-xs h-8 gap-1"
+            onClick={() => setPasteSocialOpen(true)}
+            disabled={scraping}
+            title="Paste an Instagram or TikTok link"
+          >
+            <Share2 className="h-3 w-3" />
+            Social
+          </Button>
         </div>
       </div>
 
@@ -624,6 +657,11 @@ export default function StudioWorkbench() {
         onImported={(items: ImportedPendingItem[]) =>
           setPendingItems((prev) => [...prev, ...items])
         }
+      />
+      <PasteSocialDialog
+        open={pasteSocialOpen}
+        onOpenChange={setPasteSocialOpen}
+        onImported={() => setSocialRefreshKey((k) => k + 1)}
       />
       {pendingItems.length > 0 && (
         <div className="border-b border-border bg-secondary/30 px-5 py-3">

@@ -57,7 +57,7 @@ function computeMatch(
   return "partial";
 }
 
-export default function ItineraryItemCard({ item, hasConflict = false, fix = null, onApplyFix }: ItineraryItemCardProps) {
+function ItineraryItemCardBase({ item, hasConflict = false, fix = null, onApplyFix }: ItineraryItemCardProps) {
   const [editing, setEditing] = useState(false);
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const setActiveAnchor = useTripStore((s) => s.setActiveAnchor);

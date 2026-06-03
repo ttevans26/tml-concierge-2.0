@@ -1,81 +1,103 @@
-## Goal
+# Release 2.0 — Sprint 1 Build Plan
 
-Ship TML Concierge as a real iOS app (App Store-ready) so you can pull up your itinerary, Ideas Vault folders, and Tools page mid-trip — even without signal.
-
----
-
-## Phase 1 — Capacitor shell
-
-Wrap the existing React app with Capacitor so it runs natively on iOS without rewriting the UI.
-
-1. Add Capacitor dependencies: `@capacitor/core`, `@capacitor/ios`, `@capacitor/cli`, `@capacitor/preferences` (secure storage), `@capacitor/network` (online/offline detection), `@capacitor/app` (lifecycle).
-2. Create `capacitor.config.ts` with:
-   - `appId: app.lovable.693f38f0fd12468791b16036a995ed65`
-   - `appName: TML Concierge`
-   - Hot-reload pointing at the Lovable sandbox URL so you can iterate in chat and see changes live on device.
-3. Add a small `useIsNative()` hook (wraps `Capacitor.isNativePlatform()`) used by mobile-only UI tweaks (safe-area padding, hide desktop-only chrome).
-4. Apply iOS safe-area insets globally (top notch + home indicator) so the App Shell header and bottom bars don't clip.
-
-## Phase 2 — Offline data layer
-
-The store currently fetches trips, itinerary items, studio folders, and studio items from Supabase on every mount. Add a persistent cache so they're available with zero signal.
-
-1. **Persisted Zustand**: wrap `useTripStore` and `useStudioStore` with `zustand/middleware`'s `persist`, backed by Capacitor `Preferences` on native (falls back to `localStorage` on web). Caches: `trips`, `itineraryItems`, `studioFolders`, `studioItems`, `profile`, `loyalty/cards`.
-2. **Stale-while-revalidate fetch pattern**: on app launch, hydrate UI immediately from cache, then fire Supabase queries in the background and reconcile.
-3. **Network indicator**: small status pill in the header ("Offline — showing saved data") driven by `@capacitor/network`.
-4. **Active trip pinning**: mark the active trip as "always cached" — its itinerary items, attached studio items, and any cached Place photos persist regardless of cache size.
-5. **Mutation queue**: when offline, edits (drag/drop, edit dialog saves, marking items confirmed) go to a queued-write list; flushed to Supabase automatically when the network returns.
-
-## Phase 3 — Mobile-first navigation
-
-The current 3-panel desktop layout doesn't translate to a 390px phone. Add a native-feeling bottom tab bar for the four primary destinations:
-
-```text
-┌────────────────────────────┐
-│       (current screen)     │
-│                            │
-├────────────────────────────┤
-│ Today  Trip  Studio  Tools │
-└────────────────────────────┘
-```
-
-- **Today** — new screen: next 24h of itinerary items + flight status, pulled from cached active trip.
-- **Trip** — existing Matrix grid, switched to a vertical day-by-day stack on phone widths (already partly responsive; tighten it).
-- **Studio** — Ideas Vault folders list → folder detail → item detail, all offline-readable.
-- **Tools** — existing Tools page (Preparedness Checklist, Travel Warnings, Upcoming Appointments).
-- Hide the bottom bar on desktop / web.
-
-## Phase 4 — Native polish (small, high-impact)
-
-- Splash screen + app icon set generated from the Bronze Beige + Onyx mark.
-- Status bar style synced to Cream/Onyx theme.
-- Tap any itinerary item with a `google_place_id` → opens Apple Maps natively.
-- `@capacitor/app` listener triggers a background refresh whenever the app returns to the foreground.
-
-## Phase 5 — Run it on your phone
-
-After the shell is wired up I'll give you the exact 6-step recipe:
-1. Push the project to your GitHub via Export.
-2. `git clone` + `npm install` locally on a Mac.
-3. `npx cap add ios`
-4. `npm run build && npx cap sync`
-5. `npx cap open ios` to open Xcode.
-6. Plug in your iPhone, sign with your Apple ID, and press Run.
+Eight workstreams, sequenced by dependency. Each is independently shippable. Bundled into three logical waves so we can ship value mid-sprint.
 
 ---
 
-## Technical notes
+## Wave A — Foundation (must land first)
 
-- **Auth**: Supabase JWT already persists in `localStorage`; Capacitor's WebView treats it like Safari, so existing sessions survive app restarts. No changes needed beyond ensuring tokens auto-refresh on resume.
-- **Edge functions**: All current edge functions (`smart-pull`, `concierge-chat`, `aviationstack-lookup`, `scrape-and-parse`) keep working unchanged — they're just HTTP calls.
-- **Google Maps JS API**: Stays on web view, no native SDK swap needed for v1.
-- **Push notifications, Wallet passes, share-sheet ingestion**: explicitly deferred to a Phase 6 — they require Apple Developer Program enrollment and APNs setup, which we should tackle after the shell feels good on-device.
-- **App Store submission**: not part of this build; once you've TestFlight'd it for a few days we'll add the listing assets.
+### 1. Auth Hardening
+**Goal:** App is safe to hand to external testers.
+
+- Enable **Google OAuth** via `supabase--configure_social_auth` (`providers: ["google"]`) and add a "Continue with Google" button to `Login` and `Signup` using `lovable.auth.signInWithOAuth("google", ...)`.
+- Switch `useAuth.signUp` to require email verification (turn off auto-confirm); add a "check your inbox" state to `Signup.tsx`.
+- Wire `ForgotPassword` / `ResetPassword` to real Supabase calls (already scaffolded — just verify the `redirectTo` and add success states).
+- **Profile editing**: new `ProfileSettings` panel inside the existing `ProfileDrawer` — edit `display_name`, `avatar_url` (Supabase Storage bucket `avatars`, public read), and travel preferences.
+- **Account deletion**: edge function `delete-account` that calls `auth.admin.deleteUser()` after re-auth confirmation; cascade-delete trips/items/folders.
+- Enable HIBP leaked-password protection via `configure_auth`.
+
+**DB:** create `avatars` storage bucket (public read, owner write); no schema changes.
+
+### 2. Concierge Conversational Thread (foundation for #6 and #7)
+**Goal:** Real chat replaces the floating placeholder. Required before gap-fix routing has somewhere to live.
+
+- New table `concierge_conversations` (id, user_id, trip_id, title, created_at) and `concierge_messages` (id, conversation_id, role, content, tool_calls jsonb, created_at). RLS by `auth.uid()`.
+- Rewrite `supabase/functions/concierge-chat/index.ts` to:
+  - Accept full message history.
+  - Stream responses (SSE) using Lovable AI Gateway (`google/gemini-2.5-flash` default, `pro` for planning).
+  - Expose tools: `create_itinerary_item`, `open_scheduling_modal`, `search_studio`, `lookup_flight`, `suggest_gap_fix`.
+- Replace `ConciergePanel` body with a real chat UI: thread list (left), streaming messages with `react-markdown`, tool-call cards rendered inline.
+- Persist `pendingConciergePrompt` → opens or creates a conversation, sends as first message.
 
 ---
 
-## What this plan does NOT do
+## Wave B — Workspace Polish
 
-- No rewrite to SwiftUI — staying with React + Capacitor keeps one codebase.
-- No PWA / service worker (Capacitor handles the native shell instead).
-- No push notifications in v1 (needs paid Apple Developer account first).
+### 3. Matrix Cross-Day Drag + Undo/Redo
+- Extend the existing drag handlers in `MatrixGrid.tsx` so an in-grid card is a drag source as well as a drop target (currently only Studio items are sources).
+- On drop: update `date` + `category` via `updateItineraryItem`, with optimistic UI in `useTripStore`.
+- **Undo/Redo**: add a bounded `historyStack` / `redoStack` (size 50) in `useTripStore` capturing `{op, before, after}` for create/update/delete/move. Keyboard: ⌘Z / ⇧⌘Z. Toolbar buttons in `TripWorkspace` header.
+
+### 4. Conflict Auto-Resolve
+- Extend `lib/gapDetection.ts` (or add `lib/conflictResolution.ts`) to emit a `suggestedFix` per conflict: move to next free slot, swap stay nights, split overlapping activities, etc.
+- In `TripHealthBar` and `ConciergePanel`, render an **"Apply fix"** button per conflict that runs the suggested mutation through `updateItineraryItem` (so it's undo-able).
+- Complex/ambiguous conflicts route through the new chat (see #2) with a pre-filled prompt.
+
+### 5. Gap-Fill → Scheduling Engine Routing
+- Replace the current "ship as draft" handler on gap suggestion buttons with `openSchedulingModal({ date, category, prefill })`.
+- `SchedulingModal.tsx` accepts a `prefill` prop (title, time window, location, source) so the user reviews/edits before commit.
+- Concierge tool `suggest_gap_fix` returns structured items the modal can consume directly.
+
+### 6. Cancellation Reminders
+- DB: new column already exists (`cancellation_deadline`). Add `notification_preferences jsonb` to `profiles` (lead-time defaults).
+- Edge function `cancellation-scan` (cron via Supabase scheduled function, daily) finds items with `cancellation_deadline` within lead-time and writes to a new `notifications` table.
+- UI: extend `NotificationsPopover` to read from `notifications`, show count badge.
+- iOS: foreground via `@capacitor/local-notifications`; web via in-app popover only this sprint. Push notifications deferred to a later milestone.
+
+---
+
+## Wave C — Ingest Upgrades
+
+### 7. Studio Bulk Import + PDF / Image OCR
+- Extend `scrape-and-parse` edge function to accept:
+  - An array of URLs (loop server-side, return per-URL status).
+  - A base64 PDF (parse text with `pdf-parse` / Gemini multimodal).
+  - A base64 image (Gemini 2.5 Flash multimodal for OCR + structured extraction).
+- New `BulkImportDialog` in Studio: textarea for URL list, drop-zone for PDFs/images. Results land in the existing Review tray.
+- Per-item progress, retry on partial failures.
+
+### 8. Smart Pull — Gmail Connector
+- Use `standard_connectors--connect` with `connector_id: google_mail` (builder's mailbox model — explain in UI that this connects *the user's* mailbox and that we'll need per-user OAuth later).
+- New edge function `smart-pull-gmail` queries `is:unread (from:booking OR from:hotel OR ...)` via the connector gateway, pipes each message body through the existing `smart-pull` parser.
+- New "Sync Gmail" button in `SmartPullInbox`; results merge into the existing tray.
+- Acknowledge limitation: this sprint connects one mailbox per workspace. Per-user OAuth (each tester connects their own Gmail) is a follow-up milestone — flagged but out of scope here.
+
+---
+
+## Ship Order Within the Sprint
+
+1. **Day 1–2** — Wave A #1 (Auth) and DB migrations for #2, #6.
+2. **Day 3–5** — Wave A #2 (Concierge thread + streaming).
+3. **Day 6–8** — Wave B #3, #4, #5 (workspace polish, all leverage Wave A).
+4. **Day 9–10** — Wave B #6 (reminders) + Wave C #7 (bulk/OCR).
+5. **Day 11–12** — Wave C #8 (Gmail) + QA pass.
+
+---
+
+## Technical Notes (for review)
+
+- **No iOS-native work in this sprint.** App icon, splash, push, biometric, share-sheet — deferred to the next iOS-focused milestone so we can ship the web app to testers first. `@capacitor/local-notifications` is the only Capacitor plugin touched (for #6), and it degrades gracefully on web.
+- **New tables:** `concierge_conversations`, `concierge_messages`, `notifications`. **New storage bucket:** `avatars`. All RLS-scoped to `auth.uid()` with `service_role` grants for edge functions.
+- **New edge functions:** `delete-account`, `cancellation-scan` (scheduled), `smart-pull-gmail`. **Updated:** `concierge-chat` (streaming + tools), `scrape-and-parse` (bulk + multimodal).
+- **Lovable AI Gateway** covers all model calls — no new API keys needed for concierge or OCR.
+- **New connector:** `google_mail` for #8.
+- **Existing memory files** stay accurate; will add `mem://features/concierge-chat`, `mem://features/cancellation-reminders`, `mem://features/bulk-import` after build.
+
+## Out of scope (explicitly deferred)
+
+- iOS push notifications, app icon/splash, App Store assets, share-sheet extension, biometric unlock.
+- Per-user Gmail OAuth (each tester their own mailbox).
+- Travel Network real data, Trip Access Requests UI, comments.
+- Real Mapbox/Google Maps proximity rendering.
+- Per-category budget caps, real cpp points math, live FX.
+- Sentry / PostHog / E2E test infrastructure.

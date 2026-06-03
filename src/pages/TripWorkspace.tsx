@@ -101,16 +101,7 @@ export default function TripWorkspace() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
-          <h1 className="font-playfair text-base font-semibold text-foreground leading-tight">
-            {activeTrip.name}
-          </h1>
-          {activeTrip.destination && (
-            <p className="font-inter text-[11px] text-muted-foreground">
-              {activeTrip.destination}
-            </p>
-          )}
-        </div>
+        <TripSwitcher />
       </header>
 
       {/* Trip Health Bar */}
@@ -134,10 +125,7 @@ export default function TripWorkspace() {
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <span
-              className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground"
-              style={{ writingMode: "vertical-rl" }}
-            >
+            <span className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground [writing-mode:vertical-rl]">
               Studio
             </span>
           </div>
@@ -153,49 +141,37 @@ export default function TripWorkspace() {
           <div className="hidden w-[22%] min-w-[260px] shrink-0 lg:flex flex-col border-l border-border bg-card">
             {/* Tabs */}
             <div className="flex shrink-0 border-b border-border">
-              <button
-                onClick={() => setRightTab("budget")}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
-                  rightTab === "budget"
-                    ? "border-b-2 border-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Wallet className="h-3 w-3" />
-                Budget
-              </button>
-              <button
-                onClick={() => setRightTab("concierge")}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
-                  rightTab === "concierge"
-                    ? "border-b-2 border-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Sparkles className="h-3 w-3" />
-                Concierge
-              </button>
-              <button
-                onClick={() => setRightTab("map")}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 py-2 font-inter text-[11px] uppercase tracking-wider transition-colors",
-                  rightTab === "map"
-                    ? "border-b-2 border-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <MapPin className="h-3 w-3" />
-                Map
-              </button>
-              <button
+              {([
+                { id: "budget", label: "Budget", Icon: Wallet },
+                { id: "concierge", label: "Concierge", Icon: Sparkles },
+                { id: "map", label: "Map", Icon: MapPin },
+                { id: "packing", label: "Pack", Icon: ListChecks },
+                { id: "documents", label: "Docs", Icon: FileText },
+              ] as const).map(({ id, label, Icon }) => (
+                <Button
+                  key={id}
+                  variant="ghost"
+                  onClick={() => setRightTab(id)}
+                  className={cn(
+                    "flex-1 min-h-[44px] rounded-none px-1 font-inter text-[11px] uppercase tracking-wider gap-1.5",
+                    rightTab === id
+                      ? "border-b-2 border-accent text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </Button>
+              ))}
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setBudgetOpen(false)}
-                className="flex items-center justify-center px-2 text-muted-foreground hover:text-foreground"
                 title="Collapse panel"
+                className="min-h-[44px] w-8 shrink-0 rounded-none text-muted-foreground hover:text-foreground"
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
               {rightTab === "budget" && (
@@ -203,6 +179,8 @@ export default function TripWorkspace() {
               )}
               {rightTab === "concierge" && <ConciergePanel />}
               {rightTab === "map" && <ProximityMap />}
+              {rightTab === "packing" && <PackingList />}
+              {rightTab === "documents" && <TripDocuments />}
             </div>
           </div>
         ) : (
@@ -216,11 +194,8 @@ export default function TripWorkspace() {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span
-              className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground"
-              style={{ writingMode: "vertical-rl" }}
-            >
-              Budget · Concierge
+            <span className="mt-3 font-inter text-[10px] uppercase tracking-widest text-muted-foreground [writing-mode:vertical-rl]">
+              Budget · Concierge · Pack · Docs
             </span>
           </div>
         )}

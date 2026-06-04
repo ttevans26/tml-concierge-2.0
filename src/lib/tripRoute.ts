@@ -316,6 +316,11 @@ function finiteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Detect coords pinned to (0,0) "Null Island" — a common bad-data sentinel. */
+function isLikelyNullIsland(lat: number, lng: number): boolean {
+  return Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001;
+}
+
 function findRouteHint(raw: string): RouteHint | null {
   const normalized = normalizeRouteText(raw);
   return ROUTE_HINTS.find((hint) => normalized.includes(normalizeRouteText(hint.match))) ?? null;

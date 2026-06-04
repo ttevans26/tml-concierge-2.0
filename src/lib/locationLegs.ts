@@ -107,6 +107,10 @@ export interface StayPill {
   locationName: string | null;
   googlePlaceId: string | null;
   firstItem: ItineraryItem;
+  /** True when the underlying row stores its own check-in/check-out via metadata.end_date. */
+  isRange: boolean;
+  /** Derived city label (matches a Location leg overlapping the stay). Set when `legs` is passed in. */
+  derivedLocation: string | null;
 }
 
 function stayGroupKey(it: ItineraryItem): string {
@@ -118,23 +122,55 @@ function stayGroupKey(it: ItineraryItem): string {
 }
 
 /**
- * Collapse per-night stay items into spanning pills.
- * Stays sharing title + location are merged when their dates are consecutive.
+ * Build Stay pills.
+ *
+ * - **Range rows** (have `metadata.end_date`): emit one pill per row. The row IS the pill.
+ *   New writes always use this format.
+ * - **Legacy per-night rows** (no `metadata.end_date`): collapse consecutive nights
+ *   sharing title + location into a single multi-night pill (backwards-compatibility).
+ *
+ * When `legs` is passed in, each pill's `derivedLocation` is set from whichever
+ * Location leg overlaps its start date.
  */
-export function getStayPills(items: ItineraryItem[]): StayPill[] {
+export function getStayPills(items: ItineraryItem[], legs?: LocationLeg[]): StayPill[] {
   const stays = items
     .filter((i) => i.category === "stays" && !!i.date)
     .slice()
     .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
 
   const pills: StayPill[] = [];
-  const byKey = new Map<string, StayPill>();
+  // Legacy fallback: track most recent pill per group key for consecutive-night merging.
+  const lastLegacyByKey = new Map<string, StayPill>();
 
   for (const it of stays) {
-    const key = stayGroupKey(it);
-    const existing = byKey.get(key);
     const date = it.date as string;
-    // Consecutive if date == endDate + 1
+    const meta = (it.metadata as Record<string, unknown> | null) || {};
+    const metaEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : null;
+
+    // RANGE ROW — one pill per row, never merged.
+    if (metaEnd) {
+      const endDate = metaEnd < date ? date : metaEnd; // clamp inverted ranges defensively
+      const nights = Math.max(1, differenceInCalendarDays(parseISO(endDate), parseISO(date)) + 1);
+      pills.push({
+        id: it.id,
+        itemIds: [it.id],
+        startDate: date,
+        endDate,
+        nights,
+        title: it.title,
+        locationName: it.location_name ?? null,
+        googlePlaceId: it.google_place_id ?? null,
+        firstItem: it,
+        isRange: true,
+        derivedLocation: null,
+      });
+      // Don't pollute legacy merger
+      continue;
+    }
+
+    // LEGACY PER-NIGHT ROW — merge consecutive same-stay rows.
+    const key = stayGroupKey(it);
+    const existing = lastLegacyByKey.get(key);
     const nextDay = existing
       ? format(addDays(parseISO(existing.endDate), 1), "yyyy-MM-dd")
       : null;
@@ -154,9 +190,19 @@ export function getStayPills(items: ItineraryItem[]): StayPill[] {
       locationName: it.location_name ?? null,
       googlePlaceId: it.google_place_id ?? null,
       firstItem: it,
+      isRange: false,
+      derivedLocation: null,
     };
     pills.push(pill);
-    byKey.set(key, pill);
+    lastLegacyByKey.set(key, pill);
+  }
+
+  // Derive location from overlapping Location legs (by start date).
+  if (legs && legs.length > 0) {
+    for (const p of pills) {
+      const leg = legs.find((l) => p.startDate >= l.startDate && p.startDate <= l.endDate);
+      p.derivedLocation = leg ? leg.city : null;
+    }
   }
 
   return pills;

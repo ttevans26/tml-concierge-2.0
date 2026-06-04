@@ -13,7 +13,6 @@ import type { ErrorReporter, Severity } from "./types";
  */
 export async function createSentryReporter(dsn: string): Promise<ErrorReporter> {
   // Lazy require avoids bundling Sentry when DSN is unset.
-  // @ts-expect-error — package is optional and added later.
   const Sentry = await import(/* @vite-ignore */ "@sentry/react").catch(() => null);
   if (!Sentry) {
     if (import.meta.env.DEV) console.warn("[sentry] package not installed; skipping init");

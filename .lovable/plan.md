@@ -1,22 +1,17 @@
-# Fix Preview: Missing Observability Dependencies
+## Plan
 
-## Diagnosis
+1. **Fix the route builder for Europe 2026**
+   - Update the journey route logic so it uses the trip’s explicit `location` itinerary rows as route stops, not only `stays`.
+   - Preserve chronological ordering so the route captures Paris → Saint-Rémy-de-Provence → Antibes → Ortisei → Salò → Bath → Sherborne.
+   - Keep the existing bad-coordinate protections that filter out Null Island / Africa-style erroneous points.
 
-Vite is failing to resolve two imports, which crashes the preview:
+2. **Make geocoding tolerant of multi-country trips**
+   - Avoid over-restricting Google geocoding to the first country in `UK, France, Italy`, which can block later Italy/UK legs.
+   - Prefer known Europe 2026 route hints for ambiguous rows like St Rémy, Antibes, Salò, Bath, and Sherborne.
 
-```
-posthog-js     (imported by src/lib/observability/posthog.ts)
-@sentry/react  (imported by src/lib/observability/sentry.ts)
-```
+3. **Improve map loading behavior**
+   - Ensure the map leaves “Drawing route…” once the route is built or a fallback state is reached.
+   - Keep the dashboard card UI unchanged aside from the route map actually rendering.
 
-Both modules are imported by `src/lib/observability/` but were never added to `package.json`.
-
-## Fix
-
-Install the two packages:
-
-- `bun add posthog-js @sentry/react`
-
-That alone should bring the preview back. After install Vite will auto-restart and the "open in new tab" link will work.
-
-No code changes required — both files already guard on `import.meta.env` so they no-op if env vars are absent.
+4. **Verify with real trip data**
+   - Re-check the Europe 2026 itinerary rows and confirm the generated waypoint list includes all expected legs and no bad offshore/Africa coordinates.

@@ -67,9 +67,10 @@ async function buildDestinationContext(destination: string | null): Promise<Dest
     if (!res) continue;
     const comps = (res.address_components as any[] | undefined) || [];
     const country = comps.find((c) => c.types?.includes("country"));
-    if (country?.short_name && !seenCountries.has(country.short_name)) {
-      seenCountries.add(country.short_name);
-      ctx.countryCodes.push(country.short_name.toLowerCase());
+    const shortName = typeof country?.short_name === "string" ? country.short_name : null;
+    if (shortName && !seenCountries.has(shortName)) {
+      seenCountries.add(shortName);
+      ctx.countryCodes.push(shortName.toLowerCase());
     }
     const vp = res.geometry?.viewport;
     if (vp?.getNorthEast && vp?.getSouthWest) {
@@ -147,7 +148,7 @@ export async function buildRouteWithGeocoding(
   // should never short-circuit the rest of the lodging route.
   const directFallback = buildRouteFromItems(items);
   const sortedStays = [...items]
-    .filter((i) => i.category === "stays")
+    .filter((i) => i.category === "stays" || i.category === "location")
     .sort((a, b) => {
       const ad = a.date ?? "";
       const bd = b.date ?? "";
@@ -155,14 +156,22 @@ export async function buildRouteWithGeocoding(
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
 
+  // Prefer explicit `location` rows as the route backbone — their
+  // location_name (e.g. "Antibes", "Bath") is a clean, geocodable city.
+  // Stays often have a hotel title or no location_name at all.
   const unique: StayCandidate[] = [];
-  const titleSeen = new Set<string>();
+  const keySeen = new Set<string>();
   for (const i of sortedStays) {
     const title = (i.title || "").trim();
     const locationName = (i.location_name || "").trim() || null;
-    const key = normalizeRouteText(locationName || title);
-    if (!key || titleSeen.has(key)) continue;
-    titleSeen.add(key);
+    // For `location` rows, the title IS the geographic label
+    // (e.g. "Antibes, France"). Prefer it for matching/hints.
+    const primaryLabel = i.category === "location"
+      ? (locationName || title)
+      : (locationName || title);
+    const key = normalizeRouteText(primaryLabel);
+    if (!key || keySeen.has(key)) continue;
+    keySeen.add(key);
     const candLat = finiteNumber(i.location_lat);
     const candLng = finiteNumber(i.location_lng);
     const validStored =
@@ -174,7 +183,7 @@ export async function buildRouteWithGeocoding(
       lat: validStored ? candLat : null,
       lng: validStored ? candLng : null,
       sortOrder: i.sort_order ?? 0,
-      hint: findRouteHint(locationName || title),
+      hint: findRouteHint(primaryLabel),
     });
   }
 

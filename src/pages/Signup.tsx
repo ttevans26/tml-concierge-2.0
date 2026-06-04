@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,11 @@ import ConnectionIndicator from "@/components/ConnectionIndicator";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthRedirectUri } from "@/lib/authRedirect";
+import { ensureDevSession, isDevPreviewHost } from "@/lib/devAutoAuth";
 import { toast } from "sonner";
 
 export default function Signup() {
-  const { signUp } = useAuth();
+  const { signUp, session } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirectTo = params.get("redirectTo") || "/";
@@ -21,6 +22,38 @@ export default function Signup() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | "google" | "apple">(null);
+  const [autoAuthPending, setAutoAuthPending] = useState<boolean>(
+    () => isDevPreviewHost(),
+  );
+
+  useEffect(() => {
+    if (!isDevPreviewHost()) {
+      setAutoAuthPending(false);
+      return;
+    }
+    if (session) {
+      setAutoAuthPending(false);
+      navigate(redirectTo, { replace: true });
+      return;
+    }
+    let cancelled = false;
+    ensureDevSession().then((ok) => {
+      if (cancelled) return;
+      setAutoAuthPending(false);
+      if (ok) navigate(redirectTo, { replace: true });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, navigate, redirectTo]);
+
+  if (autoAuthPending) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <p className="font-inter text-muted-foreground text-sm tracking-wide">Loading…</p>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

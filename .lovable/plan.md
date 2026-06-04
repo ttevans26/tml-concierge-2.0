@@ -1,36 +1,44 @@
-Three separate issues bundled in your message. Tackling them in order:
+# Trip-card route map — fix wrong / Africa locations
 
-## 1. Sign-out doesn't reach `/login` (carries over from previous turn)
+## What's actually wrong
 
-`signOut()` works, but on the preview host `ProtectedRoute` and `Login` immediately re-invoke `ensureDevSession()` and sign the shared dev account back in. Fix:
+Inspected the live data + the current `TripRouteMap` / `tripRoute.ts` / `Index.tsx` pipeline. Three real bugs make the card map wrong:
 
-- **`src/lib/devAutoAuth.ts`** — add `suppressDevAutoAuth()` / `isDevAutoAuthSuppressed()` / `clearDevAutoAuthSuppression()` backed by `sessionStorage`. `ensureDevSession()` short-circuits to `false` when suppressed.
-- **`src/hooks/useAuth.tsx`** — call `suppressDevAutoAuth()` before `supabase.auth.signOut()`.
-- **`src/components/ProfileDrawer.tsx`** — after `handleSignOut` and `signOutAllDevices` hard-navigate with `window.location.href = "/login"` so route state fully resets.
-- **`src/pages/Login.tsx`** + **`src/pages/Signup.tsx`** — skip the auto-bypass `useEffect` when `isDevAutoAuthSuppressed()`; call `clearDevAutoAuthSuppression()` on successful sign-in so future visits auto-bypass again.
+### 1. Valid single-city destinations are being rejected as "multi-region"
 
-## 2. Trip map shows Africa
+`isSingleRegionDestination` in `Index.tsx` counts commas — so `"Mexico City, CDMX, Mexico"` is flagged multi-region and the card falls back to the empty state instead of geocoding to Mexico City. Same trap for `"Paris, Île-de-France, France"`, `"London, UK"` etc.
 
-Root cause: the Europe 2026 trip's `destination` is the string `"UK, France, Italy"`. When geocoded as a `fallbackQuery`, Google returns a centroid in the Atlantic / Africa (lat 20, lng 0 region). Two things compound it:
+### 2. Initial map center is in Africa
 
-- `TripRouteMap` opens with `center: { lat: 20, lng: 0 }` (mid-Africa) before geocoding resolves — visible as a flash even when waypoints later succeed.
-- `Index.tsx` passes the multi-country destination string straight through to the geocoder when waypoint building returns empty.
+`TripRouteMap` mounts the `google.maps.Map` with `center: { lat: 30, lng: 10 }` (Libya) as a "temp" before the geocode resolves — so the user sees Africa flash, and if the geocode fails (or the viewport check rejects it) the map sits on Africa until the empty-state overlay paints.
 
-Fix in two places:
+### 3. Stay geocoding has no country bias
 
-- **`src/components/trips/TripRouteMap.tsx`** — change the initial map center to the first waypoint when available, otherwise leave the container in the `"loading"` state instead of mounting a map centered on `0,0`. Don't render the map until we have either a waypoint or a successful geocode.
-- **`src/lib/tripRoute.ts`** — when geocoding a stay fails, try the stay's `location_name` (which for Europe 2026 holds proper city strings like "Saint-Rémy-de-Provence") before falling back to the trip destination. Reject geocode results whose viewport spans more than ~one country (heuristic: bounds wider than 15° in either axis) so a multi-country fallback string can't return a bogus centroid.
-- **`src/pages/Index.tsx`** — when the trip destination contains more than one comma-separated region (e.g. `"UK, France, Italy"`), don't pass it as `fallbackQuery`; rely on the per-stay geocoding inside `buildRouteWithGeocoding`.
+For Europe 2026, stays like `"Airbnb St Remy"` / `"Airbnb Antibes"` have no `location_name` and no coords. They get fed raw to Google with no `componentRestrictions` and no `bounds`, so results can be the wrong "St Remy" / "Antibes" worldwide. The `viewportOk` check only runs on the fallback query, not on per-stay geocodes, so a bogus centroid still gets pushed into `bounds.extend(...)` and warps the fitBounds toward Africa / mid-Atlantic.
 
-After this, Europe 2026 will render Paris → St Rémy → Antibes → Ortisei → Salò → Bath → Sherborne (driven by `ROUTE_HINTS` already in `tripRoute.ts`).
+## Fix
 
-## 3. Matrix Grid layout change — needs your input before I touch the code
+### `src/pages/Index.tsx`
+- Remove the comma-count heuristic. Always pass `trip.destination` as `fallbackQuery` when waypoints come back empty. The viewport-size guard in `TripRouteMap` already rejects useless multi-country centroids — that's the right place for it.
 
-You wrote:
-> still showing the old format with horizontal color bands by data type and not by locations in a vertical fashion and not showing the locations in pill multi date spanning form
+### `src/lib/tripRoute.ts`
+- Add a single up-front `geocodeDestinationContext(destination)` call inside `buildRouteWithGeocoding` that returns `{ countryCodes: string[], bounds: LatLngBounds | null }` parsed from `address_components` of the destination geocode. For `"UK, France, Italy"` split on commas first and geocode each piece to collect multiple country codes.
+- Pass that context to `geocodeOnce(query, ctx)` so per-stay geocodes use Google's `componentRestrictions: { country: ctx.countryCodes }` and `bounds: ctx.bounds` for biasing.
+- In `geocodeOnce`, reject any result whose viewport spans > 8° lat or lng (tighter than the 15° map-level guard — a single stay should be city-sized) and any result whose `country` component isn't in `ctx.countryCodes` when context is present.
+- Keep `ROUTE_HINTS` and stored-coord paths as the first choice (no change).
 
-`MatrixGrid.tsx` is 1,498 lines and the current row model is **rows = categories (Stays / Logistics / Dining / Agenda)** across **columns = dates**. Reworking it to "rows = locations" with multi-day "pills" is a significant feature change, not a bug fix, and I want to confirm the intent before I rewrite it. After you approve items 1 and 2, I'll come back with a focused plan + visual mock for the Matrix redesign so we get the structure right (rows by location? location pills as a header track over the existing category rows? something else?).
+### `src/components/trips/TripRouteMap.tsx`
+- Don't create the `google.maps.Map` until we have either (a) at least one waypoint or (b) a successful fallback geocode. While neither has resolved, keep `status = "loading"` and render only the "Drawing route…" overlay over an empty container — no map instance, no `{lat:30,lng:10}` center.
+- For the fallback-geocode path, resolve the geocode first, then construct the map centered on the result. Apply the same `viewportOk` check (already there) but bump it from 15° to 12° to better match continent-vs-country.
+- Apply the per-stay viewport/country validation at the bounds step too: skip `bounds.extend` for any waypoint whose lat/lng is outside the destination context bounds (when available). This prevents a single bad geocode from dragging the whole route.
 
----
+## Result per trip
 
-Approve and I'll ship items 1 and 2 in build mode, then return with options for the Matrix redesign.
+- **Mexico City** (`"Mexico City, CDMX, Mexico"`, no stays) → geocodes destination → single pin on CDMX. No Africa.
+- **Tokyo New Years 2026** (`"Tokyo"`, no stays) → single pin on Tokyo (already worked).
+- **Europe 2026** (`"UK, France, Italy"`, 7 stays, 2 with coords) → country context = `[GB, FR, IT]`. Stays geocode within those countries only: Paris (stored) → Ortisei (stored) → Salò (from `location_name`) → Bath (from `location_name`) → Sherborne (hint). St Rémy / Antibes Airbnbs that have no `location_name` are biased to FR and resolve to the correct cities; if Google still returns nothing within FR, they're skipped instead of pulling the route into Africa.
+
+## Out of scope
+
+- Matrix grid layout changes (separate thread already in progress).
+- Reverse-geocoding stored stays to backfill missing `location_name` in the DB — handled by the in-trip workspace, not this card.

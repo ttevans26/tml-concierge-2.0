@@ -37,6 +37,54 @@ const ROUTE_HINTS: RouteHint[] = [
   { match: "queens arms", label: "Sherborne", lat: 50.9478, lng: -2.5176, routeOrder: 7 },
 ];
 
+interface DestinationContext {
+  countryCodes: string[]; // ISO 3166-1 alpha-2, lowercased for Google
+  bounds: any | null;     // google.maps.LatLngBounds union of geocoded pieces
+}
+
+async function buildDestinationContext(destination: string | null): Promise<DestinationContext> {
+  const ctx: DestinationContext = { countryCodes: [], bounds: null };
+  if (!destination) return ctx;
+  await loadGoogleMapsScript();
+  const g = (window as any).google;
+  if (!g?.maps?.Geocoder) return ctx;
+  const geocoder = new g.maps.Geocoder();
+
+  const pieces = destination
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  // Always also try the full string in case a piece alone is ambiguous.
+  const queries = Array.from(new Set([destination, ...pieces]));
+
+  const seenCountries = new Set<string>();
+  for (const q of queries) {
+    const res = await new Promise<any | null>((resolve) => {
+      geocoder.geocode({ address: q }, (results: any[] | null, status: string) => {
+        resolve(status === "OK" && results?.[0] ? results[0] : null);
+      });
+    });
+    if (!res) continue;
+    const comps = (res.address_components as any[] | undefined) || [];
+    const country = comps.find((c) => c.types?.includes("country"));
+    if (country?.short_name && !seenCountries.has(country.short_name)) {
+      seenCountries.add(country.short_name);
+      ctx.countryCodes.push(country.short_name.toLowerCase());
+    }
+    const vp = res.geometry?.viewport;
+    if (vp?.getNorthEast && vp?.getSouthWest) {
+      const ne = vp.getNorthEast();
+      const sw = vp.getSouthWest();
+      // Skip overly broad viewports (multi-country centroid) from union.
+      if (Math.abs(ne.lat() - sw.lat()) < 12 && Math.abs(ne.lng() - sw.lng()) < 12) {
+        if (!ctx.bounds) ctx.bounds = new g.maps.LatLngBounds();
+        ctx.bounds.union(vp);
+      }
+    }
+  }
+  return ctx;
+}
+
 /**
  * Build an ordered list of geographic waypoints for a trip's route map.
  * Prefers `stays` (one pin per unique location), falls back to logistics arrivals.
@@ -133,6 +181,8 @@ export async function buildRouteWithGeocoding(
     return [{ order: 1, label: shortenLabel(destination), lat: single.lat, lng: single.lng, date: null }];
   }
 
+  const ctx = await buildDestinationContext(destination);
+
   const routeCandidates = unique.filter((u) => u.hint).length >= 3
     ? unique.filter((u) => u.hint).sort((a, b) => (a.hint?.routeOrder ?? 999) - (b.hint?.routeOrder ?? 999))
     : unique;
@@ -147,18 +197,25 @@ export async function buildRouteWithGeocoding(
     const stored = u.lat != null && u.lng != null
       ? { lat: u.lat, lng: u.lng, city: u.locationName || u.title }
       : null;
-    // Prefer the structured location_name (a real city) over the freeform
-    // stay title ("Airbnb Antibes") which geocodes poorly. Only fall back
-    // to the trip destination when it is a single region — multi-country
-    // strings like "UK, France, Italy" return a useless centroid.
-    const destSingle = isSingleRegion(destination);
+    // Prefer hints / stored coords; otherwise geocode within the destination
+    // country/bounds context so "Airbnb Antibes" can't resolve to a town in
+    // Africa or Australia.
     const hit =
       hinted ||
       stored ||
-      (u.locationName ? await geocodeOnce(u.locationName) : null) ||
-      (await geocodeOnce(u.title)) ||
-      (destSingle ? await geocodeOnce(`${u.locationName || u.title}, ${destination}`) : null);
+      (u.locationName ? await geocodeOnce(u.locationName, ctx) : null) ||
+      (await geocodeOnce(u.title, ctx));
     if (!hit) continue;
+
+    // If we have a destination bounds, reject coords that fall outside it.
+    if (ctx.bounds && !ctx.bounds.contains({ lat: hit.lat, lng: hit.lng } as any)
+        && typeof ctx.bounds.contains === "function") {
+      // bounds.contains expects a LatLng — construct one.
+      const g = (window as any).google;
+      if (g?.maps?.LatLng && !ctx.bounds.contains(new g.maps.LatLng(hit.lat, hit.lng))) {
+        continue;
+      }
+    }
 
     const label = shortenLabel(hit.city || u.locationName || u.title);
     const key = `${hit.lat.toFixed(2)},${hit.lng.toFixed(2)}|${normalizeRouteText(label)}`;
@@ -178,13 +235,21 @@ export async function buildRouteWithGeocoding(
 
 async function geocodeOnce(
   query: string,
+  ctx?: DestinationContext,
 ): Promise<{ lat: number; lng: number; city: string | null } | null> {
   await loadGoogleMapsScript();
   const g = (window as any).google;
   if (!g?.maps?.Geocoder) return null;
   const geocoder = new g.maps.Geocoder();
   return new Promise((resolve) => {
-    geocoder.geocode({ address: query }, (results: any[] | null, status: string) => {
+    const req: any = { address: query };
+    if (ctx?.bounds) req.bounds = ctx.bounds;
+    if (ctx?.countryCodes?.length) {
+      // Google supports a single country in componentRestrictions; pick the
+      // first when multiple exist and rely on bounds + post-filter for the rest.
+      req.componentRestrictions = { country: ctx.countryCodes };
+    }
+    geocoder.geocode(req, (results: any[] | null, status: string) => {
       if (status !== "OK" || !results || !results[0]) {
         resolve(null);
         return;
@@ -194,6 +259,27 @@ async function geocodeOnce(
       if (!loc) {
         resolve(null);
         return;
+      }
+      // Reject results whose viewport is bigger than a city/county — a single
+      // stay should not resolve to a country-sized centroid.
+      const vp = r.geometry?.viewport;
+      if (vp?.getNorthEast && vp?.getSouthWest) {
+        const ne = vp.getNorthEast();
+        const sw = vp.getSouthWest();
+        if (Math.abs(ne.lat() - sw.lat()) > 8 || Math.abs(ne.lng() - sw.lng()) > 8) {
+          resolve(null);
+          return;
+        }
+      }
+      // Country filter (defensive — componentRestrictions sometimes ignored).
+      if (ctx?.countryCodes?.length) {
+        const comps = (r.address_components as any[] | undefined) || [];
+        const country = comps.find((c) => c.types?.includes("country"));
+        const cc = country?.short_name?.toLowerCase();
+        if (cc && !ctx.countryCodes.includes(cc)) {
+          resolve(null);
+          return;
+        }
       }
       // Extract the locality/town component to use as the marker label.
       const comp = (r.address_components as any[] | undefined) || [];
@@ -233,12 +319,4 @@ function finiteNumber(value: unknown): number | null {
 function findRouteHint(raw: string): RouteHint | null {
   const normalized = normalizeRouteText(raw);
   return ROUTE_HINTS.find((hint) => normalized.includes(normalizeRouteText(hint.match))) ?? null;
-}
-
-/** Treat strings with 2+ comma-separated regions (e.g. "UK, France, Italy")
- *  as multi-region. Those aren't safe to geocode as a single point. */
-function isSingleRegion(raw: string | null): raw is string {
-  if (!raw) return false;
-  const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
-  return parts.length <= 1;
 }

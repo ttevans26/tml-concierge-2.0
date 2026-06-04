@@ -20,7 +20,7 @@ import {
 import { Search, Loader2, MapPin } from "lucide-react";
 import { useTripStore } from "@/stores/useTripStore";
 import type { ItineraryItem } from "@/stores/useTripStore";
-import { format, parseISO, eachDayOfInterval } from "date-fns";
+import { format, parseISO, addDays, differenceInCalendarDays } from "date-fns";
 import { useGooglePlaces, type PlaceResult } from "@/hooks/useGooglePlaces";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -196,33 +196,38 @@ export default function AddItemDialog({
     if (!finalTitle) return;
     setSubmitting(true);
 
-    // Multi-night stay bulk insert
-    if (category === "stays" && checkoutDate && checkoutDate > date) {
+    // Stays: single range row (date = check-in, metadata.end_date = last night inclusive).
+    if (category === "stays") {
+      const effectiveCheckout = checkoutDate && checkoutDate > date
+        ? checkoutDate
+        : format(addDays(parseISO(date), 1), "yyyy-MM-dd");
+      const endDateInclusive = format(addDays(parseISO(effectiveCheckout), -1), "yyyy-MM-dd");
+      const nights = Math.max(
+        1,
+        differenceInCalendarDays(parseISO(effectiveCheckout), parseISO(date)),
+      );
       try {
-        const nights = eachDayOfInterval({
-          start: parseISO(date),
-          end: parseISO(checkoutDate),
-        }).slice(0, -1); // exclude checkout day
-
-        for (const night of nights) {
-          await createItineraryItem({
-            trip_id: tripId,
-            category,
-            date: format(night, "yyyy-MM-dd"),
-            title: finalTitle,
-            cost: cost ? parseFloat(cost) : null,
-            start_time: startTime || null,
-            end_time: endTime || null,
-            source_reference: sourceUrl || null,
-            location_name: location || null,
-            location_lat: selectedPlace?.lat ?? null,
-            location_lng: selectedPlace?.lng ?? null,
-            google_place_id: googlePlaceId || null,
-            api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
-          });
-        }
+        await createItineraryItem({
+          trip_id: tripId,
+          category,
+          date,
+          title: finalTitle,
+          // `cost` here is the nightly rate field — store total cost = rate × nights.
+          cost: cost ? parseFloat(cost) * nights : null,
+          source_reference: sourceUrl || null,
+          location_name: location || null,
+          location_lat: selectedPlace?.lat ?? null,
+          location_lng: selectedPlace?.lng ?? null,
+          google_place_id: googlePlaceId || null,
+          api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
+          metadata: {
+            end_date: endDateInclusive,
+            check_out: effectiveCheckout,
+            ...(cost ? { nightly_rate: parseFloat(cost) } : {}),
+          },
+        });
       } catch (err) {
-        console.error("Bulk insert error:", err);
+        console.error("Stay insert error:", err);
       }
     } else {
       // Logistics: build a descriptive title if departure/arrival exist
@@ -240,7 +245,7 @@ export default function AddItemDialog({
         start_time: startTime || null,
         end_time: endTime || null,
         source_reference: sourceUrl || null,
-        location_name: category === "stays" ? location || null : selectedPlace?.address || null,
+        location_name: selectedPlace?.address || null,
         location_lat: selectedPlace?.lat ?? null,
         location_lng: selectedPlace?.lng ?? null,
         google_place_id: googlePlaceId || null,

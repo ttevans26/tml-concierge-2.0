@@ -573,7 +573,7 @@ export default function MatrixGrid() {
   );
 
   /* ---- Stay pills (consecutive same-stay grouping) ---- */
-  const stayPills = useMemo(() => getStayPills(itineraryItems), [itineraryItems]);
+  const stayPills = useMemo(() => getStayPills(itineraryItems, displayedLegs), [itineraryItems, displayedLegs]);
   const stayLanes = useMemo(() => assignLanes(stayPills), [stayPills]);
   const stayPillLane = useMemo(() => {
     const m = new Map<string, number>();

@@ -1,74 +1,34 @@
 ## Goal
-Single dialog for stays in the Matrix Grid. Clicking an empty Stays cell **and** clicking an existing stay pill open the same form, pre-filled appropriately.
+Make the Calendar view reflect the new single-row stay schema produced by `StayDialog` (one row per stay with `metadata.end_date` as the last night inclusive). Each stay should render as one pill that spans contiguous date cells matching its check-in → check-out range, identical to how the Matrix Grid renders stay pills.
 
-## New form (one popup, one schema)
+## Problem
+`src/components/workspace/CalendarStaysView.tsx` still uses legacy logic: it expects one `itinerary_items` row per night and groups consecutive rows by `title|location` key. With the new schema there is only one row per stay, so:
+- Multi-night stays show as a 1-day pill on the check-in date only.
+- Stays imported/edited via the new `StayDialog` never span across the grid.
+- Empty banners appear because grouping/key collisions miscount stays.
 
-| Field | Notes |
-|---|---|
-| Property name | Google Places search (lodging) — same autocomplete as today |
-| Property type | Segmented control: **Hotel** \| **Airbnb** (default Hotel) |
-| Check-in | Date picker, defaults to clicked cell date / existing `date` |
-| Check-out | Date picker, defaults to check-in + 1 night / existing `metadata.end_date + 1` |
-| Nights | Read-only derived from dates |
-| Nightly rate | Number |
-| Taxes & fees | Optional flat number |
-| **Total cost** | Auto = `rate × nights + taxes/fees`; user can type to override. Small "Reset to calculated" link appears when overridden |
-| Confirmation code | Optional text |
-| **Cleaning fee** | Airbnb only — flat number, added to total when not overridden |
-| **Listing URL** | Airbnb only — text input, stored on `source_url` |
+## Fix (scope: `CalendarStaysView.tsx` only)
 
-Derived-location chip ("Inside Paris") stays in the edit case.
-
-## Implementation
-
-### 1. New `src/components/workspace/StayDialog.tsx`
-- Replaces both the `category === "stays"` branch of `AddItemDialog` and the standalone `EditStayDialog`.
-- Props: `{ open, onOpenChange, mode: "create"|"edit", tripId, tripStart, tripEnd, legs, defaultDate?, pill? }`.
-- Internal logic:
-  - `nights = max(1, diffDays(checkOut, checkIn))`
-  - `calculatedTotal = rate*nights + (taxes||0) + (propertyType==="airbnb" ? (cleaningFee||0) : 0)`
-  - `total` state seeded from calculated; if user edits, mark `totalOverridden=true`. Toggle "Reset" restores derived.
-- Persisted shape on `itinerary_items`:
-  - `date` = check-in
-  - `cost` = final total (calculated or override)
-  - `source_url` = listing URL (Airbnb)
-  - `confirmation_code` = code
-  - `metadata` =
-    ```
-    {
-      end_date,            // last night inclusive
-      check_out,           // exclusive
-      property_type: "hotel" | "airbnb",
-      nightly_rate,
-      taxes_fees,
-      cleaning_fee?,       // airbnb only
-      total_override?: number | undefined
-    }
-    ```
-- Edit mode: hydrates from `pill.firstItem` on open transition (same `prevOpen` guard pattern as today's `EditStayDialog`); on save converts legacy multi-row pills by deleting trailing per-night rows (carry over existing logic).
-- Delete button shown in edit mode only.
-
-### 2. `AddItemDialog.tsx`
-- Remove the entire `category === "stays"` branch and related stays-only state (`checkoutDate`, `location`). Keep dining/logistics/activity branches untouched.
-- When `category === "stays"`, `MatrixGrid` will no longer route to this dialog (see step 3).
-
-### 3. `MatrixGrid.tsx`
-- Replace lazy `AddItemDialog` mount with: if `dialogState.category === "stays"` render `<StayDialog mode="create" ... />`; otherwise render `<AddItemDialog />`.
-- Replace lazy `EditStayDialog` usage with the same `StayDialog mode="edit"`.
-- `openAdd("stays", date)` path is unchanged; just hits the new dialog.
-
-### 4. Delete `src/components/workspace/EditStayDialog.tsx`
-- Logic absorbed into `StayDialog`.
+1. Replace `groupStays(items)` with a direct mapping: each stay row → one `StaySegment`:
+   - `startDate = parseISO(item.date)` (check-in)
+   - `endDate` = last night inclusive, derived in order:
+     1. `item.metadata.end_date` (new schema)
+     2. `item.metadata.check_out` minus 1 day (exclusive checkout)
+     3. fallback to `startDate` (single-night)
+   - `key = item.id` (stable, unique — fixes color/legend collisions)
+   - `colorIndex = hashIndex(title|location, palette.length)` (keep same-property color consistency)
+   - `items: [item]` (no more multi-row aggregation)
+2. Sort segments by `startDate` ascending.
+3. Keep existing week-slicing, lane assignment, mobile agenda list, legend, and `EditItemDialog` open-on-click behavior — they already work off `startDate`/`endDate`.
+4. Nights label stays as `differenceInCalendarDays(endDate, startDate) + 1`.
+5. Guard against malformed metadata (string vs Date) with a small `parseMaybeIso` helper.
 
 ## Out of scope
-- No DB schema changes (everything fits in existing `metadata` JSONB + `cost` + `source_url` + `confirmation_code`).
-- No changes to Matrix pill rendering, drag/resize, or daily totals (they already read `cost` and `metadata.end_date`).
-- No changes to Studio drop-in, Reshuffle, or location legs.
+- No changes to `MatrixGrid`, `StayDialog`, store, schema, or other views.
+- No drag-to-resize on the calendar (still click-to-edit, which opens `StayDialog` via `EditItemDialog` → existing pill click path). If you want true drag-to-resize on the calendar itself, that's a follow-up.
 
 ## Verification
-1. Click empty Stays cell → new unified dialog opens with that date as check-in, Hotel selected, total auto-calculates as rate × nights.
-2. Toggle to Airbnb → Cleaning fee and Listing URL appear; total includes cleaning fee.
-3. Type into Total → "Reset to calculated" appears; click to restore.
-4. Save → pill appears with correct nights, total cost spreads across days in Daily $ row.
-5. Click existing pill → same dialog opens in edit mode with all fields hydrated, including property type from `metadata.property_type` (defaults to Hotel for legacy rows).
-6. Delete button only visible in edit mode; removes all `itemIds` on the pill.
+1. Create a 5-night stay in Matrix → Calendar shows one pill spanning 5 day cells; legend lists it once with "5n".
+2. Edit check-out in `StayDialog` → pill resizes accordingly.
+3. Two overlapping stays on the transition day stack into two lanes without visual overlap.
+4. Mobile agenda list shows each stay once with correct night count and date range.

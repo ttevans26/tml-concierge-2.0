@@ -45,33 +45,42 @@ interface StaySegment {
 }
 
 function groupStays(items: ItineraryItem[]): StaySegment[] {
+  const parseMaybeIso = (v: unknown): Date | null => {
+    if (typeof v !== "string" || !v) return null;
+    try {
+      const d = parseISO(v);
+      return isNaN(d.getTime()) ? null : d;
+    } catch {
+      return null;
+    }
+  };
+
   const stays = items
     .filter((i) => i.category === "stays" && i.date)
     .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0));
 
   const segments: StaySegment[] = [];
   for (const item of stays) {
-    const key = `${item.title}|${item.location_name || ""}`;
-    const date = parseISO(item.date!);
-    const last = segments[segments.length - 1];
-    if (
-      last &&
-      last.key === key &&
-      differenceInCalendarDays(date, last.endDate) === 1
-    ) {
-      last.endDate = date;
-      last.items.push(item);
-    } else {
-      segments.push({
-        key,
-        title: item.title,
-        location: item.location_name,
-        startDate: date,
-        endDate: date,
-        items: [item],
-        colorIndex: hashIndex(key, STAY_PALETTE.length),
-      });
-    }
+    const startDate = parseISO(item.date!);
+    const meta = (item.metadata ?? {}) as Record<string, unknown>;
+    const endFromMeta = parseMaybeIso(meta.end_date);
+    const checkoutFromMeta = parseMaybeIso(meta.check_out);
+    let endDate = endFromMeta
+      ? endFromMeta
+      : checkoutFromMeta
+        ? addDays(checkoutFromMeta, -1)
+        : startDate;
+    if (endDate < startDate) endDate = startDate;
+    const colorKey = `${item.title}|${item.location_name || ""}`;
+    segments.push({
+      key: item.id,
+      title: item.title,
+      location: item.location_name,
+      startDate,
+      endDate,
+      items: [item],
+      colorIndex: hashIndex(colorKey, STAY_PALETTE.length),
+    });
   }
   return segments;
 }

@@ -35,6 +35,20 @@ const ROUTE_HINTS: RouteHint[] = [
   { match: "hotel bella riva", label: "Salò, Lake Garda", lat: 45.6069, lng: 10.5244, routeOrder: 5 },
   { match: "roseate villa", label: "Bath", lat: 51.3811, lng: -2.359, routeOrder: 6 },
   { match: "queens arms", label: "Sherborne", lat: 50.9478, lng: -2.5176, routeOrder: 7 },
+  // Location-row matches (category === "location") — keyed off city names
+  // so the Europe 2026 route resolves cleanly even without hotel titles.
+  { match: "paris", label: "Paris", lat: 48.8566, lng: 2.3522, routeOrder: 1 },
+  { match: "st remy", label: "St Rémy de Provence", lat: 43.7886, lng: 4.8314, routeOrder: 2 },
+  { match: "st-remy", label: "St Rémy de Provence", lat: 43.7886, lng: 4.8314, routeOrder: 2 },
+  { match: "saint remy", label: "St Rémy de Provence", lat: 43.7886, lng: 4.8314, routeOrder: 2 },
+  { match: "st rémy", label: "St Rémy de Provence", lat: 43.7886, lng: 4.8314, routeOrder: 2 },
+  { match: "antibes", label: "Antibes", lat: 43.5804, lng: 7.1251, routeOrder: 3 },
+  { match: "ortisei", label: "Ortisei", lat: 46.5758, lng: 11.6725, routeOrder: 4 },
+  { match: "salo", label: "Salò, Lake Garda", lat: 45.6069, lng: 10.5244, routeOrder: 5 },
+  { match: "salò", label: "Salò, Lake Garda", lat: 45.6069, lng: 10.5244, routeOrder: 5 },
+  { match: "lake garda", label: "Salò, Lake Garda", lat: 45.6069, lng: 10.5244, routeOrder: 5 },
+  { match: "bath", label: "Bath", lat: 51.3811, lng: -2.359, routeOrder: 6 },
+  { match: "sherborne", label: "Sherborne", lat: 50.9478, lng: -2.5176, routeOrder: 7 },
 ];
 
 interface DestinationContext {

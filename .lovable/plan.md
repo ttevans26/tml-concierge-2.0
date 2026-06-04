@@ -1,17 +1,25 @@
 ## Plan
 
-1. **Fix the route builder for Europe 2026**
-   - Update the journey route logic so it uses the trip’s explicit `location` itinerary rows as route stops, not only `stays`.
-   - Preserve chronological ordering so the route captures Paris → Saint-Rémy-de-Provence → Antibes → Ortisei → Salò → Bath → Sherborne.
-   - Keep the existing bad-coordinate protections that filter out Null Island / Africa-style erroneous points.
+1. **Stop the geocoder crash**
+   - Update `src/lib/tripRoute.ts` so Google geocoding never passes an array to `componentRestrictions.country`; Google requires a single string.
+   - For multi-country trips like `UK, France, Italy`, skip the country restriction and rely on explicit route hints / stored coordinates instead.
 
-2. **Make geocoding tolerant of multi-country trips**
-   - Avoid over-restricting Google geocoding to the first country in `UK, France, Italy`, which can block later Italy/UK legs.
-   - Prefer known Europe 2026 route hints for ambiguous rows like St Rémy, Antibes, Salò, Bath, and Sherborne.
+2. **Use location rows as the route source**
+   - Make the route builder prioritize itinerary items where `category === "location"` and use their `location_name` / `title` as the canonical stops.
+   - Add exact location hints for the requested route stops:
+     - Paris
+     - St Remy-Provence
+     - Antibes
+     - Ortisei
+     - Salo Lake Garda
+     - Bath UK
+     - Sherborne UK
+   - Return those pins in that order without depending on hotel/stay names.
 
-3. **Improve map loading behavior**
-   - Ensure the map leaves “Drawing route…” once the route is built or a fallback state is reached.
-   - Keep the dashboard card UI unchanged aside from the route map actually rendering.
+3. **Prevent infinite “Drawing route…”**
+   - Wrap the route-building call on the Your Journeys page in error handling so a geocoding exception resolves to an empty/fallback state instead of leaving `waypoints` stuck as `null`.
+   - Add defensive error handling inside `TripRouteMap` so a Google Maps load/render exception changes the UI to “Map unavailable” rather than hanging.
 
-4. **Verify with real trip data**
-   - Re-check the Europe 2026 itinerary rows and confirm the generated waypoint list includes all expected legs and no bad offshore/Africa coordinates.
+4. **Verify the fix**
+   - Check the preview console no longer shows `InvalidValueError: componentRestrictions.country: not a string`.
+   - Confirm the Europe 2026 map renders pins for all seven location stops and draws the route line between them.

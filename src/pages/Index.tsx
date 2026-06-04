@@ -263,9 +263,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         <TripRouteMap
           waypoints={waypoints ?? []}
           fallbackQuery={
-            waypoints && waypoints.length === 0 && isSingleRegionDestination(trip.destination)
-              ? trip.destination
-              : null
+            waypoints && waypoints.length === 0 ? trip.destination ?? null : null
           }
           isLoading={waypoints === null}
           height={420}
@@ -273,14 +271,6 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
       )}
     </div>
   );
-}
-
-/** Multi-country destinations like "UK, France, Italy" geocode to a useless
- *  centroid (the Atlantic / Africa). Only pass single-region strings through. */
-function isSingleRegionDestination(dest: string | null | undefined): dest is string {
-  if (!dest) return false;
-  const parts = dest.split(",").map((p) => p.trim()).filter(Boolean);
-  return parts.length === 1;
 }
 
 /* ------------------------------------------------------------------ */

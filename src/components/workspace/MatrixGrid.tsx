@@ -591,86 +591,74 @@ export default function MatrixGrid() {
     /** Live preview offset in day-columns; commits on mouseup. */
     deltaDays: number;
   } | null>(null);
-  const resizeRef = useRef<{
-    pill: StayPill;
-    side: "left" | "right";
-    startX: number;
-  } | null>(null);
 
-  useEffect(() => {
-    if (!resizeRef.current) return;
-    const onMove = (e: MouseEvent) => {
-      const ctx = resizeRef.current;
-      if (!ctx) return;
-      const dx = e.clientX - ctx.startX;
-      const delta = Math.round(dx / 176); // 176px = one day column
-      setResizeState((s) =>
-        s && s.deltaDays === delta ? s : { pillId: ctx.pill.id, side: ctx.side, deltaDays: delta },
-      );
-    };
-    const onUp = async () => {
-      const ctx = resizeRef.current;
-      resizeRef.current = null;
-      const snapshot = resizeState;
-      setResizeState(null);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      if (!ctx || !snapshot || snapshot.deltaDays === 0 || !activeTrip) return;
+  const startStayResize = useCallback(
+    (e: React.MouseEvent, pill: StayPill, side: "left" | "right") => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      let lastDelta = 0;
+      setResizeState({ pillId: pill.id, side, deltaDays: 0 });
 
-      const { pill, side } = ctx;
-      const delta = snapshot.deltaDays;
-      const tripStart = activeTrip.start_date!;
-      const tripEnd = activeTrip.end_date!;
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        const delta = Math.round(dx / 176);
+        if (delta !== lastDelta) {
+          lastDelta = delta;
+          setResizeState({ pillId: pill.id, side, deltaDays: delta });
+        }
+      };
 
-      // Legacy per-night pills: not resizable — they'd require row-add/row-delete bookkeeping.
-      if (!pill.isRange) {
-        toast.message("Open the stay to edit dates — this stay still uses the legacy per-night format.");
-        return;
-      }
+      const onUp = async () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        const delta = lastDelta;
+        setResizeState(null);
+        if (delta === 0 || !activeTrip?.start_date || !activeTrip?.end_date) return;
 
-      const item = pill.firstItem;
-      const meta = (item.metadata as Record<string, unknown> | null) || {};
-      const metaEnd = typeof meta.end_date === "string" ? meta.end_date : pill.endDate;
-      let newStart = pill.startDate;
-      let newEnd = metaEnd;
+        if (!pill.isRange) {
+          toast.message(
+            "Open the stay to edit dates — this stay still uses the legacy per-night format.",
+          );
+          return;
+        }
 
-      if (side === "right") {
-        newEnd = format(addDays(parseISO(metaEnd), delta), "yyyy-MM-dd");
-        if (newEnd < newStart) newEnd = newStart;
-        if (newEnd > tripEnd) newEnd = tripEnd;
-      } else {
-        newStart = format(addDays(parseISO(pill.startDate), delta), "yyyy-MM-dd");
-        if (newStart < tripStart) newStart = tripStart;
-        if (newStart > newEnd) newStart = newEnd;
-      }
+        const tripStart = activeTrip.start_date;
+        const tripEnd = activeTrip.end_date;
+        const item = pill.firstItem;
+        const meta = (item.metadata as Record<string, unknown> | null) || {};
+        const metaEnd =
+          typeof meta.end_date === "string" ? (meta.end_date as string) : pill.endDate;
+        let newStart = pill.startDate;
+        let newEnd = metaEnd;
 
-      try {
-        await updateItineraryItem(item.id, {
-          ...(side === "left" ? { date: newStart } : {}),
-          metadata: { ...meta, end_date: newEnd },
-        });
-        const nights = differenceInCalendarDays(parseISO(newEnd), parseISO(newStart)) + 1;
-        toast.success(`Stay resized · ${nights} night${nights === 1 ? "" : "s"}`);
-      } catch {
-        toast.error("Failed to resize stay");
-      }
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    // Re-register when an active resize starts/stops.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resizeState?.pillId, activeTrip, updateItineraryItem]);
+        if (side === "right") {
+          newEnd = format(addDays(parseISO(metaEnd), delta), "yyyy-MM-dd");
+          if (newEnd < newStart) newEnd = newStart;
+          if (newEnd > tripEnd) newEnd = tripEnd;
+        } else {
+          newStart = format(addDays(parseISO(pill.startDate), delta), "yyyy-MM-dd");
+          if (newStart < tripStart) newStart = tripStart;
+          if (newStart > newEnd) newStart = newEnd;
+        }
 
-  const startStayResize = useCallback((e: React.MouseEvent, pill: StayPill, side: "left" | "right") => {
-    e.preventDefault();
-    e.stopPropagation();
-    resizeRef.current = { pill, side, startX: e.clientX };
-    setResizeState({ pillId: pill.id, side, deltaDays: 0 });
-  }, []);
+        try {
+          await updateItineraryItem(item.id, {
+            ...(side === "left" ? { date: newStart } : {}),
+            metadata: { ...meta, end_date: newEnd },
+          });
+          const nights = differenceInCalendarDays(parseISO(newEnd), parseISO(newStart)) + 1;
+          toast.success(`Stay resized · ${nights} night${nights === 1 ? "" : "s"}`);
+        } catch {
+          toast.error("Failed to resize stay");
+        }
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [activeTrip, updateItineraryItem],
+  );
 
   const handleSaveLeg = useCallback(
     async (data: {

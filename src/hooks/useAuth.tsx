@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { setCachedUserId } from "@/lib/session";
 import { obs } from "@/lib/observability";
+import { suppressDevAutoAuth } from "@/lib/devAutoAuth";
 
 interface AuthContextType {
   session: Session | null;
@@ -59,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Prevent the preview's auto-sign-in from immediately rebonding the
+    // shared dev account before the user reaches /login.
+    suppressDevAutoAuth();
     await supabase.auth.signOut();
   }, []);
 

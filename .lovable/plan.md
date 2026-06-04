@@ -1,34 +1,35 @@
 ## Goal
-Make the Calendar view reflect the new single-row stay schema produced by `StayDialog` (one row per stay with `metadata.end_date` as the last night inclusive). Each stay should render as one pill that spans contiguous date cells matching its check-in → check-out range, identical to how the Matrix Grid renders stay pills.
+Refactor `CalendarStaysView` to consume the same canonical primitives as the Matrix Grid so it never drifts again. Today it has a hand-rolled stay-grouping function and opens the wrong edit dialog. After overhaul work on stays (`metadata.end_date` range rows, legacy per-night merging, derived legs, `StayDialog`), the calendar must reuse those shared utilities verbatim.
 
-## Problem
-`src/components/workspace/CalendarStaysView.tsx` still uses legacy logic: it expects one `itinerary_items` row per night and groups consecutive rows by `title|location` key. With the new schema there is only one row per stay, so:
-- Multi-night stays show as a 1-day pill on the check-in date only.
-- Stays imported/edited via the new `StayDialog` never span across the grid.
-- Empty banners appear because grouping/key collisions miscount stays.
+## What changes in `src/components/workspace/CalendarStaysView.tsx`
 
-## Fix (scope: `CalendarStaysView.tsx` only)
+1. **Replace local `groupStays` with shared `getStayPills` from `@/lib/locationLegs`.**
+   - Import: `getStayPills`, `assignLanes` (lane logic also already in this file is duplicated), `type StayPill`.
+   - Compute `pills = getStayPills(itineraryItems, displayedLegs)` where `displayedLegs` comes from `getLegs(activeTrip, itineraryItems)` (same call MatrixGrid uses) so each pill inherits `derivedLocation`.
+   - Drop the local `StaySegment` interface and `hashIndex`+palette index logic; derive `colorIndex` from `pill.id` (stable per pill, same as Matrix).
+2. **Reuse date fields verbatim from `StayPill`:** `startDate`, `endDate`, `nights`. No more bespoke `metadata.end_date` / `check_out` parsing in this file — that lives in `getStayPills` and stays the single source of truth.
+3. **Week slicing & lane assignment:** keep per-week slicing (calendar is multi-row weeks), but feed the slices into `assignLanes` from `locationLegs` instead of the local one. The current local `assignLanes` predates the shared one and uses different math; using the shared util keeps semantics aligned with the Matrix.
+4. **Click → open `StayDialog` in edit mode (not `EditItemDialog`).**
+   - Mirror MatrixGrid's `stayEdit` state shape: `{ open, pill }`.
+   - Render `<StayDialog mode="edit" pill={stayEdit.pill} tripId tripStart tripEnd legs={displayedLegs} />` exactly like MatrixGrid lines 1458–1471.
+   - Remove the `EditItemDialog` import and `editing` state.
+5. **Legend & mobile agenda:** iterate over `pills` (one entry per pill, dedup by `pill.id`). Show `derivedLocation || locationName` as the subtitle so the calendar matches Matrix pill labels.
+6. **Drag-and-drop (out of scope for this pass).** The user asked only that the data/structures match; leave calendar pills click-to-edit. Drag-resize/move on the calendar can be a follow-up — flagged in the file with a TODO comment so it's discoverable.
 
-1. Replace `groupStays(items)` with a direct mapping: each stay row → one `StaySegment`:
-   - `startDate = parseISO(item.date)` (check-in)
-   - `endDate` = last night inclusive, derived in order:
-     1. `item.metadata.end_date` (new schema)
-     2. `item.metadata.check_out` minus 1 day (exclusive checkout)
-     3. fallback to `startDate` (single-night)
-   - `key = item.id` (stable, unique — fixes color/legend collisions)
-   - `colorIndex = hashIndex(title|location, palette.length)` (keep same-property color consistency)
-   - `items: [item]` (no more multi-row aggregation)
-2. Sort segments by `startDate` ascending.
-3. Keep existing week-slicing, lane assignment, mobile agenda list, legend, and `EditItemDialog` open-on-click behavior — they already work off `startDate`/`endDate`.
-4. Nights label stays as `differenceInCalendarDays(endDate, startDate) + 1`.
-5. Guard against malformed metadata (string vs Date) with a small `parseMaybeIso` helper.
+## Why this is safe
+
+- `getStayPills` already handles both new range rows (`metadata.end_date`) and legacy per-night rows (consecutive-night merge by title+place+location). No data shape assumptions live in the calendar anymore.
+- `StayDialog` is the same dialog the Matrix uses for create/edit and already collapses legacy multi-row pills on save, so edits from the calendar follow the same migration path.
+- `displayedLegs` (from `getLegs`) is the same source the Matrix uses for `derivedLocation`, keeping labels consistent.
 
 ## Out of scope
-- No changes to `MatrixGrid`, `StayDialog`, store, schema, or other views.
-- No drag-to-resize on the calendar (still click-to-edit, which opens `StayDialog` via `EditItemDialog` → existing pill click path). If you want true drag-to-resize on the calendar itself, that's a follow-up.
+- No store, schema, or `StayDialog` changes.
+- No new drag-to-resize on the calendar.
+- No changes to `MatrixGrid`, `segments.ts`, or `locationLegs.ts`.
 
 ## Verification
-1. Create a 5-night stay in Matrix → Calendar shows one pill spanning 5 day cells; legend lists it once with "5n".
-2. Edit check-out in `StayDialog` → pill resizes accordingly.
-3. Two overlapping stays on the transition day stack into two lanes without visual overlap.
-4. Mobile agenda list shows each stay once with correct night count and date range.
+1. Trip with a 5-night range-row stay → calendar renders one pill spanning 5 cells with correct nights label; same as Matrix.
+2. Trip with legacy per-night rows for the same hotel across 3 consecutive nights → one merged pill (3n), identical to Matrix.
+3. Two overlapping stays on transition day stack into separate lanes (shared `assignLanes`).
+4. Clicking a calendar pill opens `StayDialog` pre-filled (property type, rate, taxes, cleaning fee, listing URL all hydrated); saving updates the Matrix immediately via the same store path.
+5. Legend lists each pill once, subtitle shows derived city when a Location leg overlaps.

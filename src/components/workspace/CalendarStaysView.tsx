@@ -7,12 +7,16 @@ import {
   eachDayOfInterval,
   differenceInCalendarDays,
   addDays,
-  isSameDay,
   isWithinInterval,
 } from "date-fns";
 import { useTripStore } from "@/stores/useTripStore";
-import type { ItineraryItem } from "@/stores/useTripStore";
-import EditItemDialog from "./EditItemDialog";
+import {
+  getLegs,
+  getStayPills,
+  assignLanes as assignPillLanes,
+  type StayPill,
+} from "@/lib/locationLegs";
+import StayDialog from "./StayDialog";
 
 /* ---------- Color palette (Quiet Luxury, semantic HSL) ---------- */
 /* Kept inline because these are content-driven (per-stay) tokens, not theme */
@@ -33,65 +37,46 @@ function hashIndex(s: string, mod: number): number {
   return h % mod;
 }
 
-/* ---------- Stay segment grouping ---------- */
-interface StaySegment {
-  key: string;
-  title: string;
-  location: string | null;
-  startDate: Date;
-  endDate: Date; // last night (inclusive)
-  items: ItineraryItem[];
+/**
+ * Calendar uses the same canonical Stay primitives as the Matrix Grid:
+ *   getLegs(items) → derived Location legs (for derivedLocation labels)
+ *   getStayPills(items, legs) → handles both range rows (metadata.end_date)
+ *     and legacy per-night rows (merged by title+place+location)
+ *   assignLanes(pills) → greedy lane stacking
+ *
+ * Edits open StayDialog (shared with Matrix), not EditItemDialog, so all
+ * stay writes flow through one persistence path.
+ *
+ * TODO: drag-to-move / drag-to-resize on calendar pills (currently click-to-edit).
+ */
+interface PillSlice {
+  pill: StayPill;
+  startDate: string; // yyyy-MM-dd, clamped to week
+  endDate: string;   // yyyy-MM-dd, clamped to week
+  colStart: number;  // 0..6
+  colSpan: number;
+  isStartInWeek: boolean;
+  isEndInWeek: boolean;
   colorIndex: number;
-}
-
-function groupStays(items: ItineraryItem[]): StaySegment[] {
-  const parseMaybeIso = (v: unknown): Date | null => {
-    if (typeof v !== "string" || !v) return null;
-    try {
-      const d = parseISO(v);
-      return isNaN(d.getTime()) ? null : d;
-    } catch {
-      return null;
-    }
-  };
-
-  const stays = items
-    .filter((i) => i.category === "stays" && i.date)
-    .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0));
-
-  const segments: StaySegment[] = [];
-  for (const item of stays) {
-    const startDate = parseISO(item.date!);
-    const meta = (item.metadata ?? {}) as Record<string, unknown>;
-    const endFromMeta = parseMaybeIso(meta.end_date);
-    const checkoutFromMeta = parseMaybeIso(meta.check_out);
-    let endDate = endFromMeta
-      ? endFromMeta
-      : checkoutFromMeta
-        ? addDays(checkoutFromMeta, -1)
-        : startDate;
-    if (endDate < startDate) endDate = startDate;
-    const colorKey = `${item.title}|${item.location_name || ""}`;
-    segments.push({
-      key: item.id,
-      title: item.title,
-      location: item.location_name,
-      startDate,
-      endDate,
-      items: [item],
-      colorIndex: hashIndex(colorKey, STAY_PALETTE.length),
-    });
-  }
-  return segments;
 }
 
 /* ---------- Component ---------- */
 export default function CalendarStaysView() {
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
-  const [editing, setEditing] = useState<ItineraryItem | null>(null);
+  const [stayEdit, setStayEdit] = useState<{ open: boolean; pill: StayPill | null }>({
+    open: false,
+    pill: null,
+  });
 
-  const segments = useMemo(() => groupStays(itineraryItems), [itineraryItems]);
+  const legs = useMemo(() => getLegs(itineraryItems), [itineraryItems]);
+  const pills = useMemo(
+    () => getStayPills(itineraryItems, legs),
+    [itineraryItems, legs],
+  );
+
+  const colorFor = (pill: StayPill) =>
+    STAY_PALETTE[hashIndex(`${pill.title}|${pill.locationName ?? ""}`, STAY_PALETTE.length)];
 
   const { tripStart, tripEnd, weeks } = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) {
@@ -118,87 +103,73 @@ export default function CalendarStaysView() {
     );
   }
 
-  /* Per-week segment slices */
-  const segmentsByWeek = (week: Date[]) => {
-    const wkStart = week[0];
-    const wkEnd = week[6];
-    return segments
-      .filter((s) => s.startDate <= wkEnd && s.endDate >= wkStart)
-      .map((s) => {
-        const sliceStart = s.startDate < wkStart ? wkStart : s.startDate;
-        const sliceEnd = s.endDate > wkEnd ? wkEnd : s.endDate;
-        const colStart = differenceInCalendarDays(sliceStart, wkStart); // 0..6
-        const colSpan = differenceInCalendarDays(sliceEnd, sliceStart) + 1;
+  /* Per-week pill slices (clamp pill dates to the week, compute grid columns) */
+  const slicesForWeek = (week: Date[]): PillSlice[] => {
+    const wkStartIso = format(week[0], "yyyy-MM-dd");
+    const wkEndIso = format(week[6], "yyyy-MM-dd");
+    return pills
+      .filter((p) => p.startDate <= wkEndIso && p.endDate >= wkStartIso)
+      .map<PillSlice>((p) => {
+        const sliceStart = p.startDate < wkStartIso ? wkStartIso : p.startDate;
+        const sliceEnd = p.endDate > wkEndIso ? wkEndIso : p.endDate;
+        const colStart = differenceInCalendarDays(parseISO(sliceStart), week[0]);
+        const colSpan =
+          differenceInCalendarDays(parseISO(sliceEnd), parseISO(sliceStart)) + 1;
         return {
-          seg: s,
+          pill: p,
+          startDate: sliceStart,
+          endDate: sliceEnd,
           colStart,
           colSpan,
-          isStartInWeek: isSameDay(sliceStart, s.startDate),
-          isEndInWeek: isSameDay(sliceEnd, s.endDate),
+          isStartInWeek: sliceStart === p.startDate,
+          isEndInWeek: sliceEnd === p.endDate,
+          colorIndex: hashIndex(
+            `${p.title}|${p.locationName ?? ""}`,
+            STAY_PALETTE.length,
+          ),
         };
       });
   };
-
-  /* Stack lane assignment within a week (handles overlap on transition days) */
-  function assignLanes<T extends { colStart: number; colSpan: number }>(slices: T[]) {
-    const lanes: number[][] = []; // lane => list of end columns
-    return slices.map((sl) => {
-      const sliceEndCol = sl.colStart + sl.colSpan - 1;
-      let lane = 0;
-      while (true) {
-        const occ = lanes[lane] || [];
-        const overlaps = occ.some((endCol, i) => {
-          const startCol = (lanes[lane] as any)._starts?.[i] ?? 0;
-          return !(sl.colStart > endCol || sliceEndCol < startCol);
-        });
-        if (!overlaps) {
-          if (!lanes[lane]) {
-            lanes[lane] = [];
-            (lanes[lane] as any)._starts = [];
-          }
-          lanes[lane].push(sliceEndCol);
-          (lanes[lane] as any)._starts.push(sl.colStart);
-          return { ...sl, lane };
-        }
-        lane++;
-      }
-    });
-  }
 
   const isInTrip = (d: Date) =>
     isWithinInterval(d, { start: tripStart, end: tripEnd });
 
   const dayOfWeekLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+  const openPill = (pill: StayPill) => setStayEdit({ open: true, pill });
+
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Trip date subtitle */}
       <div className="shrink-0 border-b border-border px-4 py-2">
         <p className="font-inter text-[11px] text-muted-foreground">
-          {format(tripStart, "MMM d")} — {format(tripEnd, "MMM d, yyyy")} · {segments.length} stay{segments.length !== 1 ? "s" : ""}
+          {format(tripStart, "MMM d")} — {format(tripEnd, "MMM d, yyyy")} · {pills.length} stay{pills.length !== 1 ? "s" : ""}
         </p>
       </div>
 
       {/* Mobile: agenda list */}
       <div className="flex-1 overflow-y-auto sm:hidden p-3 space-y-2">
-        {segments.length === 0 && (
+        {pills.length === 0 && (
           <p className="text-center font-inter text-xs text-muted-foreground py-8">
             No stays added yet. Add a stay in the Matrix view to see it here.
           </p>
         )}
-        {segments.map((s) => {
-          const c = STAY_PALETTE[s.colorIndex];
-          const nights = differenceInCalendarDays(s.endDate, s.startDate) + 1;
+        {pills.map((p) => {
+          const c = colorFor(p);
+          const subtitle = p.derivedLocation || p.locationName;
           return (
             <button
-              key={s.key + s.startDate.toISOString()}
-              onClick={() => setEditing(s.items[0])}
+              key={p.id}
+              onClick={() => openPill(p)}
               className="w-full text-left rounded-sm px-3 py-2.5 border min-h-[44px] touch-manipulation transition-opacity hover:opacity-90"
               style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
             >
-              <div className="font-playfair text-sm font-semibold leading-tight">{s.title}</div>
+              <div className="font-playfair text-sm font-semibold leading-tight">{p.title}</div>
+              {subtitle && (
+                <div className="font-inter text-[10px] mt-0.5 opacity-80">{subtitle}</div>
+              )}
               <div className="font-inter text-[10px] mt-0.5 opacity-90">
-                {format(s.startDate, "EEE, MMM d")} → {format(addDays(s.endDate, 1), "EEE, MMM d")} · {nights} night{nights !== 1 ? "s" : ""}
+                {format(parseISO(p.startDate), "EEE, MMM d")} → {format(addDays(parseISO(p.endDate), 1), "EEE, MMM d")} · {p.nights} night{p.nights !== 1 ? "s" : ""}
               </div>
             </button>
           );
@@ -222,8 +193,9 @@ export default function CalendarStaysView() {
         {/* Week rows */}
         <div className="flex-1">
           {weeks.map((week, wi) => {
-            const slices = assignLanes(segmentsByWeek(week));
-            const laneCount = Math.max(1, ...slices.map((s) => s.lane + 1));
+            const slices = slicesForWeek(week);
+            const laned = assignPillLanes(slices); // [{ pill: PillSlice, lane }]
+            const laneCount = Math.max(1, ...laned.map((s) => s.lane + 1));
             const rowMinHeight = 88 + Math.max(0, laneCount - 1) * 28;
 
             return (
@@ -260,17 +232,16 @@ export default function CalendarStaysView() {
                   className="absolute inset-x-0 top-7 grid grid-cols-7 pointer-events-none"
                   style={{ gridAutoRows: "26px", rowGap: "2px" }}
                 >
-                  {slices.map((sl, idx) => {
-                    const c = STAY_PALETTE[sl.seg.colorIndex];
-                    const nights = differenceInCalendarDays(sl.seg.endDate, sl.seg.startDate) + 1;
+                  {laned.map(({ pill: sl, lane }, idx) => {
+                    const c = STAY_PALETTE[sl.colorIndex];
                     return (
                       <button
-                        key={`${sl.seg.key}-${wi}-${idx}`}
-                        onClick={() => setEditing(sl.seg.items[0])}
+                        key={`${sl.pill.id}-${wi}-${idx}`}
+                        onClick={() => openPill(sl.pill)}
                         className="pointer-events-auto mx-0.5 px-2 flex items-center overflow-hidden border touch-manipulation transition-opacity hover:opacity-90"
                         style={{
                           gridColumn: `${sl.colStart + 1} / span ${sl.colSpan}`,
-                          gridRow: `${sl.lane + 1}`,
+                          gridRow: `${lane + 1}`,
                           backgroundColor: c.bg,
                           color: c.text,
                           borderColor: c.border,
@@ -281,10 +252,10 @@ export default function CalendarStaysView() {
                           borderLeftWidth: sl.isStartInWeek ? 1 : 0,
                           borderRightWidth: sl.isEndInWeek ? 1 : 0,
                         }}
-                        title={`${sl.seg.title} · ${nights} night${nights !== 1 ? "s" : ""}`}
+                        title={`${sl.pill.title} · ${sl.pill.nights} night${sl.pill.nights !== 1 ? "s" : ""}`}
                       >
                         <span className="font-playfair text-[11px] font-semibold truncate leading-none">
-                          {sl.isStartInWeek ? sl.seg.title : `↳ ${sl.seg.title}`}
+                          {sl.isStartInWeek ? sl.pill.title : `↳ ${sl.pill.title}`}
                         </span>
                       </button>
                     );
@@ -296,19 +267,18 @@ export default function CalendarStaysView() {
         </div>
 
         {/* Legend */}
-        {segments.length > 0 && (
+        {pills.length > 0 && (
           <div className="shrink-0 border-t border-border px-4 py-2 flex flex-wrap gap-x-3 gap-y-1.5">
-            {segments.map((s) => {
-              const c = STAY_PALETTE[s.colorIndex];
-              const nights = differenceInCalendarDays(s.endDate, s.startDate) + 1;
+            {pills.map((p) => {
+              const c = colorFor(p);
               return (
-                <div key={s.key + s.startDate.toISOString()} className="flex items-center gap-1.5">
+                <div key={p.id} className="flex items-center gap-1.5">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-sm border"
                     style={{ backgroundColor: c.bg, borderColor: c.border }}
                   />
                   <span className="font-inter text-[10px] text-foreground">
-                    {s.title} <span className="text-muted-foreground">· {nights}n</span>
+                    {p.title} <span className="text-muted-foreground">· {p.nights}n</span>
                   </span>
                 </div>
               );
@@ -317,8 +287,17 @@ export default function CalendarStaysView() {
         )}
       </div>
 
-      {editing && (
-        <EditItemDialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)} item={editing} />
+      {stayEdit.open && stayEdit.pill && activeTrip.start_date && activeTrip.end_date && (
+        <StayDialog
+          mode="edit"
+          open={stayEdit.open}
+          onOpenChange={(open) => setStayEdit((s) => ({ ...s, open }))}
+          tripId={activeTrip.id}
+          pill={stayEdit.pill}
+          tripStart={activeTrip.start_date}
+          tripEnd={activeTrip.end_date}
+          legs={legs}
+        />
       )}
     </div>
   );

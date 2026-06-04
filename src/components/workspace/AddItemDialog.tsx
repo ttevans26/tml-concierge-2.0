@@ -74,10 +74,6 @@ export default function AddItemDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [showResults, setShowResults] = useState(false);
 
-  // Stays-specific
-  const [checkoutDate, setCheckoutDate] = useState("");
-  const [location, setLocation] = useState("");
-
   // Logistics-specific
   const [logisticsType, setLogisticsType] = useState("plane");
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -91,7 +87,7 @@ export default function AddItemDialog({
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const activeTrip = useTripStore((s) => s.activeTrip);
 
-  const usePlaces = category !== "logistics";
+  const usePlaces = category !== "logistics" && category !== "stays";
   const { predictions, search: searchPlaces, getDetails, loading: placesLoading } = useGooglePlaces({
     types: PLACES_TYPES[category] || ["establishment"],
     enabled: usePlaces,
@@ -107,7 +103,6 @@ export default function AddItemDialog({
   const reset = () => {
     setTitle(""); setCost(""); setStartTime(""); setEndTime("");
     setSourceUrl(""); setSearchQuery(""); setShowResults(false);
-    setCheckoutDate(""); setLocation("");
     setLogisticsType("plane"); setReferenceNumber("");
     setDeparture(""); setArrival(""); setLookingUp(false);
     setSelectedPlace(null); setGooglePlaceId(""); setApiMetadata({});
@@ -119,7 +114,6 @@ export default function AddItemDialog({
     const details = await getDetails(prediction.place_id);
     if (details) {
       setTitle(details.name);
-      setLocation(details.address);
       setSourceUrl(details.website || "");
       setGooglePlaceId(details.placeId);
       setSelectedPlace(details);
@@ -194,42 +188,14 @@ export default function AddItemDialog({
     e.preventDefault();
     const finalTitle = title.trim();
     if (!finalTitle) return;
+    if (category === "stays") {
+      // Stays use the dedicated StayDialog. Defensive guard.
+      console.warn("AddItemDialog received category=stays; this should be routed to StayDialog.");
+      return;
+    }
     setSubmitting(true);
 
-    // Stays: single range row (date = check-in, metadata.end_date = last night inclusive).
-    if (category === "stays") {
-      const effectiveCheckout = checkoutDate && checkoutDate > date
-        ? checkoutDate
-        : format(addDays(parseISO(date), 1), "yyyy-MM-dd");
-      const endDateInclusive = format(addDays(parseISO(effectiveCheckout), -1), "yyyy-MM-dd");
-      const nights = Math.max(
-        1,
-        differenceInCalendarDays(parseISO(effectiveCheckout), parseISO(date)),
-      );
-      try {
-        await createItineraryItem({
-          trip_id: tripId,
-          category,
-          date,
-          title: finalTitle,
-          // `cost` here is the nightly rate field — store total cost = rate × nights.
-          cost: cost ? parseFloat(cost) * nights : null,
-          source_reference: sourceUrl || null,
-          location_name: location || null,
-          location_lat: selectedPlace?.lat ?? null,
-          location_lng: selectedPlace?.lng ?? null,
-          google_place_id: googlePlaceId || null,
-          api_metadata: Object.keys(apiMetadata).length > 0 ? apiMetadata : null,
-          metadata: {
-            end_date: endDateInclusive,
-            check_out: effectiveCheckout,
-            ...(cost ? { nightly_rate: parseFloat(cost) } : {}),
-          },
-        });
-      } catch (err) {
-        console.error("Stay insert error:", err);
-      }
-    } else {
+    {
       // Logistics: build a descriptive title if departure/arrival exist
       let itemTitle = finalTitle;
       if (category === "logistics" && departure && arrival) {
@@ -259,15 +225,11 @@ export default function AddItemDialog({
     onOpenChange(false);
   };
 
-  const placeholderText = category === "stays"
-    ? "e.g. Park Hyatt Tokyo"
-    : category === "dining"
+  const placeholderText = category === "dining"
     ? "e.g. Le Jules Verne"
     : category === "logistics"
     ? "e.g. AF 1234 or Eurostar 9021"
     : "e.g. Louvre Museum Tour";
-
-  const maxDate = activeTrip?.end_date || "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

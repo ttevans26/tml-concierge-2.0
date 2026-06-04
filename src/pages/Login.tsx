@@ -7,7 +7,12 @@ import { Label } from "@/components/ui/label";
 import ConnectionIndicator from "@/components/ConnectionIndicator";
 import { lovable } from "@/integrations/lovable";
 import { getAuthRedirectUri } from "@/lib/authRedirect";
-import { ensureDevSession, isDevPreviewHost } from "@/lib/devAutoAuth";
+import {
+  ensureDevSession,
+  isDevPreviewHost,
+  isDevAutoAuthSuppressed,
+  clearDevAutoAuthSuppression,
+} from "@/lib/devAutoAuth";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -21,13 +26,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | "google" | "apple">(null);
   const [autoAuthPending, setAutoAuthPending] = useState<boolean>(
-    () => isDevPreviewHost(),
+    () => isDevPreviewHost() && !isDevAutoAuthSuppressed(),
   );
 
   // In Lovable preview / localhost, never show the login form — auto sign
   // into the shared dev account and continue to the intended route.
   useEffect(() => {
-    if (!isDevPreviewHost()) {
+    if (!isDevPreviewHost() || isDevAutoAuthSuppressed()) {
       setAutoAuthPending(false);
       return;
     }
@@ -64,12 +69,14 @@ export default function Login() {
     if (error) {
       setError(error.message);
     } else {
+      clearDevAutoAuthSuppression();
       navigate(redirectTo, { replace: true });
     }
   };
 
   const handleGoogle = async () => {
     setOauthLoading("google");
+    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });
@@ -84,6 +91,7 @@ export default function Login() {
 
   const handleApple = async () => {
     setOauthLoading("apple");
+    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("apple", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });

@@ -8,7 +8,12 @@ import ConnectionIndicator from "@/components/ConnectionIndicator";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthRedirectUri } from "@/lib/authRedirect";
-import { ensureDevSession, isDevPreviewHost } from "@/lib/devAutoAuth";
+import {
+  ensureDevSession,
+  isDevPreviewHost,
+  isDevAutoAuthSuppressed,
+  clearDevAutoAuthSuppression,
+} from "@/lib/devAutoAuth";
 import { toast } from "sonner";
 
 export default function Signup() {
@@ -23,11 +28,11 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | "google" | "apple">(null);
   const [autoAuthPending, setAutoAuthPending] = useState<boolean>(
-    () => isDevPreviewHost(),
+    () => isDevPreviewHost() && !isDevAutoAuthSuppressed(),
   );
 
   useEffect(() => {
-    if (!isDevPreviewHost()) {
+    if (!isDevPreviewHost() || isDevAutoAuthSuppressed()) {
       setAutoAuthPending(false);
       return;
     }
@@ -78,13 +83,16 @@ export default function Signup() {
       // Detect that and show the "check your inbox" affordance instead of
       // bouncing the user to a protected route they can't reach yet.
       const { data } = await supabase.auth.getSession();
-      if (data.session) navigate(redirectTo, { replace: true });
-      else toast.success("Check your inbox to confirm your email.");
+      if (data.session) {
+        clearDevAutoAuthSuppression();
+        navigate(redirectTo, { replace: true });
+      } else toast.success("Check your inbox to confirm your email.");
     }
   };
 
   const handleGoogle = async () => {
     setOauthLoading("google");
+    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });
@@ -99,6 +107,7 @@ export default function Signup() {
 
   const handleApple = async () => {
     setOauthLoading("apple");
+    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("apple", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });

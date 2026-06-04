@@ -25,6 +25,9 @@ const PROFILE_COLUMNS =
 
 const PAGE_SOFT_LIMIT = 500;
 
+/** How long a cached fetch stays "fresh" before a refetch is needed. */
+const CACHE_TTL_MS = 60_000;
+
 /* ------------------------------------------------------------------ */
 /*  Types (mirrors DB schema)                                         */
 /* ------------------------------------------------------------------ */

@@ -135,18 +135,23 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from("itinerary_items")
-        .select("*")
-        .eq("trip_id", trip.id)
-        .order("sort_order");
-      if (cancelled) return;
-      if (error || !data) {
-        setWaypoints([]);
-        return;
+      try {
+        const { data, error } = await supabase
+          .from("itinerary_items")
+          .select("*")
+          .eq("trip_id", trip.id)
+          .order("sort_order");
+        if (cancelled) return;
+        if (error || !data) {
+          setWaypoints([]);
+          return;
+        }
+        const wps = await buildRouteWithGeocoding(data as any, trip.destination);
+        if (!cancelled) setWaypoints(wps);
+      } catch (err) {
+        console.error("Route build failed", err);
+        if (!cancelled) setWaypoints([]);
       }
-      const wps = await buildRouteWithGeocoding(data as any, trip.destination);
-      if (!cancelled) setWaypoints(wps);
     })();
     return () => {
       cancelled = true;

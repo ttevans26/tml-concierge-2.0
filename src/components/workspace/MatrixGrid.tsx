@@ -276,9 +276,9 @@ export default function MatrixGrid() {
   }>({ open: false, leg: null, initialStart: "" });
 
   /* ---- Stay pill edit dialog state ---- */
-  const [stayEdit, setStayEdit] = useState<{ open: boolean; item: ItineraryItem | null }>({
+  const [stayEdit, setStayEdit] = useState<{ open: boolean; pill: StayPill | null }>({
     open: false,
-    item: null,
+    pill: null,
   });
 
   // Smart Pull state

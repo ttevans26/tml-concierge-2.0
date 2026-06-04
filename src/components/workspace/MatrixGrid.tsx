@@ -1423,12 +1423,15 @@ export default function MatrixGrid() {
         </Suspense>
       )}
 
-      {stayEdit.open && stayEdit.item && (
+      {stayEdit.open && stayEdit.pill && activeTrip?.start_date && activeTrip?.end_date && (
         <Suspense fallback={null}>
-          <EditItemDialog
+          <EditStayDialog
             open={stayEdit.open}
             onOpenChange={(open) => setStayEdit((s) => ({ ...s, open }))}
-            item={stayEdit.item}
+            pill={stayEdit.pill}
+            tripStart={activeTrip.start_date}
+            tripEnd={activeTrip.end_date}
+            legs={displayedLegs}
           />
         </Suspense>
       )}

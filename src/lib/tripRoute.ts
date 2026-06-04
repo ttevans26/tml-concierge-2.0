@@ -163,12 +163,16 @@ export async function buildRouteWithGeocoding(
     const key = normalizeRouteText(locationName || title);
     if (!key || titleSeen.has(key)) continue;
     titleSeen.add(key);
+    const candLat = finiteNumber(i.location_lat);
+    const candLng = finiteNumber(i.location_lng);
+    const validStored =
+      candLat != null && candLng != null && !isLikelyNullIsland(candLat, candLng);
     unique.push({
       title,
       locationName,
       date: i.date,
-      lat: finiteNumber(i.location_lat),
-      lng: finiteNumber(i.location_lng),
+      lat: validStored ? candLat : null,
+      lng: validStored ? candLng : null,
       sortOrder: i.sort_order ?? 0,
       hint: findRouteHint(locationName || title),
     });

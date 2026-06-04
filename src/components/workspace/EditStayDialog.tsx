@@ -121,10 +121,6 @@ export default function EditStayDialog({
     setTitle(p.mainText || p.description);
     setLocationName(p.secondaryText || p.description);
     setGooglePlaceId(p.placeId);
-    if (typeof p.lat === "number" && typeof p.lng === "number") {
-      setLat(p.lat);
-      setLng(p.lng);
-    }
   }, []);
 
   const updateItineraryItem = useTripStore((s) => s.updateItineraryItem);

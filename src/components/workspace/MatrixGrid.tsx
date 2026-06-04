@@ -1167,38 +1167,73 @@ export default function MatrixGrid() {
                 if (!activeTrip?.start_date) return null;
                 const { startIdx, span } = legColumnSpan(activeTrip.start_date, pill);
                 if (startIdx < 0 || startIdx >= days.length) return null;
-                const width = Math.min(span, days.length - startIdx) * 176;
                 const hasConflict = pill.itemIds.some((id) => conflictIds.has(id));
+                // Apply live preview while resizing.
+                const resizing = resizeState?.pillId === pill.id ? resizeState : null;
+                const previewStartIdx =
+                  resizing?.side === "left" ? startIdx + resizing.deltaDays : startIdx;
+                const previewEndIdx =
+                  (resizing?.side === "right" ? startIdx + span - 1 + resizing.deltaDays : startIdx + span - 1);
+                const clampedStartIdx = Math.max(0, Math.min(days.length - 1, previewStartIdx));
+                const clampedEndIdx = Math.max(clampedStartIdx, Math.min(days.length - 1, previewEndIdx));
+                const previewSpan = clampedEndIdx - clampedStartIdx + 1;
+                const width = previewSpan * 176;
                 return (
-                  <button
+                  <div
                     key={pill.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData(
-                        "application/stay-pill",
-                        JSON.stringify({ itemIds: pill.itemIds, startDate: pill.startDate }),
-                      );
-                    }}
-                    onClick={() => setStayEdit({ open: true, item: pill.firstItem })}
-                    className={`pointer-events-auto absolute flex h-6 cursor-grab items-center gap-1.5 truncate rounded-sm border px-2.5 text-left transition-colors active:cursor-grabbing ${
-                      hasConflict
-                        ? "border-destructive/70 bg-destructive/10 ring-1 ring-destructive/40 hover:bg-destructive/20"
-                        : "border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
-                    }`}
+                    className="pointer-events-auto absolute"
                     style={{
-                      left: `${startIdx * 176 + 4}px`,
+                      left: `${clampedStartIdx * 176 + 4}px`,
                       width: `${width - 8}px`,
                       top: `${lane * STAY_LANE_H + 6}px`,
+                      height: "24px",
                     }}
-                    title={`${pill.title}${pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"} — drag to a new start date, click to edit`}
                   >
-                    <Bed className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
-                    <span className="truncate font-inter text-[11px] font-medium">
-                      {pill.title} · {pill.nights}n
-                    </span>
-                  </button>
+                    {/* Left edge resize handle */}
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      onMouseDown={(e) => startStayResize(e, pill, "left")}
+                      className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize rounded-l-sm hover:bg-accent/50"
+                      title="Drag to change check-in"
+                    />
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData(
+                          "application/stay-pill",
+                          JSON.stringify({
+                            itemIds: pill.itemIds,
+                            startDate: pill.startDate,
+                            isRange: pill.isRange,
+                            firstItemId: pill.firstItem.id,
+                          }),
+                        );
+                      }}
+                      onClick={() => setStayEdit({ open: true, pill })}
+                      className={`flex h-full w-full cursor-grab items-center gap-1.5 truncate rounded-sm border px-3 text-left transition-colors active:cursor-grabbing ${
+                        hasConflict
+                          ? "border-destructive/70 bg-destructive/10 ring-1 ring-destructive/40 hover:bg-destructive/20"
+                          : "border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
+                      }`}
+                      title={`${pill.title}${pill.derivedLocation ? ` · ${pill.derivedLocation}` : pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"} — drag to move, drag edges to resize, click to edit`}
+                    >
+                      <Bed className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                      <span className="truncate font-inter text-[11px] font-medium">
+                        {pill.title} · {pill.nights}n
+                      </span>
+                    </button>
+                    {/* Right edge resize handle */}
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      onMouseDown={(e) => startStayResize(e, pill, "right")}
+                      className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize rounded-r-sm hover:bg-accent/50"
+                      title="Drag to change check-out"
+                    />
+                  </div>
                 );
               })}
             </div>

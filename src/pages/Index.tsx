@@ -262,13 +262,25 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
       {mapOpen && (
         <TripRouteMap
           waypoints={waypoints ?? []}
-          fallbackQuery={waypoints && waypoints.length === 0 ? trip.destination : null}
+          fallbackQuery={
+            waypoints && waypoints.length === 0 && isSingleRegionDestination(trip.destination)
+              ? trip.destination
+              : null
+          }
           isLoading={waypoints === null}
           height={420}
         />
       )}
     </div>
   );
+}
+
+/** Multi-country destinations like "UK, France, Italy" geocode to a useless
+ *  centroid (the Atlantic / Africa). Only pass single-region strings through. */
+function isSingleRegionDestination(dest: string | null | undefined): dest is string {
+  if (!dest) return false;
+  const parts = dest.split(",").map((p) => p.trim()).filter(Boolean);
+  return parts.length === 1;
 }
 
 /* ------------------------------------------------------------------ */

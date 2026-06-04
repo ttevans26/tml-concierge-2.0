@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,16 @@ import { Label } from "@/components/ui/label";
 import ConnectionIndicator from "@/components/ConnectionIndicator";
 import { lovable } from "@/integrations/lovable";
 import { getAuthRedirectUri } from "@/lib/authRedirect";
+import {
+  ensureDevSession,
+  isDevPreviewHost,
+  isDevAutoAuthSuppressed,
+  clearDevAutoAuthSuppression,
+} from "@/lib/devAutoAuth";
 import { toast } from "sonner";
 
 export default function Login() {
-  const { signIn } = useAuth();
+  const { signIn, session } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirectTo = params.get("redirectTo") || "/";
@@ -19,6 +25,40 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | "google" | "apple">(null);
+  const [autoAuthPending, setAutoAuthPending] = useState<boolean>(
+    () => isDevPreviewHost() && !isDevAutoAuthSuppressed(),
+  );
+
+  // In Lovable preview / localhost, never show the login form — auto sign
+  // into the shared dev account and continue to the intended route.
+  useEffect(() => {
+    if (!isDevPreviewHost() || isDevAutoAuthSuppressed()) {
+      setAutoAuthPending(false);
+      return;
+    }
+    if (session) {
+      setAutoAuthPending(false);
+      navigate(redirectTo, { replace: true });
+      return;
+    }
+    let cancelled = false;
+    ensureDevSession().then((ok) => {
+      if (cancelled) return;
+      setAutoAuthPending(false);
+      if (ok) navigate(redirectTo, { replace: true });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, navigate, redirectTo]);
+
+  if (autoAuthPending) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <p className="font-inter text-muted-foreground text-sm tracking-wide">Loading…</p>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,12 +69,14 @@ export default function Login() {
     if (error) {
       setError(error.message);
     } else {
+      clearDevAutoAuthSuppression();
       navigate(redirectTo, { replace: true });
     }
   };
 
   const handleGoogle = async () => {
     setOauthLoading("google");
+    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });
@@ -49,6 +91,7 @@ export default function Login() {
 
   const handleApple = async () => {
     setOauthLoading("apple");
+    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("apple", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });

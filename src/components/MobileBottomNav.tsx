@@ -10,6 +10,21 @@ const items = [
   { label: "Tools", path: "/tools", icon: Wrench },
 ];
 
+/** Warm lazy-route chunks on tap-start so the navigation feels instant. */
+const prefetchers: Record<string, () => Promise<unknown>> = {
+  "/studio": () => import("@/pages/Studio"),
+  "/tools": () => import("@/pages/Tools"),
+  "/today": () => import("@/pages/Today"),
+};
+const prefetched = new Set<string>();
+const prefetch = (path: string) => {
+  if (prefetched.has(path)) return;
+  const fn = prefetchers[path];
+  if (!fn) return;
+  prefetched.add(path);
+  void fn().catch(() => prefetched.delete(path));
+};
+
 /**
  * Native-style bottom tab bar shown only on mobile widths. Honors iOS
  * safe-area so it sits above the home indicator.
@@ -34,6 +49,8 @@ export default function MobileBottomNav() {
           <button
             key={it.path}
             type="button"
+            onTouchStart={() => prefetch(it.path)}
+            onMouseEnter={() => prefetch(it.path)}
             onClick={() => {
               if (it.path === "/" && activeTrip?.id && location.pathname === "/") {
                 navigate(`/trip/${activeTrip.id}`);

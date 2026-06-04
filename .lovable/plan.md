@@ -1,39 +1,55 @@
-## Goal
-Color calendar stay pills by their **derived Location leg (city)**, and guarantee that two pills which sit adjacent in time never share a color — fixing the current "Hilton → Marriott → Hilton" same-color run.
+## 1. Preview login — clarification (no code needed)
 
-## Approach
+The login screen you hit in the Lovable preview is the real auth gate (`ProtectedRoute` → `/login`). It is fully built. Because the project runs in "Zero-Verification" mode, you don't need an emailed confirmation link:
 
-Two-step assignment in `CalendarStaysView.tsx`:
+- Go to `/signup`, enter any email + password → you're in immediately.
+- Reuse those credentials on subsequent preview sessions.
+- Optionally, I can seed a known dev account (e.g. `dev@tml.local` / a password you choose) so the team always has a shared login.
 
-1. **Group key = city (derived leg).**
-   - Primary key: `pill.derivedLocation` (already set by `getStayPills(items, legs)`).
-   - Fallback chain when a leg overlap isn't found: `pill.locationName` → `"unassigned"`.
-   - All pills in the same city group must share the same palette slot.
+Nothing about this flow is broken — it just isn't obvious from the Lovable "Open preview" button. Tell me if you'd like the seeded dev account.
 
-2. **Assign palette slots in chronological order, with adjacency avoidance.**
-   - Sort pills by `startDate`.
-   - Walk the list; for each new city group, pick the next palette index that
-     - hasn't been used by the immediately previous group, **and**
-     - hasn't been used by any pill whose `endDate + 1 day == this pill.startDate` (handles same-day check-out/check-in transitions).
-   - Once a city has been assigned a slot, reuse it for every subsequent pill in that city (so "Paris" stays one color across the trip).
-   - If the palette runs out before satisfying constraints, fall back to a hash so we never crash.
+## 2. Slow navigation between spaces — root causes
 
-3. **Palette stays the same `STAY_PALETTE` (8 muted Quiet-Luxury tones).** No new tokens.
+After tracing the route lifecycle, three things compound on every nav:
 
-## Files
+1. **`AppLayout` remounts the whole page tree on every route change.**
+   `src/components/AppLayout.tsx` sets `<main key={pathname}>`. Changing the `key` unmounts the previous page and mounts the next one from scratch — destroying React Query / Zustand-derived component state and re-running every `useEffect` (including fetches).
+2. **Each page refetches on mount with weak guards.**
+   `Index`, `Today`, `Tools`, `TripWorkspace` all call `fetchTrips()` / `fetchItineraryItems(id)` in `useEffect`. Guards like `trips.length === 0` only help the first time; on `TripWorkspace` the itinerary refetch fires for every visit to a trip, even one you opened 5 seconds ago.
+3. **Lazy chunks + entry animation add perceived latency.**
+   Every non-Index route is `lazy()`-loaded (good for first paint, bad on repeat nav with no prefetch), and `animate-editorial-in` plays a fresh fade on every mount because of the `key` reset.
 
-- `src/components/workspace/CalendarStaysView.tsx`
-  - Replace the current `hashIndex(title|locationName)` mapping with a memoized `Map<pillId, paletteIndex>` built via the algorithm above.
-  - Helper lives inline (small, view-specific). No changes to `locationLegs.ts` or `StayDialog`.
-  - Mobile agenda list, desktop bars, and the legend all read from the same map → consistent colors everywhere.
-  - Legend gets a small subtitle showing the city (derivedLocation) under the pill title so the color → city link is obvious.
+Trip-detail navigation also pays a 4th cost: `MatrixGrid` and friends do their own initial work after the itinerary fetch resolves.
 
-## Out of scope
-- No data model changes, no shared util changes, no Matrix Grid recoloring.
-- No country detection.
+## 3. Plan of changes
 
-## Verification
-1. Trip with Paris (3 nights) → Rome (4 nights) → Paris (2 nights): both Paris pills are the same color; Rome is a different color; the Paris→Rome and Rome→Paris transitions never repeat the prior color.
-2. Two back-to-back hotels in the same city show one shared color (intentional — same leg).
-3. A stay with no matching leg falls into an "unassigned" group and still gets a non-adjacent color.
-4. Legend lists each pill with the correct swatch + city subtitle.
+### a. Stop remounting on every navigation
+- `src/components/AppLayout.tsx`: remove `key={pathname}` on `<main>`. Keep the fade by scoping `animate-editorial-in` to a wrapper that mounts once, or trigger it only on first paint.
+
+### b. Cache fetches so revisits are instant
+- `src/stores/useTripStore.ts`: add lightweight freshness tracking
+  - `tripsFetchedAt: number | null`
+  - `itineraryFetchedAt: Record<tripId, number>`
+  - `flightsFetchedAt: Record<tripId, number>`
+  - `fetchTrips({ force? })`, `fetchItineraryItems(id, { force? })`, `fetchFlights(id, { force? })` short-circuit when `Date.now() - fetchedAt < 60_000` unless `force` is true.
+- Update `Index`, `Today`, `Tools`, `TripWorkspace` to call the cached variants (no `force`). Realtime/mutations already update the store optimistically, so stale risk is minimal.
+- Background revalidate: when a cached read is served, kick off a `force` fetch in the background so data stays warm without blocking the UI.
+
+### c. Prefetch the likely next chunk
+- `src/components/AppHeader.tsx` / `MobileBottomNav.tsx`: on `onMouseEnter` / `onFocus` of each nav link, call the matching `import()` (e.g. `import("@/pages/Studio")`) so the chunk is in cache before the click. Cheap, no behavioural change.
+
+### d. Trim the trip-workspace cold path
+- `src/pages/TripWorkspace.tsx`: when the user clicks a trip from `Index`, the trip object is already in `trips`. Set `activeTrip` synchronously from the cached array before any fetch so `MatrixGrid` can render its shell immediately. Only fetch itinerary items if the cache for that trip is stale.
+
+### e. Verification
+- Hard reload, sign in, then:
+  - Click between Trips → Studio → Tools → Today twice each. Second pass should be effectively instant (no spinner, no fade-in delay, no network refetch in DevTools).
+  - Open a trip from `/`, go back, reopen the same trip: itinerary should appear without a loading state.
+- Watch the dev-server log + Network panel to confirm no duplicate `itinerary_items` requests within 60 s.
+
+## 4. Out of scope (call out, don't do yet)
+- Switching to React Query for global cache (bigger refactor; the freshness map above gets ~90% of the win).
+- Eager-loading all routes (would hurt first paint).
+- Skeleton polish per page (separate UX pass).
+
+If this matches what you want, approve and I'll implement a–e in one pass.

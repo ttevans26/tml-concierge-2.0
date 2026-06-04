@@ -1,51 +1,74 @@
-## Root cause
+## Goal
+Single dialog for stays in the Matrix Grid. Clicking an empty Stays cell **and** clicking an existing stay pill open the same form, pre-filled appropriately.
 
-Your trip has **7 `location` rows and 0 `stays` rows** in the database. The Matrix Grid renders Locations correctly because `getLegs()` reads from `category='location'` items. **Reshuffle and the segment banners read from `buildSegments()` in `src/lib/segments.ts`, which only looks at `category='stays'`.**
+## New form (one popup, one schema)
 
-Result: every day is "unassigned" → only one synthetic segment is produced → Reshuffle bails out with *"Add stays in at least two locations to reshuffle the trip."* and the SegmentCard list renders empty banners. The Matrix Grid (7 location pills) and Reshuffle (zero usable segments) are reading from two different sources.
+| Field | Notes |
+|---|---|
+| Property name | Google Places search (lodging) — same autocomplete as today |
+| Property type | Segmented control: **Hotel** \| **Airbnb** (default Hotel) |
+| Check-in | Date picker, defaults to clicked cell date / existing `date` |
+| Check-out | Date picker, defaults to check-in + 1 night / existing `metadata.end_date + 1` |
+| Nights | Read-only derived from dates |
+| Nightly rate | Number |
+| Taxes & fees | Optional flat number |
+| **Total cost** | Auto = `rate × nights + taxes/fees`; user can type to override. Small "Reset to calculated" link appears when overridden |
+| Confirmation code | Optional text |
+| **Cleaning fee** | Airbnb only — flat number, added to total when not overridden |
+| **Listing URL** | Airbnb only — text input, stored on `source_url` |
 
-This is a regression from the Stays refactor — Stays are now optional/range-based, but the trip-structure logic was never re-pointed at Locations.
+Derived-location chip ("Inside Paris") stays in the edit case.
 
-## Fix
+## Implementation
 
-Repoint `buildSegments` (and anything downstream) at **Location items** as the primary source of truth, with stays-derived fallback only when no locations exist.
+### 1. New `src/components/workspace/StayDialog.tsx`
+- Replaces both the `category === "stays"` branch of `AddItemDialog` and the standalone `EditStayDialog`.
+- Props: `{ open, onOpenChange, mode: "create"|"edit", tripId, tripStart, tripEnd, legs, defaultDate?, pill? }`.
+- Internal logic:
+  - `nights = max(1, diffDays(checkOut, checkIn))`
+  - `calculatedTotal = rate*nights + (taxes||0) + (propertyType==="airbnb" ? (cleaningFee||0) : 0)`
+  - `total` state seeded from calculated; if user edits, mark `totalOverridden=true`. Toggle "Reset" restores derived.
+- Persisted shape on `itinerary_items`:
+  - `date` = check-in
+  - `cost` = final total (calculated or override)
+  - `source_url` = listing URL (Airbnb)
+  - `confirmation_code` = code
+  - `metadata` =
+    ```
+    {
+      end_date,            // last night inclusive
+      check_out,           // exclusive
+      property_type: "hotel" | "airbnb",
+      nightly_rate,
+      taxes_fees,
+      cleaning_fee?,       // airbnb only
+      total_override?: number | undefined
+    }
+    ```
+- Edit mode: hydrates from `pill.firstItem` on open transition (same `prevOpen` guard pattern as today's `EditStayDialog`); on save converts legacy multi-row pills by deleting trailing per-night rows (carry over existing logic).
+- Delete button shown in edit mode only.
 
-### `src/lib/segments.ts` — `buildSegments(trip, items)`
+### 2. `AddItemDialog.tsx`
+- Remove the entire `category === "stays"` branch and related stays-only state (`checkoutDate`, `location`). Keep dining/logistics/activity branches untouched.
+- When `category === "stays"`, `MatrixGrid` will no longer route to this dialog (see step 3).
 
-1. Scan `items` for `category === 'location'` rows with a `date`. Each row uses `date` as the start and `metadata.end_date` (or `date` itself) as the inclusive end. Clamp each range to `[trip.start_date, trip.end_date]`. Sort by start.
-2. If 1+ location rows exist:
-   - Emit one `LocationSegment` per location row using `location_name` (fallback to `title`) as the label.
-   - For any gap between consecutive locations, or before the first / after the last, emit an `isUnassigned` segment for the empty days inside the trip window.
-   - Skip the existing "anchored by stays" path entirely.
-3. If **no** location rows exist, keep today's stays-anchored behavior unchanged (backwards-compat for trips planned the old way).
-4. After segments are built, assign every item (any category) whose `date` falls inside a segment window to that segment's `itemIds`/`counts`, exactly as today.
-5. Drop the post-pass "merge adjacent stays with the same `location_name`" step when on the location path — locations are already the source of truth and shouldn't be merged.
+### 3. `MatrixGrid.tsx`
+- Replace lazy `AddItemDialog` mount with: if `dialogState.category === "stays"` render `<StayDialog mode="create" ... />`; otherwise render `<AddItemDialog />`.
+- Replace lazy `EditStayDialog` usage with the same `StayDialog mode="edit"`.
+- `openAdd("stays", date)` path is unchanged; just hits the new dialog.
 
-### `src/components/workspace/ReshuffleLegsList.tsx`
+### 4. Delete `src/components/workspace/EditStayDialog.tsx`
+- Logic absorbed into `StayDialog`.
 
-- No structural changes needed. With real segments now flowing in, the existing DnD list, preview math, and `computeReorderPatches` will work.
-- The `legForSegment` lookup already matches by date overlap, so each segment will resolve to its corresponding Matrix-Grid leg and the rename/cascade flow keeps working.
-- The "at least two locations" guard (`baseSegments.length < 2`) stays — but it will now correctly count your 7 locations instead of 1 synthetic block.
+## Out of scope
+- No DB schema changes (everything fits in existing `metadata` JSONB + `cost` + `source_url` + `confirmation_code`).
+- No changes to Matrix pill rendering, drag/resize, or daily totals (they already read `cost` and `metadata.end_date`).
+- No changes to Studio drop-in, Reshuffle, or location legs.
 
-### `src/components/workspace/OrphanItemsBanner.tsx`
-
-- No change. `findOrphanedItems` already uses the trip's date window, not segments. (Your current trip window covers all 7 locations, so this banner should disappear once segments populate.)
-
-### Out of scope
-
-- No DB schema changes.
-- No changes to Stays data model — the previous refactor stands.
-- No visual / coloring changes to the Matrix Grid (it already reads Locations).
-- No new auto-creation of Location rows from Stays.
-
-## Files
-
-- `src/lib/segments.ts` — rewrite `buildSegments` to prefer Location items; keep stays fallback.
-- (Verify only, no edits expected) `src/components/workspace/ReshuffleLegsList.tsx`, `OrphanItemsBanner.tsx`, `SegmentCard.tsx`.
-
-## Verification after build
-
-1. Open `/trip/affb0049-…` → Reshuffle panel shows 7 draggable rows (Paris → Sherborne).
-2. Drag a row, confirm preview dates shift, Apply persists.
-3. Matrix Grid Location band continues to render the same 7 pills (coloring/labels unchanged).
-4. Orphan banner does not appear (all items fall inside Aug 14 – Sep 10).
+## Verification
+1. Click empty Stays cell → new unified dialog opens with that date as check-in, Hotel selected, total auto-calculates as rate × nights.
+2. Toggle to Airbnb → Cleaning fee and Listing URL appear; total includes cleaning fee.
+3. Type into Total → "Reset to calculated" appears; click to restore.
+4. Save → pill appears with correct nights, total cost spreads across days in Daily $ row.
+5. Click existing pill → same dialog opens in edit mode with all fields hydrated, including property type from `metadata.property_type` (defaults to Hotel for legacy rows).
+6. Delete button only visible in edit mode; removes all `itemIds` on the pill.

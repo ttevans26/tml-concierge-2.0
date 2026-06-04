@@ -21,14 +21,18 @@ function formatLabel(city: string, state: string | null, country: string | null)
   return [city, state, country].filter(Boolean).join(", ");
 }
 
-/** Build legs from real itinerary "location" items. */
-export function getLegs(items: ItineraryItem[]): LocationLeg[] {
+/** Build legs from real itinerary "location" items.
+ *  When a location row has no explicit `metadata.end_date`, derive its end
+ *  from the next location's start (or the trip's end_date) so the pill
+ *  spans multiple days instead of collapsing to a 1-day dot. */
+export function getLegs(items: ItineraryItem[], tripEndDate?: string | null): LocationLeg[] {
   const out: LocationLeg[] = [];
   for (const it of items) {
     if (it.category !== "location" || !it.date) continue;
     const meta = (it.metadata as any) || {};
     const startDate = it.date;
-    const endDate: string = meta.end_date || it.date;
+    const explicitEnd: string | null = typeof meta.end_date === "string" ? meta.end_date : null;
+    const endDate: string = explicitEnd || it.date; // temp — refined after sort below
     const start = parseISO(startDate);
     const end = parseISO(endDate);
     const nights = Math.max(1, differenceInCalendarDays(end, start) + 1);
@@ -49,7 +53,26 @@ export function getLegs(items: ItineraryItem[]): LocationLeg[] {
       itemRef: it,
     });
   }
-  return out.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const sorted = out.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  // Backfill end dates from sequence for any leg that had no explicit
+  // metadata.end_date (i.e. its current endDate === startDate).
+  for (let i = 0; i < sorted.length; i++) {
+    const leg = sorted[i];
+    const meta = (leg.itemRef?.metadata as any) || {};
+    const hadExplicitEnd = typeof meta.end_date === "string" && meta.end_date.length > 0;
+    if (hadExplicitEnd) continue;
+    const next = sorted[i + 1];
+    const inferredEnd = next
+      ? format(addDays(parseISO(next.startDate), -1), "yyyy-MM-dd")
+      : (tripEndDate || leg.startDate);
+    const finalEnd = inferredEnd < leg.startDate ? leg.startDate : inferredEnd;
+    leg.endDate = finalEnd;
+    leg.nights = Math.max(
+      1,
+      differenceInCalendarDays(parseISO(finalEnd), parseISO(leg.startDate)) + 1,
+    );
+  }
+  return sorted;
 }
 
 /** Derive non-persisted ghost legs by collapsing consecutive same-location stays. */

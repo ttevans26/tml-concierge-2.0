@@ -225,9 +225,10 @@ interface TripStore {
   consumeConciergePrompt: () => string | null;
 
   /* actions */
-  fetchTrips: () => Promise<void>;
-  fetchItineraryItems: (tripId: string) => Promise<void>;
-  fetchFlights: (tripId: string) => Promise<void>;
+  /** Cached: returns immediately if data is < 60s old unless `force` is set. */
+  fetchTrips: (opts?: { force?: boolean }) => Promise<void>;
+  fetchItineraryItems: (tripId: string, opts?: { force?: boolean }) => Promise<void>;
+  fetchFlights: (tripId: string, opts?: { force?: boolean }) => Promise<void>;
   fetchProfile: () => Promise<void>;
   setActiveTrip: (trip: Trip | null) => void;
 

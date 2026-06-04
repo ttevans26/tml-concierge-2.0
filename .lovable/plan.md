@@ -1,24 +1,28 @@
-# Fix: Erroneous "Null Island" Points on Trip Route Map
+# Port Ideas Vault Folders to thomas26evans@gmail.com
 
-## Diagnosis
+## Source data found
 
-The marker labeled **7** sitting in the Gulf of Guinea (0°N, 0°E) is the classic "Null Island" symptom: itinerary items stored with `location_lat = 0` and `location_lng = 0` (or very near it) are being treated as valid coordinates. Multiple stay labels are stacking on that single point.
+User `Thomas Anderson` (7eb8a562…) owns 4 Studio folders with items that match what you described:
 
-Current code in `src/lib/tripRoute.ts → buildRouteFromItems()` only checks `Number.isFinite(lat)` — which passes for `0`. There's also no destination-context filter on the direct-from-items path (only `buildRouteWithGeocoding` applies the country/bounds filter).
+| Folder | Location | Items |
+|---|---|---|
+| Antibes | Antibes, FR | 6 |
+| Provence | Provence, France | 5 (this is your St Rémy folder) |
+| Lake Garda | Garda, IT | 8 |
+| UK | Bath, UK | 4 |
 
-## Changes
+Target user `thomas26evans@gmail.com` (8684caf3…) has none of these.
 
-### 1. `src/lib/tripRoute.ts`
-- In `buildRouteFromItems()`, reject coordinates where both lat and lng are within ~0.01° of (0,0), and reject any single coord with `|lat| < 0.001 && |lng| < 0.001`.
-- Add a shared `isLikelyNullIsland(lat, lng)` helper and apply it in both `buildRouteFromItems` and the `stored` branch of `buildRouteWithGeocoding`.
-- In `buildRouteWithGeocoding`, when a `DestinationContext` with `bounds` exists, also filter `buildRouteFromItems`-derived waypoints (current code returns `directFallback` unfiltered at the end). Pass bounds through and drop any waypoint outside it.
+## Change
 
-### 2. `src/components/trips/TripRouteMap.tsx`
-- Before mounting the waypoints map, filter out any waypoint with `(|lat|<0.001 && |lng|<0.001)` as a defensive last line.
-- If after filtering no waypoints remain, fall through to the fallback-query path instead of centering on a bad coord.
+Single `INSERT` data operation (no schema change):
 
-### 3. Optional cleanup pass (no DB write)
-- No migration; this is purely a presentation-layer filter. The underlying bad rows in `itinerary_items` remain but stop polluting the map. (If you want, I can follow up with a one-off script to null-out `location_lat/lng = 0` rows — say the word.)
+1. Clone the 4 `studio_folders` rows into the target user's account, generating new IDs and preserving `name` / `location`.
+2. Clone all `studio_items` belonging to those source folders into the new target folders, generating new IDs and preserving every field (title, description, address, lat/lng, url, cost, google_place_id, api_metadata, etc.).
+3. Leave the source folders untouched.
+
+Done as one CTE-based insert keyed by a folder-name map so the items land in the correct new folder.
 
 ## Result
-Markers stop appearing in the Gulf of Guinea. The Europe 2026 map will show only Paris + the Italy cluster (and any other stays with real coords). Anything geocoded outside the destination country gets dropped.
+
+Signing in as thomas26evans@gmail.com will show the Antibes, Provence (St Rémy), Lake Garda, and UK (Bath) folders in the Ideas Vault with all 23 items intact.

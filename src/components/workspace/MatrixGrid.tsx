@@ -514,10 +514,7 @@ export default function MatrixGrid() {
   }, [undo, redo]);
 
   /* ---- Location legs (real + ghost-derived from stays) ---- */
-  const legs = useMemo(
-    () => getLegs(itineraryItems, activeTrip?.end_date ?? null),
-    [itineraryItems, activeTrip?.end_date],
-  );
+  const legs = useMemo(() => getLegs(itineraryItems), [itineraryItems]);
   const ghostLegs = useMemo(
     () => (activeTrip && legs.length === 0 ? getGhostLegsFromStays(activeTrip, itineraryItems) : []),
     [activeTrip, itineraryItems, legs.length],

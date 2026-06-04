@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -8,16 +8,10 @@ import ConnectionIndicator from "@/components/ConnectionIndicator";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthRedirectUri } from "@/lib/authRedirect";
-import {
-  ensureDevSession,
-  isDevPreviewHost,
-  isDevAutoAuthSuppressed,
-  clearDevAutoAuthSuppression,
-} from "@/lib/devAutoAuth";
 import { toast } from "sonner";
 
 export default function Signup() {
-  const { signUp, session } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirectTo = params.get("redirectTo") || "/";
@@ -27,38 +21,6 @@ export default function Signup() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | "google" | "apple">(null);
-  const [autoAuthPending, setAutoAuthPending] = useState<boolean>(
-    () => isDevPreviewHost() && !isDevAutoAuthSuppressed(),
-  );
-
-  useEffect(() => {
-    if (!isDevPreviewHost() || isDevAutoAuthSuppressed()) {
-      setAutoAuthPending(false);
-      return;
-    }
-    if (session) {
-      setAutoAuthPending(false);
-      navigate(redirectTo, { replace: true });
-      return;
-    }
-    let cancelled = false;
-    ensureDevSession().then((ok) => {
-      if (cancelled) return;
-      setAutoAuthPending(false);
-      if (ok) navigate(redirectTo, { replace: true });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [session, navigate, redirectTo]);
-
-  if (autoAuthPending) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <p className="font-inter text-muted-foreground text-sm tracking-wide">Loading…</p>
-      </div>
-    );
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,16 +45,13 @@ export default function Signup() {
       // Detect that and show the "check your inbox" affordance instead of
       // bouncing the user to a protected route they can't reach yet.
       const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        clearDevAutoAuthSuppression();
-        navigate(redirectTo, { replace: true });
-      } else toast.success("Check your inbox to confirm your email.");
+      if (data.session) navigate(redirectTo, { replace: true });
+      else toast.success("Check your inbox to confirm your email.");
     }
   };
 
   const handleGoogle = async () => {
     setOauthLoading("google");
-    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });
@@ -107,7 +66,6 @@ export default function Signup() {
 
   const handleApple = async () => {
     setOauthLoading("apple");
-    clearDevAutoAuthSuppression();
     const result = await lovable.auth.signInWithOAuth("apple", {
       redirect_uri: getAuthRedirectUri(redirectTo),
     });

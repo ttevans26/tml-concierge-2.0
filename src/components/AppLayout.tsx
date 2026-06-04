@@ -18,12 +18,10 @@ export default function AppLayout() {
         Skip to content
       </a>
       <AppHeader />
-      {/* Add bottom padding on mobile so the fixed bottom nav doesn't overlap content.
-          Note: do NOT key on pathname — that unmounts the entire page tree on every
-          navigation, blowing away component state and forcing every effect/fetch to
-          rerun. Route components manage their own freshness via the trip store. */}
+      {/* Add bottom padding on mobile so the fixed bottom nav doesn't overlap content */}
       <main
         id="main-content"
+        key={pathname}
         className="flex-1 animate-editorial-in pb-safe-nav sm:pb-0"
       >
         {/* Route-level boundary: a crash inside one route does not white-screen

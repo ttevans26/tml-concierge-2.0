@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { useTripStore } from "@/stores/useTripStore";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect, useCallback } from "react";
-import { suppressDevAutoAuth } from "@/lib/devAutoAuth";
 import {
   Sheet,
   SheetContent,
@@ -176,8 +175,6 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
   const handleSignOut = async () => {
     await signOut();
     onOpenChange(false);
-    // Hard-navigate so route + in-memory state fully reset.
-    window.location.href = "/login";
   };
 
   const saveProfile = async () => {
@@ -204,13 +201,11 @@ export default function ProfileDrawer({ open, onOpenChange }: Props) {
   };
 
   const signOutAllDevices = async () => {
-    suppressDevAutoAuth();
     const { error } = await supabase.auth.signOut();
     if (error) toast.error("Sign-out failed");
     else {
       toast.success("Signed out of all devices");
       onOpenChange(false);
-      window.location.href = "/login";
     }
   };
 

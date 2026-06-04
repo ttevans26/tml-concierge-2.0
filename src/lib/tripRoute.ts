@@ -283,10 +283,11 @@ async function geocodeOnce(
   return new Promise((resolve) => {
     const req: any = { address: query };
     if (ctx?.bounds) req.bounds = ctx.bounds;
-    if (ctx?.countryCodes?.length) {
-      // Google supports a single country in componentRestrictions; pick the
-      // first when multiple exist and rely on bounds + post-filter for the rest.
-      req.componentRestrictions = { country: ctx.countryCodes };
+    if (ctx?.countryCodes?.length === 1) {
+      // Google's componentRestrictions.country MUST be a single string.
+      // For multi-country trips we skip the restriction and rely on bounds
+      // + post-filter to keep results in-region.
+      req.componentRestrictions = { country: ctx.countryCodes[0] };
     }
     geocoder.geocode(req, (results: any[] | null, status: string) => {
       if (status !== "OK" || !results || !results[0]) {

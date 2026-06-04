@@ -39,7 +39,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildSegments, computeReorderPatches } from "@/lib/segments";
 import { differenceInCalendarDays, addDays } from "date-fns";
-const EditItemDialog = lazy(() => import("./EditItemDialog"));
+const EditStayDialog = lazy(() => import("./EditStayDialog"));
 import ReshuffleLegsList from "./ReshuffleLegsList";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
@@ -275,9 +275,9 @@ export default function MatrixGrid() {
   }>({ open: false, leg: null, initialStart: "" });
 
   /* ---- Stay pill edit dialog state ---- */
-  const [stayEdit, setStayEdit] = useState<{ open: boolean; item: ItineraryItem | null }>({
+  const [stayEdit, setStayEdit] = useState<{ open: boolean; pill: StayPill | null }>({
     open: false,
-    item: null,
+    pill: null,
   });
 
   // Smart Pull state
@@ -338,9 +338,29 @@ export default function MatrixGrid() {
     const totals: Record<string, number> = {};
     for (const day of days) {
       const dateStr = format(day, "yyyy-MM-dd");
-      totals[dateStr] = itineraryItems
-        .filter((i) => i.date === dateStr && i.cost != null)
-        .reduce((sum, i) => sum + Number(i.cost), 0);
+      totals[dateStr] = 0;
+    }
+    for (const i of itineraryItems) {
+      if (i.cost == null || !i.date) continue;
+      const meta = (i.metadata as Record<string, unknown> | null) || {};
+      const metaEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : null;
+      // Range Stays → spread cost across each covered night.
+      if (i.category === "stays" && metaEnd && metaEnd >= i.date) {
+        try {
+          const start = parseISO(i.date);
+          const end = parseISO(metaEnd);
+          const nights = Math.max(1, differenceInCalendarDays(end, start) + 1);
+          const perNight = Number(i.cost) / nights;
+          for (let n = 0; n < nights; n++) {
+            const ds = format(addDays(start, n), "yyyy-MM-dd");
+            if (ds in totals) totals[ds] += perNight;
+          }
+        } catch {
+          if (i.date in totals) totals[i.date] += Number(i.cost);
+        }
+        continue;
+      }
+      if (i.date in totals) totals[i.date] += Number(i.cost);
     }
     return totals;
   }, [days, itineraryItems]);
@@ -358,19 +378,40 @@ export default function MatrixGrid() {
       if (stayRaw && activeTrip) {
         e.preventDefault();
         try {
-          const payload: { itemIds: string[]; startDate: string } = JSON.parse(stayRaw);
+          const payload: {
+            itemIds: string[];
+            startDate: string;
+            isRange?: boolean;
+            firstItemId?: string;
+          } = JSON.parse(stayRaw);
           const delta = differenceInCalendarDays(parseISO(dateStr), parseISO(payload.startDate));
           if (delta === 0) return;
           const byId = new Map(itineraryItems.map((i) => [i.id, i]));
-          const patches = payload.itemIds
-            .map((id) => byId.get(id))
-            .filter((it): it is ItineraryItem => !!it && !!it.date)
-            .map((it) => ({
-              id: it.id,
-              date: format(addDays(parseISO(it.date!), delta), "yyyy-MM-dd"),
-            }));
-          if (patches.length === 0) return;
-          await bulkUpdateItemDates(patches);
+
+          if (payload.isRange && payload.firstItemId) {
+            // Range row → shift date AND metadata.end_date by the same delta.
+            const it = byId.get(payload.firstItemId);
+            if (!it || !it.date) return;
+            const meta = (it.metadata as Record<string, unknown> | null) || {};
+            const metaEnd = typeof meta.end_date === "string" ? meta.end_date : null;
+            const newDate = format(addDays(parseISO(it.date), delta), "yyyy-MM-dd");
+            const nextMeta: Record<string, unknown> = { ...meta };
+            if (metaEnd) {
+              nextMeta.end_date = format(addDays(parseISO(metaEnd), delta), "yyyy-MM-dd");
+            }
+            await updateItineraryItem(it.id, { date: newDate, metadata: nextMeta });
+          } else {
+            // Legacy per-night rows → bulk-shift each row's date.
+            const patches = payload.itemIds
+              .map((id) => byId.get(id))
+              .filter((it): it is ItineraryItem => !!it && !!it.date)
+              .map((it) => ({
+                id: it.id,
+                date: format(addDays(parseISO(it.date!), delta), "yyyy-MM-dd"),
+              }));
+            if (patches.length === 0) return;
+            await bulkUpdateItemDates(patches);
+          }
           toast.success(`Stay moved to ${format(parseISO(dateStr), "MMM d")}`);
         } catch {
           toast.error("Failed to move stay");
@@ -441,7 +482,7 @@ export default function MatrixGrid() {
         toast.error("Failed to drop item");
       }
     },
-    [activeTrip, createItineraryItem, moveItineraryItem, itineraryItems, bulkUpdateItemDates]
+    [activeTrip, createItineraryItem, moveItineraryItem, itineraryItems, bulkUpdateItemDates, updateItineraryItem]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -551,7 +592,7 @@ export default function MatrixGrid() {
   );
 
   /* ---- Stay pills (consecutive same-stay grouping) ---- */
-  const stayPills = useMemo(() => getStayPills(itineraryItems), [itineraryItems]);
+  const stayPills = useMemo(() => getStayPills(itineraryItems, displayedLegs), [itineraryItems, displayedLegs]);
   const stayLanes = useMemo(() => assignLanes(stayPills), [stayPills]);
   const stayPillLane = useMemo(() => {
     const m = new Map<string, number>();
@@ -561,6 +602,82 @@ export default function MatrixGrid() {
   const maxStayLane = stayLanes.reduce((m, x) => Math.max(m, x.lane), -1);
   const STAY_LANE_H = 28;
   const staysRowHeight = Math.max(112, (maxStayLane + 1) * STAY_LANE_H + 16);
+
+  /* ---- Stay-pill edge resize (drag right/left edge to extend/shrink) ---- */
+  const [resizeState, setResizeState] = useState<{
+    pillId: string;
+    side: "left" | "right";
+    /** Live preview offset in day-columns; commits on mouseup. */
+    deltaDays: number;
+  } | null>(null);
+
+  const startStayResize = useCallback(
+    (e: React.MouseEvent, pill: StayPill, side: "left" | "right") => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      let lastDelta = 0;
+      setResizeState({ pillId: pill.id, side, deltaDays: 0 });
+
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        const delta = Math.round(dx / 176);
+        if (delta !== lastDelta) {
+          lastDelta = delta;
+          setResizeState({ pillId: pill.id, side, deltaDays: delta });
+        }
+      };
+
+      const onUp = async () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        const delta = lastDelta;
+        setResizeState(null);
+        if (delta === 0 || !activeTrip?.start_date || !activeTrip?.end_date) return;
+
+        if (!pill.isRange) {
+          toast.message(
+            "Open the stay to edit dates — this stay still uses the legacy per-night format.",
+          );
+          return;
+        }
+
+        const tripStart = activeTrip.start_date;
+        const tripEnd = activeTrip.end_date;
+        const item = pill.firstItem;
+        const meta = (item.metadata as Record<string, unknown> | null) || {};
+        const metaEnd =
+          typeof meta.end_date === "string" ? (meta.end_date as string) : pill.endDate;
+        let newStart = pill.startDate;
+        let newEnd = metaEnd;
+
+        if (side === "right") {
+          newEnd = format(addDays(parseISO(metaEnd), delta), "yyyy-MM-dd");
+          if (newEnd < newStart) newEnd = newStart;
+          if (newEnd > tripEnd) newEnd = tripEnd;
+        } else {
+          newStart = format(addDays(parseISO(pill.startDate), delta), "yyyy-MM-dd");
+          if (newStart < tripStart) newStart = tripStart;
+          if (newStart > newEnd) newStart = newEnd;
+        }
+
+        try {
+          await updateItineraryItem(item.id, {
+            ...(side === "left" ? { date: newStart } : {}),
+            metadata: { ...meta, end_date: newEnd },
+          });
+          const nights = differenceInCalendarDays(parseISO(newEnd), parseISO(newStart)) + 1;
+          toast.success(`Stay resized · ${nights} night${nights === 1 ? "" : "s"}`);
+        } catch {
+          toast.error("Failed to resize stay");
+        }
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [activeTrip, updateItineraryItem],
+  );
 
   const handleSaveLeg = useCallback(
     async (data: {
@@ -1069,38 +1186,73 @@ export default function MatrixGrid() {
                 if (!activeTrip?.start_date) return null;
                 const { startIdx, span } = legColumnSpan(activeTrip.start_date, pill);
                 if (startIdx < 0 || startIdx >= days.length) return null;
-                const width = Math.min(span, days.length - startIdx) * 176;
                 const hasConflict = pill.itemIds.some((id) => conflictIds.has(id));
+                // Apply live preview while resizing.
+                const resizing = resizeState?.pillId === pill.id ? resizeState : null;
+                const previewStartIdx =
+                  resizing?.side === "left" ? startIdx + resizing.deltaDays : startIdx;
+                const previewEndIdx =
+                  (resizing?.side === "right" ? startIdx + span - 1 + resizing.deltaDays : startIdx + span - 1);
+                const clampedStartIdx = Math.max(0, Math.min(days.length - 1, previewStartIdx));
+                const clampedEndIdx = Math.max(clampedStartIdx, Math.min(days.length - 1, previewEndIdx));
+                const previewSpan = clampedEndIdx - clampedStartIdx + 1;
+                const width = previewSpan * 176;
                 return (
-                  <button
+                  <div
                     key={pill.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData(
-                        "application/stay-pill",
-                        JSON.stringify({ itemIds: pill.itemIds, startDate: pill.startDate }),
-                      );
-                    }}
-                    onClick={() => setStayEdit({ open: true, item: pill.firstItem })}
-                    className={`pointer-events-auto absolute flex h-6 cursor-grab items-center gap-1.5 truncate rounded-sm border px-2.5 text-left transition-colors active:cursor-grabbing ${
-                      hasConflict
-                        ? "border-destructive/70 bg-destructive/10 ring-1 ring-destructive/40 hover:bg-destructive/20"
-                        : "border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
-                    }`}
+                    className="pointer-events-auto absolute"
                     style={{
-                      left: `${startIdx * 176 + 4}px`,
+                      left: `${clampedStartIdx * 176 + 4}px`,
                       width: `${width - 8}px`,
                       top: `${lane * STAY_LANE_H + 6}px`,
+                      height: "24px",
                     }}
-                    title={`${pill.title}${pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"} — drag to a new start date, click to edit`}
                   >
-                    <Bed className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
-                    <span className="truncate font-inter text-[11px] font-medium">
-                      {pill.title} · {pill.nights}n
-                    </span>
-                  </button>
+                    {/* Left edge resize handle */}
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      onMouseDown={(e) => startStayResize(e, pill, "left")}
+                      className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize rounded-l-sm hover:bg-accent/50"
+                      title="Drag to change check-in"
+                    />
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData(
+                          "application/stay-pill",
+                          JSON.stringify({
+                            itemIds: pill.itemIds,
+                            startDate: pill.startDate,
+                            isRange: pill.isRange,
+                            firstItemId: pill.firstItem.id,
+                          }),
+                        );
+                      }}
+                      onClick={() => setStayEdit({ open: true, pill })}
+                      className={`flex h-full w-full cursor-grab items-center gap-1.5 truncate rounded-sm border px-3 text-left transition-colors active:cursor-grabbing ${
+                        hasConflict
+                          ? "border-destructive/70 bg-destructive/10 ring-1 ring-destructive/40 hover:bg-destructive/20"
+                          : "border-accent/60 bg-accent/15 text-foreground hover:bg-accent/25"
+                      }`}
+                      title={`${pill.title}${pill.derivedLocation ? ` · ${pill.derivedLocation}` : pill.locationName ? ` · ${pill.locationName}` : ""} · ${pill.nights} night${pill.nights === 1 ? "" : "s"} — drag to move, drag edges to resize, click to edit`}
+                    >
+                      <Bed className="h-3 w-3 shrink-0 text-accent" strokeWidth={1.5} />
+                      <span className="truncate font-inter text-[11px] font-medium">
+                        {pill.title} · {pill.nights}n
+                      </span>
+                    </button>
+                    {/* Right edge resize handle */}
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      onMouseDown={(e) => startStayResize(e, pill, "right")}
+                      className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize rounded-r-sm hover:bg-accent/50"
+                      title="Drag to change check-out"
+                    />
+                  </div>
                 );
               })}
             </div>
@@ -1290,12 +1442,15 @@ export default function MatrixGrid() {
         </Suspense>
       )}
 
-      {stayEdit.open && stayEdit.item && (
+      {stayEdit.open && stayEdit.pill && activeTrip?.start_date && activeTrip?.end_date && (
         <Suspense fallback={null}>
-          <EditItemDialog
+          <EditStayDialog
             open={stayEdit.open}
             onOpenChange={(open) => setStayEdit((s) => ({ ...s, open }))}
-            item={stayEdit.item}
+            pill={stayEdit.pill}
+            tripStart={activeTrip.start_date}
+            tripEnd={activeTrip.end_date}
+            legs={displayedLegs}
           />
         </Suspense>
       )}

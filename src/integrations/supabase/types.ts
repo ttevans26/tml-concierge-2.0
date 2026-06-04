@@ -856,6 +856,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_trip_published: { Args: { _trip_id: string }; Returns: boolean }
       request_trip_access: {
         Args: { p_message?: string; p_share_token: string }
         Returns: string

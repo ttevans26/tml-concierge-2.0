@@ -1,68 +1,51 @@
-## Goal
-Restructure Stays so each Stay is **one row with a check-in → check-out range** (mirroring how Locations work today). Add a proper Edit Stay dialog with range pickers, fix the buggy grid drag-and-drop, and add an edge-drag resize. Location membership stays **derived from date overlap with Location segments** — no FK, no required parent.
+## Root cause
 
-## Root issues today
-- Each Stay is stored as **one row per night** and pills are *derived* by consolidating consecutive rows with the same title+place. This causes:
-  - Brittle merges (rename the hotel → pill splits)
-  - "Date assignment" is implicit and only via DnD
-  - Resize is impossible
-  - DnD moves all N rows in lockstep; any partial failure leaves orphans
-- Cost summed per `date` ignores multi-night allocation.
+Your trip has **7 `location` rows and 0 `stays` rows** in the database. The Matrix Grid renders Locations correctly because `getLegs()` reads from `category='location'` items. **Reshuffle and the segment banners read from `buildSegments()` in `src/lib/segments.ts`, which only looks at `category='stays'`.**
 
-## New model (no DB migration required — reuse JSONB)
-A Stay row in `itinerary_items` (`category='stays'`):
-- `date` = **check-in** (first night)
-- `metadata.end_date` = **last night, inclusive** (matches Locations convention)
-- `metadata.nightly_rate?` (optional) — display only
-- `cost` = total trip-line cost for the stay
-- `location_name`, `google_place_id` — unchanged
-- *(No FK to a Location row — membership is derived by date overlap.)*
+Result: every day is "unassigned" → only one synthetic segment is produced → Reshuffle bails out with *"Add stays in at least two locations to reshuffle the trip."* and the SegmentCard list renders empty banners. The Matrix Grid (7 location pills) and Reshuffle (zero usable segments) are reading from two different sources.
 
-Backwards compatibility: legacy per-night rows (no `metadata.end_date`) keep rendering via the existing `stayGroupKey` consolidation in `getStayPills`. New writes always use the range model. A future "Compact stays" backfill is out of scope.
+This is a regression from the Stays refactor — Stays are now optional/range-based, but the trip-structure logic was never re-pointed at Locations.
 
-## Changes
+## Fix
 
-### 1. `src/lib/locationLegs.ts` — `getStayPills` hybrid
-- If a row has `metadata.end_date`, emit one pill for that single row (range-based). Skip group-merging — the row IS the pill.
-- If no `metadata.end_date`, keep today's consecutive-night consolidation (legacy fallback).
-- Add `derivedLocation: string | null` on the pill, computed from the Location legs whose range overlaps the stay's start date.
+Repoint `buildSegments` (and anything downstream) at **Location items** as the primary source of truth, with stays-derived fallback only when no locations exist.
 
-### 2. New `src/components/workspace/EditStayDialog.tsx`
-- Two shadcn Calendar popovers: Check-in, Check-out (check-out is "morning of" — exclusive). Both clamped to `[tripStart, tripEnd]`. Check-out must be > check-in.
-- Shows derived nights and the inferred Location chip ("Inside: Paris") read-only — sourced from current Location segments.
-- Hotel name (text), `PlaceAutocomplete` for property, total cost, nightly rate (optional), confirmation code, cancellation deadline (existing fields).
-- On save: write one row with `date = check_in`, `metadata.end_date = check_out − 1 day`.
-- Delete button removes the single row. For legacy multi-row stays opened from a derived pill, treat Save as a "convert": delete the extra rows and persist a single range row.
+### `src/lib/segments.ts` — `buildSegments(trip, items)`
 
-### 3. `AddItemDialog.tsx`
-- When `category === 'stays'`, render the same range pickers and persist a single range row (no per-night fan-out).
+1. Scan `items` for `category === 'location'` rows with a `date`. Each row uses `date` as the start and `metadata.end_date` (or `date` itself) as the inclusive end. Clamp each range to `[trip.start_date, trip.end_date]`. Sort by start.
+2. If 1+ location rows exist:
+   - Emit one `LocationSegment` per location row using `location_name` (fallback to `title`) as the label.
+   - For any gap between consecutive locations, or before the first / after the last, emit an `isUnassigned` segment for the empty days inside the trip window.
+   - Skip the existing "anchored by stays" path entirely.
+3. If **no** location rows exist, keep today's stays-anchored behavior unchanged (backwards-compat for trips planned the old way).
+4. After segments are built, assign every item (any category) whose `date` falls inside a segment window to that segment's `itemIds`/`counts`, exactly as today.
+5. Drop the post-pass "merge adjacent stays with the same `location_name`" step when on the location path — locations are already the source of truth and shouldn't be merged.
 
-### 4. `MatrixGrid.tsx` — Stays drag + resize
-- **Move** (`handleDrop` stay-pill branch): compute delta; patch the single row's `date` and shift `metadata.end_date` by the same delta in one `updateItineraryItem` call. For legacy multi-row pills, keep the existing per-row bulk patch path.
-- **Right-edge resize handle**: add a 6 px grab strip on the right edge of each Stay pill. Drag to extend/shrink — snaps to day columns. Updates `metadata.end_date` only. Min 1 night, max clamped to `tripEnd`.
-- **Left-edge resize handle**: same on the left; updates `date`. Won't allow `date >= end_date`.
-- Touch targets: handles widen on hover; pill body remains the drag-to-move target.
-- Lane stacking via existing `assignLanes` — no change needed; overlaps stack visually (per user choice).
+### `src/components/workspace/ReshuffleLegsList.tsx`
 
-### 5. Conflict logic (`src/lib/conflictResolution.ts`)
-- Drop the hard "1 stay/night" rule. Overlapping stays render in stacked lanes (already supported) and only surface a soft warning chip on the pill ("Overlaps {OtherStay}") — never block save.
+- No structural changes needed. With real segments now flowing in, the existing DnD list, preview math, and `computeReorderPatches` will work.
+- The `legForSegment` lookup already matches by date overlap, so each segment will resolve to its corresponding Matrix-Grid leg and the rename/cascade flow keeps working.
+- The "at least two locations" guard (`baseSegments.length < 2`) stays — but it will now correctly count your 7 locations instead of 1 synthetic block.
 
-### 6. Daily totals (`MatrixGrid.tsx` `dailyTotals`)
-- For Stays with a range, allocate `cost / nights` to each covered day so the "Daily $" row reflects nightly burn. Other categories continue summing by `date`.
+### `src/components/workspace/OrphanItemsBanner.tsx`
 
-### 7. Memory update
-After build, update `mem://logic/stay-mapping` and the related Matrix Logic note to reflect: Stays are one range row; location is derived; overlaps allowed (stacked).
+- No change. `findOrphanedItems` already uses the trip's date window, not segments. (Your current trip window covers all 7 locations, so this banner should disappear once segments populate.)
 
-## Out of scope
-- No new DB columns / no migration.
-- No explicit Stay→Location FK (kept as a future option).
-- No automatic backfill of legacy per-night rows; legacy rows still render via fallback.
-- No Splurge Engine re-architecture — only the daily allocation tweak above.
+### Out of scope
+
+- No DB schema changes.
+- No changes to Stays data model — the previous refactor stands.
+- No visual / coloring changes to the Matrix Grid (it already reads Locations).
+- No new auto-creation of Location rows from Stays.
 
 ## Files
-- `src/lib/locationLegs.ts` — hybrid `getStayPills` + `derivedLocation`
-- `src/components/workspace/EditStayDialog.tsx` — new file (range-based)
-- `src/components/workspace/AddItemDialog.tsx` — Stays branch with range pickers
-- `src/components/workspace/MatrixGrid.tsx` — drop handler, resize handles, daily totals allocation
-- `src/lib/conflictResolution.ts` — soften stay-overlap rule
-- `mem://logic/stay-mapping` (memory update at end)
+
+- `src/lib/segments.ts` — rewrite `buildSegments` to prefer Location items; keep stays fallback.
+- (Verify only, no edits expected) `src/components/workspace/ReshuffleLegsList.tsx`, `OrphanItemsBanner.tsx`, `SegmentCard.tsx`.
+
+## Verification after build
+
+1. Open `/trip/affb0049-…` → Reshuffle panel shows 7 draggable rows (Paris → Sherborne).
+2. Drag a row, confirm preview dates shift, Apply persists.
+3. Matrix Grid Location band continues to render the same 7 pills (coloring/labels unchanged).
+4. Orphan banner does not appear (all items fall inside Aug 14 – Sep 10).

@@ -1412,13 +1412,26 @@ export default function MatrixGrid() {
 
       {activeTrip && dialogState.open && (
         <Suspense fallback={null}>
-          <AddItemDialog
-            open={dialogState.open}
-            onOpenChange={(open) => setDialogState((s) => ({ ...s, open }))}
-            tripId={activeTrip.id}
-            date={dialogState.date}
-            category={dialogState.category}
-          />
+          {dialogState.category === "stays" && activeTrip.start_date && activeTrip.end_date ? (
+            <StayDialog
+              mode="create"
+              open={dialogState.open}
+              onOpenChange={(open) => setDialogState((s) => ({ ...s, open }))}
+              tripId={activeTrip.id}
+              tripStart={activeTrip.start_date}
+              tripEnd={activeTrip.end_date}
+              legs={displayedLegs}
+              defaultDate={dialogState.date}
+            />
+          ) : (
+            <AddItemDialog
+              open={dialogState.open}
+              onOpenChange={(open) => setDialogState((s) => ({ ...s, open }))}
+              tripId={activeTrip.id}
+              date={dialogState.date}
+              category={dialogState.category}
+            />
+          )}
         </Suspense>
       )}
 
@@ -1444,9 +1457,11 @@ export default function MatrixGrid() {
 
       {stayEdit.open && stayEdit.pill && activeTrip?.start_date && activeTrip?.end_date && (
         <Suspense fallback={null}>
-          <EditStayDialog
+          <StayDialog
+            mode="edit"
             open={stayEdit.open}
             onOpenChange={(open) => setStayEdit((s) => ({ ...s, open }))}
+            tripId={activeTrip.id}
             pill={stayEdit.pill}
             tripStart={activeTrip.start_date}
             tripEnd={activeTrip.end_date}

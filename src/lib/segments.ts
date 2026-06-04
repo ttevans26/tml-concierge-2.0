@@ -35,6 +35,91 @@ export function buildSegments(trip: Trip, items: ItineraryItem[]): LocationSegme
   const totalDays = differenceInCalendarDays(te, ts) + 1;
   if (totalDays <= 0) return [];
 
+  // -------------------------------------------------------------------------
+  // Preferred path: build segments from `category='location'` items.
+  // Locations are the source of truth in the Matrix Grid (see getLegs()), so
+  // Reshuffle and the segment banners must read from the same source.
+  // -------------------------------------------------------------------------
+  const tripStartIso = trip.start_date;
+  const tripEndIso = trip.end_date;
+  const locationRows = items
+    .filter((i) => i.category === "location" && !!i.date)
+    .map((i) => {
+      const meta = (i.metadata as Record<string, unknown> | null) ?? {};
+      const rawEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : i.date!;
+      // Clamp to trip window.
+      const start = i.date! < tripStartIso ? tripStartIso : i.date!;
+      const end = rawEnd > tripEndIso ? tripEndIso : rawEnd < tripStartIso ? tripStartIso : rawEnd;
+      const safeEnd = end < start ? start : end;
+      return { item: i, start, end: safeEnd };
+    })
+    .filter((r) => r.start <= tripEndIso && r.end >= tripStartIso)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  if (locationRows.length > 0) {
+    const segments: LocationSegment[] = [];
+    let synthIdx = 0;
+    let cursorIso = tripStartIso;
+
+    const pushUnassigned = (startIso: string, endIso: string) => {
+      if (startIso > endIso) return;
+      const nights = differenceInCalendarDays(parseISO(endIso), parseISO(startIso)) + 1;
+      segments.push({
+        id: `__unassigned_${synthIdx++}|${startIso}`,
+        location: "Unassigned days",
+        isUnassigned: true,
+        startDate: startIso,
+        endDate: endIso,
+        nights,
+        itemIds: [],
+        counts: {},
+      });
+    };
+
+    for (const row of locationRows) {
+      if (row.start > cursorIso) {
+        const gapEnd = format(addDays(parseISO(row.start), -1), "yyyy-MM-dd");
+        pushUnassigned(cursorIso, gapEnd);
+      }
+      const segStart = row.start < cursorIso ? cursorIso : row.start;
+      if (segStart > row.end) continue; // fully consumed by overlap
+      const nights = differenceInCalendarDays(parseISO(row.end), parseISO(segStart)) + 1;
+      const label =
+        (row.item.location_name?.trim() || row.item.title?.trim()) || "Location";
+      segments.push({
+        id: `${row.item.id}|${segStart}`,
+        location: label,
+        isUnassigned: false,
+        startDate: segStart,
+        endDate: row.end,
+        nights,
+        itemIds: [],
+        counts: {},
+      });
+      cursorIso = format(addDays(parseISO(row.end), 1), "yyyy-MM-dd");
+    }
+    if (cursorIso <= tripEndIso) {
+      pushUnassigned(cursorIso, tripEndIso);
+    }
+
+    // Assign every item that falls inside a segment window.
+    for (const it of items) {
+      if (!it.date) continue;
+      for (const seg of segments) {
+        if (it.date >= seg.startDate && it.date <= seg.endDate) {
+          seg.itemIds.push(it.id);
+          seg.counts[it.category] = (seg.counts[it.category] ?? 0) + 1;
+          break;
+        }
+      }
+    }
+    return segments;
+  }
+
+  // -------------------------------------------------------------------------
+  // Fallback: legacy stays-anchored segments (kept for trips with no Location
+  // rows yet — preserves backwards compatibility).
+  // -------------------------------------------------------------------------
   // For each day in the trip window, find the Stay location (if any).
   const stays = items.filter((i) => i.category === "stays" && i.date);
   const dayLabels: (string | null)[] = new Array(totalDays).fill(null);

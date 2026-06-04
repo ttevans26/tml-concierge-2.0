@@ -147,12 +147,17 @@ export async function buildRouteWithGeocoding(
     const stored = u.lat != null && u.lng != null
       ? { lat: u.lat, lng: u.lng, city: u.locationName || u.title }
       : null;
-    const queryBase = u.locationName || u.title;
+    // Prefer the structured location_name (a real city) over the freeform
+    // stay title ("Airbnb Antibes") which geocodes poorly. Only fall back
+    // to the trip destination when it is a single region — multi-country
+    // strings like "UK, France, Italy" return a useless centroid.
+    const destSingle = isSingleRegion(destination);
     const hit =
       hinted ||
       stored ||
-      (await geocodeOnce(queryBase)) ||
-      (destination ? await geocodeOnce(`${queryBase}, ${destination}`) : null);
+      (u.locationName ? await geocodeOnce(u.locationName) : null) ||
+      (await geocodeOnce(u.title)) ||
+      (destSingle ? await geocodeOnce(`${u.locationName || u.title}, ${destination}`) : null);
     if (!hit) continue;
 
     const label = shortenLabel(hit.city || u.locationName || u.title);
@@ -228,4 +233,12 @@ function finiteNumber(value: unknown): number | null {
 function findRouteHint(raw: string): RouteHint | null {
   const normalized = normalizeRouteText(raw);
   return ROUTE_HINTS.find((hint) => normalized.includes(normalizeRouteText(hint.match))) ?? null;
+}
+
+/** Treat strings with 2+ comma-separated regions (e.g. "UK, France, Italy")
+ *  as multi-region. Those aren't safe to geocode as a single point. */
+function isSingleRegion(raw: string | null): raw is string {
+  if (!raw) return false;
+  const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+  return parts.length <= 1;
 }

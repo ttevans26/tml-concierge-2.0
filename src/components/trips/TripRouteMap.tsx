@@ -65,11 +65,18 @@ export default function TripRouteMap({ waypoints, fallbackQuery, height = 320, i
         return;
       }
 
+      // Guard against mounting a map centered at 0,0 (Atlantic/Africa)
+      // when we have neither a waypoint nor a resolved fallback yet.
+      if (!hasPoints && !fallbackQuery) {
+        setStatus("loading");
+        return;
+      }
+
       const map = new g.maps.Map(containerRef.current, {
         zoom: 5,
         center: hasPoints
           ? { lat: waypoints[0].lat, lng: waypoints[0].lng }
-          : { lat: 20, lng: 0 },
+          : { lat: 30, lng: 10 }, // temp center, overwritten once geocode resolves
         disableDefaultUI: true,
         gestureHandling: "cooperative",
         backgroundColor: "#FDFCF8",
@@ -81,16 +88,30 @@ export default function TripRouteMap({ waypoints, fallbackQuery, height = 320, i
         try {
           const geocoder = new g.maps.Geocoder();
           geocoder.geocode({ address: fallbackQuery }, (results: any[] | null, st: string) => {
-            if (st === "OK" && results?.[0]) {
-              const loc = results[0].geometry.location;
+            const r = results?.[0];
+            // Reject results whose viewport spans more than ~one country
+            // (multi-country fallback strings return a useless centroid).
+            let viewportOk = true;
+            const vp = r?.geometry?.viewport;
+            if (vp?.getNorthEast && vp?.getSouthWest) {
+              const ne = vp.getNorthEast();
+              const sw = vp.getSouthWest();
+              if (Math.abs(ne.lat() - sw.lat()) > 15 || Math.abs(ne.lng() - sw.lng()) > 15) {
+                viewportOk = false;
+              }
+            }
+            if (st === "OK" && r && viewportOk) {
+              const loc = r.geometry.location;
               map.setCenter(loc);
               map.setZoom(6);
               new g.maps.Marker({ position: loc, map, icon: numberedMarkerIcon(1) });
+              setStatus("ready");
+            } else {
+              setStatus("empty");
             }
-            setStatus("ready");
           });
         } catch {
-          setStatus("ready");
+          setStatus("empty");
         }
         return;
       }

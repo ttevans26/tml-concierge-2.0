@@ -406,8 +406,14 @@ export const useTripStore = create<TripStore>()(
 
   /* ---- Fetch ---- */
 
-  fetchTrips: async () => {
-    set({ loading: true });
+  fetchTrips: async (opts) => {
+    const force = opts?.force === true;
+    if (!force && _tripsFetchedAt && Date.now() - _tripsFetchedAt < CACHE_TTL_MS) {
+      return;
+    }
+    // Only show loading state for the first (cold) fetch so background
+    // revalidations don't trigger skeletons on cached pages.
+    if (!_tripsFetchedAt) set({ loading: true });
     const { data, error } = await supabase
       .from("trips")
       .select(TRIP_COLUMNS)
@@ -417,6 +423,7 @@ export const useTripStore = create<TripStore>()(
       console.error("Supabase fetchTrips error:", error);
     } else {
       set({ trips: (data as Trip[]) || [] });
+      _tripsFetchedAt = Date.now();
       if (data && data.length === PAGE_SOFT_LIMIT) {
         console.warn(`fetchTrips hit soft cap of ${PAGE_SOFT_LIMIT} — pagination needed.`);
       }
@@ -424,26 +431,42 @@ export const useTripStore = create<TripStore>()(
     set({ loading: false });
   },
 
-  fetchItineraryItems: async (tripId) => {
+  fetchItineraryItems: async (tripId, opts) => {
+    const force = opts?.force === true;
+    const last = _itineraryFetchedAt.get(tripId);
+    if (!force && last && Date.now() - last < CACHE_TTL_MS) {
+      return;
+    }
     const { data, error } = await supabase
       .from("itinerary_items")
       .select(ITINERARY_COLUMNS)
       .eq("trip_id", tripId)
       .order("sort_order")
       .limit(PAGE_SOFT_LIMIT);
-    if (!error && data) set({ itineraryItems: data as ItineraryItem[] });
+    if (!error && data) {
+      set({ itineraryItems: data as ItineraryItem[] });
+      _itineraryFetchedAt.set(tripId, Date.now());
+    }
     if (data && data.length === PAGE_SOFT_LIMIT) {
       console.warn(`fetchItineraryItems hit soft cap of ${PAGE_SOFT_LIMIT} for trip ${tripId}.`);
     }
   },
 
-  fetchFlights: async (tripId) => {
+  fetchFlights: async (tripId, opts) => {
+    const force = opts?.force === true;
+    const last = _flightsFetchedAt.get(tripId);
+    if (!force && last && Date.now() - last < CACHE_TTL_MS) {
+      return;
+    }
     const { data, error } = await supabase
       .from("flight_tracking")
       .select(FLIGHT_COLUMNS)
       .eq("trip_id", tripId)
       .order("departure_time");
-    if (!error && data) set({ flights: data as FlightTracking[] });
+    if (!error && data) {
+      set({ flights: data as FlightTracking[] });
+      _flightsFetchedAt.set(tripId, Date.now());
+    }
   },
 
   fetchProfile: async () => {

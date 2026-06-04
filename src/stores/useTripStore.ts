@@ -25,6 +25,9 @@ const PROFILE_COLUMNS =
 
 const PAGE_SOFT_LIMIT = 500;
 
+/** How long a cached fetch stays "fresh" before a refetch is needed. */
+const CACHE_TTL_MS = 60_000;
+
 /* ------------------------------------------------------------------ */
 /*  Types (mirrors DB schema)                                         */
 /* ------------------------------------------------------------------ */
@@ -222,9 +225,10 @@ interface TripStore {
   consumeConciergePrompt: () => string | null;
 
   /* actions */
-  fetchTrips: () => Promise<void>;
-  fetchItineraryItems: (tripId: string) => Promise<void>;
-  fetchFlights: (tripId: string) => Promise<void>;
+  /** Cached: returns immediately if data is < 60s old unless `force` is set. */
+  fetchTrips: (opts?: { force?: boolean }) => Promise<void>;
+  fetchItineraryItems: (tripId: string, opts?: { force?: boolean }) => Promise<void>;
+  fetchFlights: (tripId: string, opts?: { force?: boolean }) => Promise<void>;
   fetchProfile: () => Promise<void>;
   setActiveTrip: (trip: Trip | null) => void;
 
@@ -402,8 +406,14 @@ export const useTripStore = create<TripStore>()(
 
   /* ---- Fetch ---- */
 
-  fetchTrips: async () => {
-    set({ loading: true });
+  fetchTrips: async (opts) => {
+    const force = opts?.force === true;
+    if (!force && _tripsFetchedAt && Date.now() - _tripsFetchedAt < CACHE_TTL_MS) {
+      return;
+    }
+    // Only show loading state for the first (cold) fetch so background
+    // revalidations don't trigger skeletons on cached pages.
+    if (!_tripsFetchedAt) set({ loading: true });
     const { data, error } = await supabase
       .from("trips")
       .select(TRIP_COLUMNS)
@@ -413,6 +423,7 @@ export const useTripStore = create<TripStore>()(
       console.error("Supabase fetchTrips error:", error);
     } else {
       set({ trips: (data as Trip[]) || [] });
+      _tripsFetchedAt = Date.now();
       if (data && data.length === PAGE_SOFT_LIMIT) {
         console.warn(`fetchTrips hit soft cap of ${PAGE_SOFT_LIMIT} — pagination needed.`);
       }
@@ -420,26 +431,42 @@ export const useTripStore = create<TripStore>()(
     set({ loading: false });
   },
 
-  fetchItineraryItems: async (tripId) => {
+  fetchItineraryItems: async (tripId, opts) => {
+    const force = opts?.force === true;
+    const last = _itineraryFetchedAt.get(tripId);
+    if (!force && last && Date.now() - last < CACHE_TTL_MS) {
+      return;
+    }
     const { data, error } = await supabase
       .from("itinerary_items")
       .select(ITINERARY_COLUMNS)
       .eq("trip_id", tripId)
       .order("sort_order")
       .limit(PAGE_SOFT_LIMIT);
-    if (!error && data) set({ itineraryItems: data as ItineraryItem[] });
+    if (!error && data) {
+      set({ itineraryItems: data as ItineraryItem[] });
+      _itineraryFetchedAt.set(tripId, Date.now());
+    }
     if (data && data.length === PAGE_SOFT_LIMIT) {
       console.warn(`fetchItineraryItems hit soft cap of ${PAGE_SOFT_LIMIT} for trip ${tripId}.`);
     }
   },
 
-  fetchFlights: async (tripId) => {
+  fetchFlights: async (tripId, opts) => {
+    const force = opts?.force === true;
+    const last = _flightsFetchedAt.get(tripId);
+    if (!force && last && Date.now() - last < CACHE_TTL_MS) {
+      return;
+    }
     const { data, error } = await supabase
       .from("flight_tracking")
       .select(FLIGHT_COLUMNS)
       .eq("trip_id", tripId)
       .order("departure_time");
-    if (!error && data) set({ flights: data as FlightTracking[] });
+    if (!error && data) {
+      set({ flights: data as FlightTracking[] });
+      _flightsFetchedAt.set(tripId, Date.now());
+    }
   },
 
   fetchProfile: async () => {
@@ -742,6 +769,15 @@ type HistoryOp =
 const MAX_HISTORY = 50;
 const undoStack: HistoryOp[] = [];
 const redoStack: HistoryOp[] = [];
+
+/* ------------------------------------------------------------------ */
+/*  Fetch freshness tracking (module-scoped so it survives store      */
+/*  partialize/rehydration). Reset on full page reload, which is the  */
+/*  intended boundary for revalidation.                               */
+/* ------------------------------------------------------------------ */
+let _tripsFetchedAt: number | null = null;
+const _itineraryFetchedAt = new Map<string, number>();
+const _flightsFetchedAt = new Map<string, number>();
 
 function snapshot(item: ItineraryItem): Record<string, unknown> {
   // Return a plain object copy used for restoring values via UPDATE.

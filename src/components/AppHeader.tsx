@@ -12,6 +12,26 @@ import OfflineIndicator from "@/components/OfflineIndicator";
 const ProfileDrawer = lazy(() => import("@/components/ProfileDrawer"));
 const SchedulingModal = lazy(() => import("@/components/SchedulingModal"));
 
+/**
+ * Prefetch maps each nav path to the dynamic `import()` of its lazy route
+ * chunk. Calling it on hover/focus warms the browser cache so the click
+ * itself has zero network latency.
+ */
+const prefetchers: Record<string, () => Promise<unknown>> = {
+  "/studio": () => import("@/pages/Studio"),
+  "/tools": () => import("@/pages/Tools"),
+  "/today": () => import("@/pages/Today"),
+  "/network": () => import("@/pages/Network"),
+};
+const prefetched = new Set<string>();
+const prefetch = (path: string) => {
+  if (prefetched.has(path)) return;
+  const fn = prefetchers[path];
+  if (!fn) return;
+  prefetched.add(path);
+  void fn().catch(() => prefetched.delete(path));
+};
+
 const navItems = [
   { label: "Trips", path: "/" },
   { label: "Studio", path: "/studio" },
@@ -60,6 +80,8 @@ export default function AppHeader() {
               <button
                 key={item.label}
                 onClick={() => navigate(item.path)}
+                onMouseEnter={() => prefetch(item.path)}
+                onFocus={() => prefetch(item.path)}
                 className={cn(
                   "relative px-5 py-2 font-playfair text-base transition-colors duration-quick ease-editorial sm:px-6 sm:text-[17px]",
                   active
@@ -84,6 +106,8 @@ export default function AppHeader() {
             size="sm"
             className="hidden gap-1.5 font-inter text-xs text-muted-foreground hover:text-accent md:inline-flex"
             onClick={() => navigate("/network")}
+            onMouseEnter={() => prefetch("/network")}
+            onFocus={() => prefetch("/network")}
           >
             <Users className="h-3 w-3 text-accent" strokeWidth={1.5} />
             Travel Network

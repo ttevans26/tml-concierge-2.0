@@ -113,6 +113,7 @@ export function buildRouteFromItems(items: ItineraryItem[]): Waypoint[] {
     const lat = Number(item.location_lat);
     const lng = Number(item.location_lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (isLikelyNullIsland(lat, lng)) continue;
 
     const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
     const labelKey = (item.location_name || item.title || "").trim().toLowerCase();

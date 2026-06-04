@@ -770,6 +770,15 @@ const MAX_HISTORY = 50;
 const undoStack: HistoryOp[] = [];
 const redoStack: HistoryOp[] = [];
 
+/* ------------------------------------------------------------------ */
+/*  Fetch freshness tracking (module-scoped so it survives store      */
+/*  partialize/rehydration). Reset on full page reload, which is the  */
+/*  intended boundary for revalidation.                               */
+/* ------------------------------------------------------------------ */
+let _tripsFetchedAt: number | null = null;
+const _itineraryFetchedAt = new Map<string, number>();
+const _flightsFetchedAt = new Map<string, number>();
+
 function snapshot(item: ItineraryItem): Record<string, unknown> {
   // Return a plain object copy used for restoring values via UPDATE.
   // We deliberately omit server-managed fields.

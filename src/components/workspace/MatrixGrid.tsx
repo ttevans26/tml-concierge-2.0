@@ -359,19 +359,40 @@ export default function MatrixGrid() {
       if (stayRaw && activeTrip) {
         e.preventDefault();
         try {
-          const payload: { itemIds: string[]; startDate: string } = JSON.parse(stayRaw);
+          const payload: {
+            itemIds: string[];
+            startDate: string;
+            isRange?: boolean;
+            firstItemId?: string;
+          } = JSON.parse(stayRaw);
           const delta = differenceInCalendarDays(parseISO(dateStr), parseISO(payload.startDate));
           if (delta === 0) return;
           const byId = new Map(itineraryItems.map((i) => [i.id, i]));
-          const patches = payload.itemIds
-            .map((id) => byId.get(id))
-            .filter((it): it is ItineraryItem => !!it && !!it.date)
-            .map((it) => ({
-              id: it.id,
-              date: format(addDays(parseISO(it.date!), delta), "yyyy-MM-dd"),
-            }));
-          if (patches.length === 0) return;
-          await bulkUpdateItemDates(patches);
+
+          if (payload.isRange && payload.firstItemId) {
+            // Range row → shift date AND metadata.end_date by the same delta.
+            const it = byId.get(payload.firstItemId);
+            if (!it || !it.date) return;
+            const meta = (it.metadata as Record<string, unknown> | null) || {};
+            const metaEnd = typeof meta.end_date === "string" ? meta.end_date : null;
+            const newDate = format(addDays(parseISO(it.date), delta), "yyyy-MM-dd");
+            const nextMeta: Record<string, unknown> = { ...meta };
+            if (metaEnd) {
+              nextMeta.end_date = format(addDays(parseISO(metaEnd), delta), "yyyy-MM-dd");
+            }
+            await updateItineraryItem(it.id, { date: newDate, metadata: nextMeta });
+          } else {
+            // Legacy per-night rows → bulk-shift each row's date.
+            const patches = payload.itemIds
+              .map((id) => byId.get(id))
+              .filter((it): it is ItineraryItem => !!it && !!it.date)
+              .map((it) => ({
+                id: it.id,
+                date: format(addDays(parseISO(it.date!), delta), "yyyy-MM-dd"),
+              }));
+            if (patches.length === 0) return;
+            await bulkUpdateItemDates(patches);
+          }
           toast.success(`Stay moved to ${format(parseISO(dateStr), "MMM d")}`);
         } catch {
           toast.error("Failed to move stay");
@@ -442,7 +463,7 @@ export default function MatrixGrid() {
         toast.error("Failed to drop item");
       }
     },
-    [activeTrip, createItineraryItem, moveItineraryItem, itineraryItems, bulkUpdateItemDates]
+    [activeTrip, createItineraryItem, moveItineraryItem, itineraryItems, bulkUpdateItemDates, updateItineraryItem]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

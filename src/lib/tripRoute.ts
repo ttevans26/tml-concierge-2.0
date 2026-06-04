@@ -235,7 +235,18 @@ export async function buildRouteWithGeocoding(
     });
   }
 
-  return waypoints.length >= 1 ? waypoints : directFallback;
+  if (waypoints.length >= 1) return waypoints;
+  // Filter the direct fallback against the destination bounds if we have one,
+  // so a stray bad coord can't drag the map to Africa.
+  if (ctx.bounds && directFallback.length) {
+    const g = (window as any).google;
+    if (g?.maps?.LatLng) {
+      return directFallback.filter((w) =>
+        ctx.bounds.contains(new g.maps.LatLng(w.lat, w.lng)),
+      );
+    }
+  }
+  return directFallback;
 }
 
 async function geocodeOnce(

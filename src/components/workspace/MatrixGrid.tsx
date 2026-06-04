@@ -339,9 +339,29 @@ export default function MatrixGrid() {
     const totals: Record<string, number> = {};
     for (const day of days) {
       const dateStr = format(day, "yyyy-MM-dd");
-      totals[dateStr] = itineraryItems
-        .filter((i) => i.date === dateStr && i.cost != null)
-        .reduce((sum, i) => sum + Number(i.cost), 0);
+      totals[dateStr] = 0;
+    }
+    for (const i of itineraryItems) {
+      if (i.cost == null || !i.date) continue;
+      const meta = (i.metadata as Record<string, unknown> | null) || {};
+      const metaEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : null;
+      // Range Stays → spread cost across each covered night.
+      if (i.category === "stays" && metaEnd && metaEnd >= i.date) {
+        try {
+          const start = parseISO(i.date);
+          const end = parseISO(metaEnd);
+          const nights = Math.max(1, differenceInCalendarDays(end, start) + 1);
+          const perNight = Number(i.cost) / nights;
+          for (let n = 0; n < nights; n++) {
+            const ds = format(addDays(start, n), "yyyy-MM-dd");
+            if (ds in totals) totals[ds] += perNight;
+          }
+        } catch {
+          if (i.date in totals) totals[i.date] += Number(i.cost);
+        }
+        continue;
+      }
+      if (i.date in totals) totals[i.date] += Number(i.cost);
     }
     return totals;
   }, [days, itineraryItems]);

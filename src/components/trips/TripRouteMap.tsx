@@ -38,7 +38,15 @@ function numberedMarkerIcon(n: number): any {
   };
 }
 
-export default function TripRouteMap({ waypoints, fallbackQuery, height = 320, isLoading = false }: Props) {
+export default function TripRouteMap({ waypoints: rawWaypoints, fallbackQuery, height = 320, isLoading = false }: Props) {
+  // Defensive: strip Null Island and non-finite coords so a bad row can't
+  // drop a pin in the Gulf of Guinea.
+  const waypoints = rawWaypoints.filter(
+    (w) =>
+      Number.isFinite(w.lat) &&
+      Number.isFinite(w.lng) &&
+      !(Math.abs(w.lat) < 0.001 && Math.abs(w.lng) < 0.001),
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
 

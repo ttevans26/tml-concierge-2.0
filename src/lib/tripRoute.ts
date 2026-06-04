@@ -113,6 +113,7 @@ export function buildRouteFromItems(items: ItineraryItem[]): Waypoint[] {
     const lat = Number(item.location_lat);
     const lng = Number(item.location_lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (isLikelyNullIsland(lat, lng)) continue;
 
     const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
     const labelKey = (item.location_name || item.title || "").trim().toLowerCase();
@@ -162,12 +163,16 @@ export async function buildRouteWithGeocoding(
     const key = normalizeRouteText(locationName || title);
     if (!key || titleSeen.has(key)) continue;
     titleSeen.add(key);
+    const candLat = finiteNumber(i.location_lat);
+    const candLng = finiteNumber(i.location_lng);
+    const validStored =
+      candLat != null && candLng != null && !isLikelyNullIsland(candLat, candLng);
     unique.push({
       title,
       locationName,
       date: i.date,
-      lat: finiteNumber(i.location_lat),
-      lng: finiteNumber(i.location_lng),
+      lat: validStored ? candLat : null,
+      lng: validStored ? candLng : null,
       sortOrder: i.sort_order ?? 0,
       hint: findRouteHint(locationName || title),
     });
@@ -230,7 +235,18 @@ export async function buildRouteWithGeocoding(
     });
   }
 
-  return waypoints.length >= 1 ? waypoints : directFallback;
+  if (waypoints.length >= 1) return waypoints;
+  // Filter the direct fallback against the destination bounds if we have one,
+  // so a stray bad coord can't drag the map to Africa.
+  if (ctx.bounds && directFallback.length) {
+    const g = (window as any).google;
+    if (g?.maps?.LatLng) {
+      return directFallback.filter((w) =>
+        ctx.bounds.contains(new g.maps.LatLng(w.lat, w.lng)),
+      );
+    }
+  }
+  return directFallback;
 }
 
 async function geocodeOnce(
@@ -314,6 +330,11 @@ function normalizeRouteText(raw: string): string {
 function finiteNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Detect coords pinned to (0,0) "Null Island" — a common bad-data sentinel. */
+function isLikelyNullIsland(lat: number, lng: number): boolean {
+  return Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001;
 }
 
 function findRouteHint(raw: string): RouteHint | null {

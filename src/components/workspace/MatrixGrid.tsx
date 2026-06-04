@@ -39,7 +39,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildSegments, computeReorderPatches } from "@/lib/segments";
 import { differenceInCalendarDays, addDays } from "date-fns";
-const EditStayDialog = lazy(() => import("./EditStayDialog"));
+const StayDialog = lazy(() => import("./StayDialog"));
 import ReshuffleLegsList from "./ReshuffleLegsList";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */

@@ -75,8 +75,61 @@ export default function CalendarStaysView() {
     [itineraryItems, legs],
   );
 
+  /**
+   * Color pills by city (derived Location leg). Same city → same color across
+   * the trip. Chronological walk picks the next palette slot that does NOT
+   * match the previous group or any pill whose endDate+1 == this pill.startDate
+   * (back-to-back transitions), so contiguous bands never share a color.
+   */
+  const cityKey = (p: StayPill): string =>
+    (p.derivedLocation || p.locationName || "__unassigned").trim().toLowerCase();
+
+  const colorByPillId = useMemo(() => {
+    const sorted = pills.slice().sort((a, b) => a.startDate.localeCompare(b.startDate));
+    const cityToSlot = new Map<string, number>();
+    const result = new Map<string, number>(); // pillId → palette index
+    let prevCityKey: string | null = null;
+    for (let i = 0; i < sorted.length; i++) {
+      const p = sorted[i];
+      const key = cityKey(p);
+      let slot = cityToSlot.get(key);
+      if (slot === undefined) {
+        // Collect forbidden slots: previous group + any pill adjacent in time.
+        const forbidden = new Set<number>();
+        if (prevCityKey && cityToSlot.has(prevCityKey)) {
+          forbidden.add(cityToSlot.get(prevCityKey)!);
+        }
+        for (let j = 0; j < i; j++) {
+          const other = sorted[j];
+          const otherKey = cityKey(other);
+          if (otherKey === key) continue;
+          // adjacency: other ends the day before p starts, or ranges overlap/touch
+          const otherEndPlus1 = format(addDays(parseISO(other.endDate), 1), "yyyy-MM-dd");
+          if (otherEndPlus1 >= p.startDate && other.startDate <= p.endDate) {
+            const s = cityToSlot.get(otherKey);
+            if (s !== undefined) forbidden.add(s);
+          }
+        }
+        // Pick first palette slot not in forbidden; round-robin from cityToSlot.size.
+        const start = cityToSlot.size % STAY_PALETTE.length;
+        slot = start;
+        for (let k = 0; k < STAY_PALETTE.length; k++) {
+          const candidate = (start + k) % STAY_PALETTE.length;
+          if (!forbidden.has(candidate)) {
+            slot = candidate;
+            break;
+          }
+        }
+        cityToSlot.set(key, slot);
+      }
+      result.set(p.id, slot);
+      prevCityKey = key;
+    }
+    return result;
+  }, [pills]);
+
   const colorFor = (pill: StayPill) =>
-    STAY_PALETTE[hashIndex(`${pill.title}|${pill.locationName ?? ""}`, STAY_PALETTE.length)];
+    STAY_PALETTE[colorByPillId.get(pill.id) ?? hashIndex(pill.id, STAY_PALETTE.length)];
 
   const { tripStart, tripEnd, weeks } = useMemo(() => {
     if (!activeTrip?.start_date || !activeTrip?.end_date) {
@@ -123,10 +176,8 @@ export default function CalendarStaysView() {
           colSpan,
           isStartInWeek: sliceStart === p.startDate,
           isEndInWeek: sliceEnd === p.endDate,
-          colorIndex: hashIndex(
-            `${p.title}|${p.locationName ?? ""}`,
-            STAY_PALETTE.length,
-          ),
+          colorIndex:
+            colorByPillId.get(p.id) ?? hashIndex(p.id, STAY_PALETTE.length),
         };
       });
   };

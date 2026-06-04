@@ -561,21 +561,7 @@ export default function AddItemDialog({
               disabled={submitting || !title.trim()}
               className="bg-accent text-accent-foreground font-inter text-xs hover:bg-accent/90"
             >
-              {submitting
-                ? "Adding…"
-                : category === "stays" && checkoutDate && checkoutDate > date
-                ? (() => {
-                    try {
-                      const n = Math.max(
-                        1,
-                        differenceInCalendarDays(parseISO(checkoutDate), parseISO(date)),
-                      );
-                      return `Add ${n} Night${n === 1 ? "" : "s"}`;
-                    } catch {
-                      return "Add Stay";
-                    }
-                  })()
-                : "Add Item"}
+              {submitting ? "Adding…" : "Add Item"}
             </Button>
           </DialogFooter>
         </form>

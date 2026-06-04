@@ -20,7 +20,7 @@ import {
 import { Search, Loader2, MapPin } from "lucide-react";
 import { useTripStore } from "@/stores/useTripStore";
 import type { ItineraryItem } from "@/stores/useTripStore";
-import { format, parseISO, addDays, differenceInCalendarDays } from "date-fns";
+import { format } from "date-fns";
 import { useGooglePlaces, type PlaceResult } from "@/hooks/useGooglePlaces";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";

@@ -11,7 +11,6 @@ export async function createPostHogAnalytics(
   apiKey: string,
   host = "https://us.i.posthog.com",
 ): Promise<Analytics> {
-  // @ts-expect-error — package is optional and added later.
   const mod = await import(/* @vite-ignore */ "posthog-js").catch(() => null);
   if (!mod) {
     if (import.meta.env.DEV) console.warn("[posthog] package not installed; skipping init");

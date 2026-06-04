@@ -1,35 +1,39 @@
 ## Goal
-Refactor `CalendarStaysView` to consume the same canonical primitives as the Matrix Grid so it never drifts again. Today it has a hand-rolled stay-grouping function and opens the wrong edit dialog. After overhaul work on stays (`metadata.end_date` range rows, legacy per-night merging, derived legs, `StayDialog`), the calendar must reuse those shared utilities verbatim.
+Color calendar stay pills by their **derived Location leg (city)**, and guarantee that two pills which sit adjacent in time never share a color — fixing the current "Hilton → Marriott → Hilton" same-color run.
 
-## What changes in `src/components/workspace/CalendarStaysView.tsx`
+## Approach
 
-1. **Replace local `groupStays` with shared `getStayPills` from `@/lib/locationLegs`.**
-   - Import: `getStayPills`, `assignLanes` (lane logic also already in this file is duplicated), `type StayPill`.
-   - Compute `pills = getStayPills(itineraryItems, displayedLegs)` where `displayedLegs` comes from `getLegs(activeTrip, itineraryItems)` (same call MatrixGrid uses) so each pill inherits `derivedLocation`.
-   - Drop the local `StaySegment` interface and `hashIndex`+palette index logic; derive `colorIndex` from `pill.id` (stable per pill, same as Matrix).
-2. **Reuse date fields verbatim from `StayPill`:** `startDate`, `endDate`, `nights`. No more bespoke `metadata.end_date` / `check_out` parsing in this file — that lives in `getStayPills` and stays the single source of truth.
-3. **Week slicing & lane assignment:** keep per-week slicing (calendar is multi-row weeks), but feed the slices into `assignLanes` from `locationLegs` instead of the local one. The current local `assignLanes` predates the shared one and uses different math; using the shared util keeps semantics aligned with the Matrix.
-4. **Click → open `StayDialog` in edit mode (not `EditItemDialog`).**
-   - Mirror MatrixGrid's `stayEdit` state shape: `{ open, pill }`.
-   - Render `<StayDialog mode="edit" pill={stayEdit.pill} tripId tripStart tripEnd legs={displayedLegs} />` exactly like MatrixGrid lines 1458–1471.
-   - Remove the `EditItemDialog` import and `editing` state.
-5. **Legend & mobile agenda:** iterate over `pills` (one entry per pill, dedup by `pill.id`). Show `derivedLocation || locationName` as the subtitle so the calendar matches Matrix pill labels.
-6. **Drag-and-drop (out of scope for this pass).** The user asked only that the data/structures match; leave calendar pills click-to-edit. Drag-resize/move on the calendar can be a follow-up — flagged in the file with a TODO comment so it's discoverable.
+Two-step assignment in `CalendarStaysView.tsx`:
 
-## Why this is safe
+1. **Group key = city (derived leg).**
+   - Primary key: `pill.derivedLocation` (already set by `getStayPills(items, legs)`).
+   - Fallback chain when a leg overlap isn't found: `pill.locationName` → `"unassigned"`.
+   - All pills in the same city group must share the same palette slot.
 
-- `getStayPills` already handles both new range rows (`metadata.end_date`) and legacy per-night rows (consecutive-night merge by title+place+location). No data shape assumptions live in the calendar anymore.
-- `StayDialog` is the same dialog the Matrix uses for create/edit and already collapses legacy multi-row pills on save, so edits from the calendar follow the same migration path.
-- `displayedLegs` (from `getLegs`) is the same source the Matrix uses for `derivedLocation`, keeping labels consistent.
+2. **Assign palette slots in chronological order, with adjacency avoidance.**
+   - Sort pills by `startDate`.
+   - Walk the list; for each new city group, pick the next palette index that
+     - hasn't been used by the immediately previous group, **and**
+     - hasn't been used by any pill whose `endDate + 1 day == this pill.startDate` (handles same-day check-out/check-in transitions).
+   - Once a city has been assigned a slot, reuse it for every subsequent pill in that city (so "Paris" stays one color across the trip).
+   - If the palette runs out before satisfying constraints, fall back to a hash so we never crash.
+
+3. **Palette stays the same `STAY_PALETTE` (8 muted Quiet-Luxury tones).** No new tokens.
+
+## Files
+
+- `src/components/workspace/CalendarStaysView.tsx`
+  - Replace the current `hashIndex(title|locationName)` mapping with a memoized `Map<pillId, paletteIndex>` built via the algorithm above.
+  - Helper lives inline (small, view-specific). No changes to `locationLegs.ts` or `StayDialog`.
+  - Mobile agenda list, desktop bars, and the legend all read from the same map → consistent colors everywhere.
+  - Legend gets a small subtitle showing the city (derivedLocation) under the pill title so the color → city link is obvious.
 
 ## Out of scope
-- No store, schema, or `StayDialog` changes.
-- No new drag-to-resize on the calendar.
-- No changes to `MatrixGrid`, `segments.ts`, or `locationLegs.ts`.
+- No data model changes, no shared util changes, no Matrix Grid recoloring.
+- No country detection.
 
 ## Verification
-1. Trip with a 5-night range-row stay → calendar renders one pill spanning 5 cells with correct nights label; same as Matrix.
-2. Trip with legacy per-night rows for the same hotel across 3 consecutive nights → one merged pill (3n), identical to Matrix.
-3. Two overlapping stays on transition day stack into separate lanes (shared `assignLanes`).
-4. Clicking a calendar pill opens `StayDialog` pre-filled (property type, rate, taxes, cleaning fee, listing URL all hydrated); saving updates the Matrix immediately via the same store path.
-5. Legend lists each pill once, subtitle shows derived city when a Location leg overlaps.
+1. Trip with Paris (3 nights) → Rome (4 nights) → Paris (2 nights): both Paris pills are the same color; Rome is a different color; the Paris→Rome and Rome→Paris transitions never repeat the prior color.
+2. Two back-to-back hotels in the same city show one shared color (intentional — same leg).
+3. A stay with no matching leg falls into an "unassigned" group and still gets a non-adjacent color.
+4. Legend lists each pill with the correct swatch + city subtitle.

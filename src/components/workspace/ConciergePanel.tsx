@@ -76,6 +76,7 @@ export default function ConciergePanel() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);

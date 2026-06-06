@@ -1286,7 +1286,11 @@ export default function MatrixGrid() {
             );
             const isFirstDay = !!activeTrip?.start_date && dateStr === activeTrip.start_date;
             return (
-              <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
+              <div
+                key={dateStr}
+                style={{ width: `${COL_WIDTH}px` }}
+                className="shrink-0 border-r border-border last:border-r-0"
+              >
                 <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
                   {isFirstDay ? (
                     <Popover>
@@ -1400,7 +1404,10 @@ export default function MatrixGrid() {
           })}
           {/* Trailing "+ Add day" column (Google Sheets style) */}
           {activeTrip?.end_date && (
-            <div className="w-44 shrink-0 border-r border-border last:border-r-0">
+            <div
+              style={{ width: `${COL_WIDTH}px` }}
+              className="shrink-0 border-r border-border last:border-r-0"
+            >
               <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
                 <button
                   type="button"

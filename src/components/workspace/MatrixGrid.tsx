@@ -41,6 +41,7 @@ import { buildSegments, computeReorderPatches } from "@/lib/segments";
 import { differenceInCalendarDays, addDays } from "date-fns";
 const StayDialog = lazy(() => import("./StayDialog"));
 import ReshuffleLegsList from "./ReshuffleLegsList";
+import { detectGaps, gapsByDate } from "@/lib/gapDetection";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -115,6 +116,7 @@ export default function MatrixGrid() {
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
 
   const updateEdges = useCallback(() => {
     const el = scrollRef.current;
@@ -122,6 +124,7 @@ export default function MatrixGrid() {
     setAtStart(el.scrollLeft <= 1);
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
     setContainerWidth(el.clientWidth);
+    setContainerHeight(el.clientHeight);
   }, []);
 
   useEffect(() => {

@@ -118,7 +118,7 @@ export default function GeminiFooter() {
             total: activeTrip.total_trip_budget,
             spent: totalSpent,
             remaining,
-            currency: activeTrip.currency || "USD",
+            currency: (activeTrip as unknown as { currency?: string }).currency || "USD",
           }
         : null,
       anchor: activeAnchor
@@ -431,6 +431,27 @@ export default function GeminiFooter() {
                   <div key={i} className="flex justify-end">
                     <div className="max-w-[85%] rounded-editorial px-3 py-2 bg-foil text-accent-foreground font-inter text-[11px] leading-relaxed shadow-paper">
                       <p className="whitespace-pre-wrap">{m.content}</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (m.role === "tool") {
+                const ok = !m.pending && !(m.result as { error?: string })?.error;
+                const label = m.name.replace(/_/g, " ");
+                return (
+                  <div key={i} className="flex justify-start">
+                    <div className="inline-flex items-center gap-1.5 rounded-editorial border border-foil bg-foil-soft/40 px-2.5 py-1 font-inter text-[10px] text-muted-foreground">
+                      {m.pending ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-accent" strokeWidth={1.75} />
+                      ) : ok ? (
+                        <CheckCircle2 className="h-3 w-3 text-accent" strokeWidth={1.75} />
+                      ) : (
+                        <Wrench className="h-3 w-3 text-destructive" strokeWidth={1.75} />
+                      )}
+                      <span className="uppercase tracking-wider">
+                        {m.pending ? `Calling ${label}…` : label}
+                      </span>
                     </div>
                   </div>
                 );

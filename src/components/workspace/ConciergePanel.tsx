@@ -186,7 +186,6 @@ export default function ConciergePanel() {
       preferences: (profile?.preferences as Record<string, unknown>) ?? {},
       loyalty_cards: cards,
       loyalty_programs: loyalty,
-      focused_date: useTripStore.getState().focusedDate ?? null,
     };
   }
 

@@ -1,76 +1,38 @@
-## Concierge AI Depth — Roadmap
+## Goal
+Stop the Matrix Grid from feeling cramped on large monitors. The 3-column workspace already uses `flex-1`, but the grid's day columns are hard-coded to 176px, so extra horizontal space goes unused and the grid still scrolls. Make the whole layout — side panels, header, and especially the day columns — scale with the available viewport.
 
-Today's state is solid: both surfaces (workspace `ConciergePanel`, floating `GeminiFooter`) share the `concierge-chat` edge function, persist conversations, parse a `suggestions` block into "Add to Itinerary / Studio" chips, and four tools exist (`create_itinerary_item`, `search_studio_items`, `suggest_anchor`, `get_trip_summary`).
+## What's wrong today
+- `src/pages/TripWorkspace.tsx` side panels: Studio left = `w-[20%] min-w-[220px]`, Right tabs = `w-[22%] min-w-[260px]`. Fine in spirit, but they have no max, so on ultra-wide screens they steal too much; on mid screens they're not generous enough.
+- `src/components/workspace/MatrixGrid.tsx`: `COL_WIDTH = 176` and every cell uses `w-44` / inline `width: days.length * 176`. The center pane is `flex-1 min-w-0` but the grid never measures it, so it always renders at `days * 176px` and horizontally scrolls.
+- Stay-bar widths (lines ~1104, 1154, 1184, 1202, 1209) all multiply by the hard-coded 176.
 
-Gaps that hold it back from feeling like a real travel partner:
-- Workspace panel uses non-streaming `invoke` — replies appear all at once after a long wait, while the footer streams.
-- Context fed to the model is thin: no active anchor stay, no "currently focused day", no budget remaining, no loyalty card list.
-- Only 4 tools — the model can add items but can't fix routes, find gaps, optimize loyalty earn, or rebalance budget.
-- No quick-prompt chips; the user has to think of every prompt themselves.
-- Tool-call execution shows up only after completion — no live "calling tool…" affordance.
+## Plan
 
----
+### 1. Fluid day columns in MatrixGrid
+- Add a `ResizeObserver` (or a small `useElementWidth` hook in `src/hooks/`) on the scroll container to track available width.
+- Compute `colWidth = clamp(MIN_COL, available / days.length, MAX_COL)` where `MIN_COL = 140` (preserves current readability on small screens) and `MAX_COL = 280` (prevents absurd stretching on 4K).
+- When `days.length * MIN_COL > available`, fall back to horizontal scroll (current behavior on narrow screens).
+- Replace the hard-coded `176` constant and every `w-44` day-cell class with an inline `style={{ width: colWidth }}`. Replace `days.length * 176` math (header row, stay overlay rows, "add" empty row) with `days.length * colWidth`.
+- Keep the 96px sticky left label column as-is (it's a label, not data).
 
-## Phase 1 — Streaming + Richer Context (foundation)
+### 2. Tighten side-panel scaling in TripWorkspace
+- Studio sidebar: keep `w-[20%] min-w-[220px]`, add `max-w-[320px]`.
+- Right sidebar: keep `w-[22%] min-w-[260px]`, add `max-w-[360px]`.
+- Result: on ultra-wide displays the side panels stop growing and the extra width is donated to the Matrix Grid center pane, which then expands its columns via step 1.
 
-1. **Stream the workspace ConciergePanel** the same way `GeminiFooter` does (SSE, token-by-token, abortable). Share a single `streamConcierge()` helper between both surfaces so we stop maintaining two transports.
-2. **Expand the system context block** sent to the model on every turn:
-   - Active trip name, date range, days elapsed/remaining
-   - Active anchor stay (geo + dates) when one is set
-   - Budget snapshot: total, spent, remaining, target nightly
-   - User's active loyalty cards + memberships from `profiles`
-   - Currently focused day (if user scrolled to a day in the Matrix)
-3. **Tool-call live status pills** — render an inline "Calling `create_itinerary_item`…" chip the moment a `tool_call` arrives, replace with the result when it completes.
+### 3. Header + Trip Health Bar
+- They already span full width; no change needed. Verify no `max-w-*` wrappers are introduced.
 
-## Phase 2 — New Tools (planner muscle)
-
-Add four tools to `concierge-chat`, each with a small focused schema:
-
-1. `find_gaps` — returns days with no plans and dining/activity holes (uses existing `gapDetection.ts`).
-2. `optimize_loyalty` — given a category + location, returns the best earning card from the user's wallet with multiplier and rationale.
-3. `optimize_route` — for a given day, returns a re-ordered sequence of items by proximity (uses existing `distance.ts` haversine).
-4. `rebalance_budget` — surfaces over/under categories vs. target nightly budget, suggests trims or splurge headroom.
-
-Each tool result feeds back into the model so it can compose a natural-language reply plus a `suggestions` block when appropriate.
-
-## Phase 3 — Quick-Action Prompts + Polish
-
-1. **Prompt chips** above the input in both surfaces, generated from current context:
-   - "What's missing on {focused day}?"
-   - "Best card for my next stay"
-   - "Optimize my route today"
-   - "Where's my budget heaviest?"
-   Tapping a chip submits the prompt.
-2. **Streaming abort** — visible "Stop" button while a response is in flight (already half-wired in footer; standardize).
-3. **Empty-state hero** — when a conversation is new, show 3 context-aware starter prompts instead of a blank panel.
-
----
+### 4. QA
+- Resize preview to 1280, 1440, 1920, 2560 widths and confirm: columns grow up to ~280px, no horizontal scroll appears until day count × 140 exceeds center pane width, stay bars still align with their day cells, sticky left label stays pinned.
+- Spot-check on 1024 (lg breakpoint) and below `lg` (mobile single-pane) — mobile path unchanged.
 
 ## Technical notes
+- Files touched: `src/pages/TripWorkspace.tsx`, `src/components/workspace/MatrixGrid.tsx`, plus a tiny new `src/hooks/useElementWidth.ts`.
+- No schema, store, or API changes. Pure presentational.
+- `COL_WIDTH` constant becomes derived state; anywhere it's referenced (header row, stay overlay positioning math, add-row width) reads the live value from the hook so multi-day stay bars resize correctly when the viewport changes.
+- `ReadOnlyMatrixGrid` (network view) is out of scope unless you also want it fluid — flag if yes.
 
-- All work stays inside `supabase/functions/concierge-chat/index.ts` (tools + system context) and the two React surfaces. No schema changes — `concierge_conversations` / `concierge_messages` already support tool_calls JSONB.
-- New tools reuse existing client-side helpers (`gapDetection.ts`, `distance.ts`, loyalty match from `useTripStore`); the edge function re-implements the small calculations server-side using data it already loads (itinerary items + profile).
-- Streaming helper lives at `src/lib/conciergeStream.ts` so `ConciergePanel` and `GeminiFooter` share one implementation.
-- Default model stays `google/gemini-3-flash-preview` for latency; bump to `google/gemini-2.5-pro` only for `optimize_route` if quality calls for it.
-- No new secrets, no new tables, no new connectors.
-
----
-
-## Out of scope (deferred)
-
-- Multimodal image input (paste menu / boarding pass photo) — separate phase.
-- "@" mention autocomplete for itinerary/studio items — separate phase.
-- Voice input — separate phase.
-- Production-readiness items (real auth, Sentry/PostHog DSNs, E2E tests) — separate roadmap thread.
-
----
-
-## Suggested implementation order
-
-```text
-Phase 1  →  immediate UX lift (streaming parity + better answers from richer context)
-Phase 2  →  unlocks the "do something for me" use cases
-Phase 3  →  discoverability — users learn what concierge can do
-```
-
-I'll start with Phase 1 once you approve.
+## Out of scope
+- Changing the row layout, category list, or vertical sizing.
+- Touching dialogs, ConciergePanel internals, or studio cards.

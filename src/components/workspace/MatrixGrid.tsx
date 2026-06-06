@@ -114,12 +114,14 @@ export default function MatrixGrid() {
   });
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const updateEdges = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setAtStart(el.scrollLeft <= 1);
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+    setContainerWidth(el.clientWidth);
   }, []);
 
   useEffect(() => {
@@ -135,10 +137,11 @@ export default function MatrixGrid() {
     };
   }, [updateEdges]);
 
-  const COL_WIDTH = 176; // matches w-44
-
+  // COL_WIDTH is computed below after `days` is defined; scrollByCols reads
+  // the latest value via a ref so it can be defined here.
+  const colWidthRef = useRef(176);
   const scrollByCols = (cols: number) => {
-    scrollRef.current?.scrollBy({ left: cols * COL_WIDTH, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: cols * colWidthRef.current, behavior: "smooth" });
   };
   const scrollToStart = () => {
     scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });
@@ -309,6 +312,20 @@ export default function MatrixGrid() {
       return [];
     }
   }, [activeTrip?.start_date, activeTrip?.end_date]);
+
+  // Fluid day-column width: fills the available scroll-container width and
+  // clamps to a readable range. Sticky label column on the left is 96px.
+  const LABEL_COL = 96;
+  const MIN_COL = 140;
+  const MAX_COL = 280;
+  const COL_WIDTH = useMemo(() => {
+    if (!containerWidth || days.length === 0) return 176;
+    const available = Math.max(0, containerWidth - LABEL_COL);
+    return Math.min(MAX_COL, Math.max(MIN_COL, Math.floor(available / days.length)));
+  }, [containerWidth, days.length]);
+  useEffect(() => {
+    colWidthRef.current = COL_WIDTH;
+  }, [COL_WIDTH]);
 
   const conflictIds = useMemo(() => detectConflicts(itineraryItems), [itineraryItems]);
 
@@ -624,7 +641,7 @@ export default function MatrixGrid() {
 
       const onMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startX;
-        const delta = Math.round(dx / 176);
+        const delta = Math.round(dx / colWidthRef.current);
         if (delta !== lastDelta) {
           lastDelta = delta;
           setResizeState({ pillId: pill.id, side, deltaDays: delta });
@@ -1101,13 +1118,13 @@ export default function MatrixGrid() {
             {/* Absolute leg-pill overlay: top is below the 40px date header, height matches the location row */}
             <div
               className="pointer-events-none absolute left-0 top-10 z-10 h-9"
-              style={{ width: `${days.length * 176}px` }}
+              style={{ width: `${days.length * COL_WIDTH}px` }}
             >
               {displayedLegs.map((leg) => {
                 if (!activeTrip?.start_date) return null;
                 const { startIdx, span } = legColumnSpan(activeTrip.start_date, leg);
                 if (startIdx < 0 || startIdx >= days.length) return null;
-                const width = Math.min(span, days.length - startIdx) * 176;
+                const width = Math.min(span, days.length - startIdx) * COL_WIDTH;
                 const token = legTokenById.get(leg.id);
                 const isDragging = draggingLegId === leg.id;
                 return (
@@ -1150,7 +1167,7 @@ export default function MatrixGrid() {
                         : "border cursor-grab active:cursor-grabbing"
                     } ${isDragging ? "opacity-40 ring-2 ring-accent" : ""}`}
                     style={{
-                      left: `${startIdx * 176 + 4}px`,
+                      left: `${startIdx * COL_WIDTH + 4}px`,
                       width: `${width - 8}px`,
                       backgroundColor: token
                         ? `hsl(var(${token}) / ${leg.isGhost ? 0.12 : 0.28})`
@@ -1181,7 +1198,7 @@ export default function MatrixGrid() {
               className="pointer-events-none absolute left-0 z-10"
               style={{
                 top: `${40 + 36}px`, // date header (40) + location row (36)
-                width: `${days.length * 176}px`,
+                width: `${days.length * COL_WIDTH}px`,
                 height: `${staysRowHeight}px`,
               }}
             >
@@ -1199,13 +1216,13 @@ export default function MatrixGrid() {
                 const clampedStartIdx = Math.max(0, Math.min(days.length - 1, previewStartIdx));
                 const clampedEndIdx = Math.max(clampedStartIdx, Math.min(days.length - 1, previewEndIdx));
                 const previewSpan = clampedEndIdx - clampedStartIdx + 1;
-                const width = previewSpan * 176;
+                const width = previewSpan * COL_WIDTH;
                 return (
                   <div
                     key={pill.id}
                     className="pointer-events-auto absolute"
                     style={{
-                      left: `${clampedStartIdx * 176 + 4}px`,
+                      left: `${clampedStartIdx * COL_WIDTH + 4}px`,
                       width: `${width - 8}px`,
                       top: `${lane * STAY_LANE_H + 6}px`,
                       height: "24px",
@@ -1269,7 +1286,11 @@ export default function MatrixGrid() {
             );
             const isFirstDay = !!activeTrip?.start_date && dateStr === activeTrip.start_date;
             return (
-              <div key={dateStr} className="w-44 shrink-0 border-r border-border last:border-r-0">
+              <div
+                key={dateStr}
+                style={{ width: `${COL_WIDTH}px` }}
+                className="shrink-0 border-r border-border last:border-r-0"
+              >
                 <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
                   {isFirstDay ? (
                     <Popover>
@@ -1383,7 +1404,10 @@ export default function MatrixGrid() {
           })}
           {/* Trailing "+ Add day" column (Google Sheets style) */}
           {activeTrip?.end_date && (
-            <div className="w-44 shrink-0 border-r border-border last:border-r-0">
+            <div
+              style={{ width: `${COL_WIDTH}px` }}
+              className="shrink-0 border-r border-border last:border-r-0"
+            >
               <div className="sticky top-0 z-10 flex h-10 items-center justify-center border-b border-border bg-secondary/40 backdrop-blur-sm">
                 <button
                   type="button"

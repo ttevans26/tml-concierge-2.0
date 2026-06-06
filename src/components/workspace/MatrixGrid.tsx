@@ -1198,7 +1198,7 @@ export default function MatrixGrid() {
               className="pointer-events-none absolute left-0 z-10"
               style={{
                 top: `${40 + 36}px`, // date header (40) + location row (36)
-                width: `${days.length * 176}px`,
+                width: `${days.length * COL_WIDTH}px`,
                 height: `${staysRowHeight}px`,
               }}
             >
@@ -1216,13 +1216,13 @@ export default function MatrixGrid() {
                 const clampedStartIdx = Math.max(0, Math.min(days.length - 1, previewStartIdx));
                 const clampedEndIdx = Math.max(clampedStartIdx, Math.min(days.length - 1, previewEndIdx));
                 const previewSpan = clampedEndIdx - clampedStartIdx + 1;
-                const width = previewSpan * 176;
+                const width = previewSpan * COL_WIDTH;
                 return (
                   <div
                     key={pill.id}
                     className="pointer-events-auto absolute"
                     style={{
-                      left: `${clampedStartIdx * 176 + 4}px`,
+                      left: `${clampedStartIdx * COL_WIDTH + 4}px`,
                       width: `${width - 8}px`,
                       top: `${lane * STAY_LANE_H + 6}px`,
                       height: "24px",

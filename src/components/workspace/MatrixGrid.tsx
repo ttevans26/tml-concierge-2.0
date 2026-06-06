@@ -41,6 +41,7 @@ import { buildSegments, computeReorderPatches } from "@/lib/segments";
 import { differenceInCalendarDays, addDays } from "date-fns";
 const StayDialog = lazy(() => import("./StayDialog"));
 import ReshuffleLegsList from "./ReshuffleLegsList";
+import { detectGaps, gapsByDate } from "@/lib/gapDetection";
 
 /** Check if two time ranges overlap. Items without times don't conflict. */
 function timesOverlap(a: ItineraryItem, b: ItineraryItem): boolean {
@@ -115,6 +116,7 @@ export default function MatrixGrid() {
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
 
   const updateEdges = useCallback(() => {
     const el = scrollRef.current;
@@ -122,6 +124,7 @@ export default function MatrixGrid() {
     setAtStart(el.scrollLeft <= 1);
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
     setContainerWidth(el.clientWidth);
+    setContainerHeight(el.clientHeight);
   }, []);
 
   useEffect(() => {
@@ -382,6 +385,15 @@ export default function MatrixGrid() {
     return totals;
   }, [days, itineraryItems]);
 
+  const maxDailyTotal = useMemo(() => {
+    const vals = Object.values(dailyTotals);
+    return vals.length ? Math.max(1, ...vals) : 1;
+  }, [dailyTotals]);
+
+  const pulseGapsByDate = useMemo(() => {
+    return gapsByDate(detectGaps(activeTrip, itineraryItems));
+  }, [activeTrip, itineraryItems]);
+
   /* ---- Smart Pull handlers ---- */
 
   // Smart Pull logic is encapsulated in <SmartPullInbox /> below.
@@ -621,7 +633,29 @@ export default function MatrixGrid() {
   }, [stayLanes]);
   const maxStayLane = stayLanes.reduce((m, x) => Math.max(m, x.lane), -1);
   const STAY_LANE_H = 28;
-  const staysRowHeight = Math.max(112, (maxStayLane + 1) * STAY_LANE_H + 16);
+
+  /* ---- Dynamic row + Pulse strip sizing ----
+   * Continuously scale rows between ROW_MIN and ROW_MAX based on available
+   * scroll-container height. Any remainder above ROW_MAX*4 fades a compact
+   * Trip Pulse strip in below the Daily $ footer.
+   */
+  const ROW_MIN = 96;
+  const ROW_MAX = 160;
+  const PULSE_MAX = 140;
+  const PULSE_MIN_RENDER = 36;
+  const lanesExtra = Math.max(0, (maxStayLane + 1) * STAY_LANE_H + 16 - ROW_MIN);
+  const chrome = 40 /* date header */ + 36 /* location row */ + 32 /* daily $ */;
+  const usableH = Math.max(0, containerHeight - chrome - lanesExtra);
+  const rowH = containerHeight
+    ? Math.min(ROW_MAX, Math.max(ROW_MIN, Math.floor(usableH / 4)))
+    : 112;
+  const staysRowHeight = Math.max(rowH, (maxStayLane + 1) * STAY_LANE_H + 16);
+  const rowsTotalH = rowH * 3 + staysRowHeight;
+  const remainderH = containerHeight - chrome - rowsTotalH;
+  const pulseH = containerHeight
+    ? Math.max(0, Math.min(PULSE_MAX, remainderH))
+    : 0;
+  const showPulse = pulseH >= PULSE_MIN_RENDER;
 
   /* ---- Stay-pill edge resize (drag right/left edge to extend/shrink) ---- */
   const [resizeState, setResizeState] = useState<{
@@ -1098,7 +1132,7 @@ export default function MatrixGrid() {
                 key={cat.key}
                 className="flex items-center border-b border-border px-3"
                 style={{
-                  height: cat.key === "stays" ? `${staysRowHeight}px` : "112px",
+                  height: cat.key === "stays" ? `${staysRowHeight}px` : `${rowH}px`,
                 }}
               >
                 <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -1111,6 +1145,16 @@ export default function MatrixGrid() {
                 Daily $
               </span>
             </div>
+            {showPulse && (
+              <div
+                className="flex items-center border-b border-border px-3"
+                style={{ height: `${pulseH}px` }}
+              >
+                <span className="font-inter text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Pulse
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Day columns wrapper (relative — hosts the absolute leg-pill overlay) */}
@@ -1361,7 +1405,7 @@ export default function MatrixGrid() {
                       key={cat.key}
                       className="flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto"
                       style={{
-                        height: isStays ? `${staysRowHeight}px` : "112px",
+                        height: isStays ? `${staysRowHeight}px` : `${rowH}px`,
                         ...cellStyleFor(dateStr),
                       }}
                       onDragOver={handleDragOver}
@@ -1399,6 +1443,48 @@ export default function MatrixGrid() {
                     {total > 0 ? `$${total.toLocaleString()}` : "—"}
                   </span>
                 </div>
+                {showPulse && (() => {
+                  const dayGaps = pulseGapsByDate.get(dateStr) || [];
+                  const sev = dayGaps.some((g) => g.severity === "high")
+                    ? "high"
+                    : dayGaps.some((g) => g.severity === "medium")
+                      ? "medium"
+                      : dayGaps.length > 0
+                        ? "low"
+                        : null;
+                  const barH = total > 0
+                    ? Math.max(4, Math.round((total / maxDailyTotal) * (pulseH - 24)))
+                    : 0;
+                  const pipColor =
+                    sev === "high"
+                      ? "bg-destructive"
+                      : sev === "medium"
+                        ? "bg-[hsl(36,75%,55%)]"
+                        : "bg-muted-foreground/40";
+                  return (
+                    <div
+                      className="relative flex items-end justify-center border-b border-border px-2 pb-1.5 pt-2 transition-opacity duration-150"
+                      style={{ height: `${pulseH}px`, ...cellStyleFor(dateStr) }}
+                      title={
+                        (total > 0 ? `$${total.toLocaleString()} planned` : "No spend") +
+                        (dayGaps.length ? `  ·  ${dayGaps.map((g) => g.label).join(", ")}` : "")
+                      }
+                    >
+                      {barH > 0 && (
+                        <div
+                          className="w-1.5 rounded-sm bg-accent/70"
+                          style={{ height: `${barH}px` }}
+                        />
+                      )}
+                      {sev && (
+                        <span
+                          className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${pipColor}`}
+                          aria-label={`${dayGaps.length} gap${dayGaps.length === 1 ? "" : "s"}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -1427,7 +1513,7 @@ export default function MatrixGrid() {
               </div>
               <div
                 className="flex h-full flex-col items-center justify-start bg-muted/10"
-                style={{ minHeight: `${36 + staysRowHeight + 112 * (CATEGORIES.length - 1) + 32}px` }}
+                style={{ minHeight: `${36 + staysRowHeight + rowH * (CATEGORIES.length - 1) + 32 + (showPulse ? pulseH : 0)}px` }}
               />
             </div>
           )}

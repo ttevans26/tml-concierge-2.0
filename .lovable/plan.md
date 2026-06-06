@@ -1,40 +1,55 @@
 ## Goal
 
-Trim gap analysis to **only trip-disrupting** issues. Visible-in-grid noise (dining, free blocks) goes away.
+Fill the dead vertical space below the Matrix Grid on tall screens without breaking small/short viewports. Approach: **rows grow continuously up to a cap, then a slim Trip Pulse strip absorbs any remainder.** No abrupt breakpoint — everything scales with available height.
 
-## Kept gap kinds (3)
+## Layout math
 
-1. **`no_stay`** (high) — a night with no accommodation. Already span-aware after the last fix.
-2. **`missing_transit`** (medium) — stay city changes day-over-day with no `logistics` item on the travel day.
-3. **`stay_gap`** (high, new) — a checkout-night with no follow-on stay before the next booked stay starts (orphan night between two different stays). Reported on each uncovered night between them.
+Available space = `MatrixGrid` flex container height (excludes header, toolbar, date row, daily totals footer, scrollbar). We measure it via a `useResizeObserver` on the scroll container.
 
-## Removed
+```
+ROW_MIN   = 96px   (today's compact 112px minus a touch)
+ROW_MAX   = 160px  (cap — beyond this, rows feel sparse)
+PULSE_MIN = 0px    (fully hidden when no remainder)
+PULSE_MAX = 140px  (compact strip)
+```
 
-- **`no_dining`** — visible in the empty Dining row.
-- **`free_block`** — visible in the empty Agenda row; not trip-breaking.
+Per frame:
+1. `targetRowH = clamp((available - chrome) / 4, ROW_MIN, ROW_MAX)`
+2. `remainder = available - chrome - targetRowH * 4`
+3. `pulseH = clamp(remainder, 0, PULSE_MAX)`
+
+Stays row is already special-cased (`staysRowHeight` for stacked location + stay pills); keep its multiplier ratio against `targetRowH` (today it's `2 * baseRowH + gap`). Apply same scaling factor.
+
+Result: between ~720–950px tall the rows just stretch; above ~950px the Pulse strip fades in and absorbs the rest; the matrix never starves on short screens.
 
 ## Changes
 
-### `src/lib/gapDetection.ts`
-- Update `GapKind` union: drop `"no_dining" | "free_block"`, add `"stay_gap"`.
-- Delete the no-dining and free-block branches inside the day loop.
-- Refine the stay-coverage logic: walk days; when a night has no stay coverage, classify as either:
-  - `no_stay` when no stay exists on adjacent nights, OR
-  - `stay_gap` when the previous and/or next planned stay are in *different* cities (i.e. an orphan between two segments). Detail copy: "Gap between {prevCity} and {nextCity} — no stay on {date}." Seed prefills `location_name` with the nearest upcoming stay city to bias the AI prompt.
-- `missing_transit` branch stays as is (already span-aware via expanded stays).
-- `computeHealthScore`: keep stay weight; drop the activity/dining weight contribution so the score reflects only critical coverage. Renormalize possible/earned accordingly.
+### 1. `src/components/workspace/MatrixGrid.tsx`
+- Add a `useResizeObserver` (or `ResizeObserver` directly) on the scroll container ref to track `availableHeight`.
+- Compute `rowHeight` + `pulseHeight` per the math above; memoize.
+- Replace the hard-coded `112px` in row `style.height` (and corresponding logistics/dining/activity row heights, lines ~1101, ~1364) with `${rowHeight}px`.
+- Recompute `staysRowHeight` using `rowHeight` as the base.
+- Pass `pulseHeight` to a new `<TripPulseStrip />` rendered as the last row of the scroll container (below the Daily $ footer) so it scrolls horizontally in sync. Hide entirely when `pulseHeight < 32`.
 
-### `supabase/functions/concierge-chat/index.ts` (`toolFindGaps`)
-- Remove `missing_dinner` and `empty_day` branches from the gaps array.
-- Mirror the same `no_stay` / `stay_gap` distinction using the already-built `staysByNight` set plus a parallel `stayCityByNight` map.
-- Keep the response `proposal.type = "find_gaps"` shape; the `gaps[].type` union shrinks to `"no_stay" | "stay_gap" | "missing_transit"`. Add `missing_transit` detection here too (currently absent) so the concierge tool matches the client-side analyzer.
+### 2. `src/components/workspace/TripPulseStrip.tsx` (new)
+A single-row strip aligned to the day columns. Contents (read-only, derived from existing store + `gapDetection`):
+- **Daily $ sparkline** — tiny bar per day, height-proportional to daily total, tinted with the active category colors. Already have `dailyTotals`.
+- **Gap pips** — small dot per day where `gapsByDate(iso)` has any entry, colored by highest severity.
+- **Anchor markers** — small Landmark icon glyph on days that contain a stay anchor (read from `staysByNight`).
 
-### Downstream
-- `TripHealthBar.tsx` and any consumer of `Gap`/`GapKind`: scan for switch/match on the removed kinds and clean up. (Quick rg pass during build.)
-- `ProposalCard` rendering for `find_gaps`: no schema change; the same "Add draft" affordance works for the new `stay_gap`.
+Quiet Luxury treatment: 0.5px border-top, cream bg, Onyx text at 60%, bronze accent on hover, no animations beyond a 150ms fade-in when it appears. Tooltip on hover shows the day's totals and gap labels.
+
+### 3. `src/pages/TripWorkspace.tsx`
+No structural change — the matrix already lives in `flex-1 min-w-0`. Just verify the scroll container fills `100%` height inside that flex slot (it already does via `flex-1 overflow-auto`).
+
+## Behavior on shrink
+
+- As the window narrows in height, `rowHeight` and `pulseHeight` both shrink continuously.
+- Below the Pulse min-render threshold (32px), the strip simply unmounts — no jank, the grid takes back the space immediately.
+- Below `ROW_MIN`, rows hit the floor and the existing internal scroll kicks in. Today's behavior.
 
 ## Out of scope
 
-- No UI redesign of the gaps panel itself — it just gets quieter.
-- No new severity levels or filters/toggles (per answer #2).
-- No changes to budget, route, or other Phase 2 tools.
+- No new interactive features in the Pulse strip (no click-to-edit, no drag); it's a glanceable overview only.
+- No changes to mobile single-panel layout — pulse strip only renders on `lg:` breakpoints where the matrix is the center panel.
+- No changes to header, sidebars, or footer.

@@ -13,11 +13,25 @@ Always cite *why* you recommend something: proximity to the traveler's anchor st
 When the traveler has an active trip, ground every answer in their itinerary, budget, and anchor stay. Never invent confirmation codes, prices, or availability.
 Format responses in concise markdown. Use short paragraphs and tight bullet lists. Avoid headings unless the answer is long.
 
-You have access to tools. Prefer tools over freeform answers when the user asks you to add/schedule something, search their saved research, suggest an anchor, or recap the trip.
-- create_itinerary_item: schedule a concrete booking on the active trip. Use only when the user clearly asks to add/schedule something.
-- search_studio_items: search the traveler's saved research vault.
-- suggest_anchor: propose a stay from the itinerary to set as geographic anchor.
-- get_trip_summary: fetch live trip metrics (spend, gaps, anchor) to ground your reply.
+You have access to tools. **Prefer tools** over freeform answers when the question maps to a tool.
+Tools never mutate the itinerary directly — they return proposals the traveler can apply with one tap. Your job is to call the right tool, then frame the result in 1–2 sentences.
+
+Action tools:
+- create_itinerary_item — schedule a concrete booking on the active trip. Use only when the user explicitly asks to add/schedule something.
+
+Research tools:
+- search_studio_items — search the traveler's saved Studio research vault.
+- suggest_anchor — propose stays from the itinerary that could anchor the trip geographically.
+- get_trip_summary — fetch live trip metrics (spend, item counts, dates).
+
+Proposal tools (return a structured proposal; user clicks Apply):
+- find_gaps — surface empty days, missing dining, or unfilled accommodation nights.
+- optimize_loyalty — recommend the best card/program to earn on a given item or category + cost.
+- optimize_route — re-order a specific day's items by proximity; returns proposed order.
+- rebalance_budget — flag categories over/under target nightly budget.
+- find_dining_near_anchor — surface dining options near the anchor stay (Studio + Places).
+- summarize_day — narrate a focused day (morning/afternoon/evening) for the traveler.
+- suggest_logistics — propose flights/trains/transfers between location legs that lack a transport item.
 
 When you recommend specific venues, hotels, restaurants, or activities (without calling create_itinerary_item), append a structured suggestions block at the end. Wrap JSON in triple backticks with the language tag "suggestions". Example:
 \`\`\`suggestions
@@ -82,6 +96,90 @@ const TOOLS = [
     function: {
       name: "get_trip_summary",
       description: "Live snapshot of active trip: dates, totals, anchor, item counts by category.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_gaps",
+      description: "Detect empty days, missing dinners, and unfilled accommodation nights on the active trip. Returns a proposal the traveler can act on.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "optimize_loyalty",
+      description: "Recommend the best card/loyalty program to earn on a given category + cost (or a specific itinerary item).",
+      parameters: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: ["stays", "dining", "activity", "logistics", "sites_of_interest"] },
+          cost: { type: "number" },
+          currency: { type: "string" },
+          item_id: { type: "string", description: "Optional: itinerary item id to optimize for." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "optimize_route",
+      description: "Re-order items on a focused day by haversine proximity. Returns a proposed order without mutating the itinerary.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD. Defaults to the focused day or first day." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rebalance_budget",
+      description: "Compare per-category spend vs. nightly target. Returns a proposal listing categories over/under and items to consider downgrading.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_dining_near_anchor",
+      description: "Surface dining candidates near the active anchor stay from Studio research. Returns proposal cards.",
+      parameters: {
+        type: "object",
+        properties: {
+          radius_km: { type: "number", description: "Search radius in km. Default 5." },
+          limit: { type: "number", description: "Max candidates. Default 5." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "summarize_day",
+      description: "Narrate a single day of the trip in morning/afternoon/evening structure based on its scheduled items.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD. Defaults to the focused day." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_logistics",
+      description: "Detect transitions between location legs without a transport item and propose flight/train/drive options.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },

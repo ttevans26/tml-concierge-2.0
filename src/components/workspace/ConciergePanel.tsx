@@ -175,12 +175,18 @@ export default function ConciergePanel() {
           }
         : null,
       anchor: activeAnchor
-        ? { title: activeAnchor.title, location_name: activeAnchor.location_name }
+        ? {
+            title: activeAnchor.title,
+            location_name: activeAnchor.location_name,
+            location_lat: activeAnchor.location_lat,
+            location_lng: activeAnchor.location_lng,
+          }
         : null,
       itinerary: itineraryItems.map((i) => ({ category: i.category, title: i.title, date: i.date })),
       preferences: (profile?.preferences as Record<string, unknown>) ?? {},
       loyalty_cards: cards,
       loyalty_programs: loyalty,
+      focused_date: useTripStore.getState().focusedDate ?? null,
     };
   }
 

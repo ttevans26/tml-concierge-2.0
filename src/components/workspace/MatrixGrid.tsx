@@ -114,12 +114,14 @@ export default function MatrixGrid() {
   });
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const updateEdges = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setAtStart(el.scrollLeft <= 1);
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+    setContainerWidth(el.clientWidth);
   }, []);
 
   useEffect(() => {
@@ -135,7 +137,17 @@ export default function MatrixGrid() {
     };
   }, [updateEdges]);
 
-  const COL_WIDTH = 176; // matches w-44
+  // Sticky label column on the left is 96px (w-24). Day columns flex to fill
+  // the remainder, clamped between MIN/MAX so they stay readable on small
+  // screens and don't sprawl on ultra-wide displays.
+  const LABEL_COL = 96;
+  const MIN_COL = 140;
+  const MAX_COL = 280;
+  const dayCount = Math.max(1, days?.length ?? 1);
+  const available = Math.max(0, containerWidth - LABEL_COL);
+  const COL_WIDTH = containerWidth
+    ? Math.min(MAX_COL, Math.max(MIN_COL, Math.floor(available / dayCount)))
+    : 176;
 
   const scrollByCols = (cols: number) => {
     scrollRef.current?.scrollBy({ left: cols * COL_WIDTH, behavior: "smooth" });

@@ -1,8 +1,8 @@
-import { eachDayOfInterval, parseISO, format, differenceInMinutes, addDays, differenceInCalendarDays } from "date-fns";
+import { eachDayOfInterval, parseISO, format, addDays, differenceInCalendarDays } from "date-fns";
 import type { ItineraryItem, Trip } from "@/stores/useTripStore";
 
 export type GapSeverity = "high" | "medium" | "low";
-export type GapKind = "no_stay" | "no_dining" | "free_block" | "missing_transit";
+export type GapKind = "no_stay" | "stay_gap" | "missing_transit";
 
 export interface Gap {
   id: string;
@@ -19,13 +19,6 @@ export interface Gap {
     title: string;
     location_name?: string | null;
   };
-}
-
-function toMin(t: string | null): number | null {
-  if (!t) return null;
-  const [h, m] = t.split(":").map(Number);
-  if (Number.isNaN(h)) return null;
-  return h * 60 + (m || 0);
 }
 
 /**
@@ -86,6 +79,18 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
   }
   const staysByNight = expandStayNights(items);
 
+  // Pre-compute the next planned stay city for each day index (for stay_gap labeling).
+  const dayIsos = days.map((d) => format(d, "yyyy-MM-dd"));
+  const nextStayCityFrom: (string | null)[] = new Array(dayIsos.length).fill(null);
+  {
+    let next: string | null = null;
+    for (let i = dayIsos.length - 1; i >= 0; i--) {
+      const here = staysByNight.get(dayIsos[i])?.[0]?.location_name ?? null;
+      if (here) next = here;
+      nextStayCityFrom[i] = next;
+    }
+  }
+
   let prevStayCity: string | null = null;
 
   for (let idx = 0; idx < days.length; idx++) {
@@ -94,62 +99,44 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
     const friendly = format(d, "EEE MMM d");
     const dayItems = byDate.get(iso) || [];
     const stays = staysByNight.get(iso) || [];
-    const dining = dayItems.filter((i) => i.category === "dining");
     const logistics = dayItems.filter((i) => i.category === "logistics");
     const isLastDay = idx === days.length - 1;
 
-    // No stay on a night (skip the final day — checkout day)
+    // No stay on a night (skip the final day — checkout day).
+    // Classify as `stay_gap` if there's a previous stay and an upcoming stay in a different city
+    // (orphan night between two segments) — otherwise plain `no_stay`.
     if (!isLastDay && stays.length === 0) {
-      gaps.push({
-        id: `${iso}-no_stay`,
-        date: iso,
-        kind: "no_stay",
-        severity: "high",
-        label: "No accommodation",
-        detail: `No stay booked for the night of ${friendly}.`,
-        prompt: `Suggest 3 well-rated hotels for the night of ${friendly}.`,
-        seed: { category: "stays", title: `Stay — ${friendly}` },
-      });
-    }
-
-    // No dinner
-    if (dining.length === 0 && (dayItems.length > 0 || stays.length > 0)) {
-      gaps.push({
-        id: `${iso}-no_dining`,
-        date: iso,
-        kind: "no_dining",
-        severity: "low",
-        label: "No dining planned",
-        detail: `Nothing booked for meals on ${friendly}.`,
-        prompt: `Suggest 3 dinner spots for ${friendly}${stays[0]?.location_name ? ` near ${stays[0].location_name}` : ""}.`,
-        seed: {
-          category: "dining",
-          title: `Dinner — ${friendly}`,
-          location_name: stays[0]?.location_name ?? null,
-        },
-      });
-    }
-
-    // Long unscheduled afternoon (>4h between known timed items)
-    const timed = dayItems
-      .map((i) => ({ s: toMin(i.start_time), e: toMin(i.end_time || i.start_time), i }))
-      .filter((x) => x.s !== null)
-      .sort((a, b) => (a.s! - b.s!));
-    for (let i = 0; i < timed.length - 1; i++) {
-      const gapMin = (timed[i + 1].s!) - (timed[i].e ?? timed[i].s!);
-      if (gapMin >= 240) {
+      const nextCity = nextStayCityFrom[idx];
+      const isOrphanBetweenSegments =
+        prevStayCity && nextCity && prevStayCity !== nextCity;
+      if (isOrphanBetweenSegments) {
         gaps.push({
-          id: `${iso}-free_block-${i}`,
+          id: `${iso}-stay_gap`,
           date: iso,
-          kind: "free_block",
-          severity: "low",
-          label: `${Math.round(gapMin / 60)}h free`,
-          detail: `Open block on ${friendly} between scheduled items.`,
-          prompt: `Suggest 2 activities for a ${Math.round(gapMin / 60)}-hour window on ${friendly}.`,
+          kind: "stay_gap",
+          severity: "high",
+          label: "Stay gap",
+          detail: `Gap between ${prevStayCity} and ${nextCity} — no stay on ${friendly}.`,
+          prompt: `Suggest a stay for the night of ${friendly} bridging ${prevStayCity} and ${nextCity}.`,
           seed: {
-            category: "activity",
-            title: `Activity — ${friendly}`,
-            location_name: stays[0]?.location_name ?? null,
+            category: "stays",
+            title: `Stay — ${friendly}`,
+            location_name: nextCity,
+          },
+        });
+      } else {
+        gaps.push({
+          id: `${iso}-no_stay`,
+          date: iso,
+          kind: "no_stay",
+          severity: "high",
+          label: "No accommodation",
+          detail: `No stay booked for the night of ${friendly}.`,
+          prompt: `Suggest 3 well-rated hotels for the night of ${friendly}${nextCity ? ` near ${nextCity}` : ""}.`,
+          seed: {
+            category: "stays",
+            title: `Stay — ${friendly}`,
+            location_name: nextCity,
           },
         });
       }
@@ -216,16 +203,10 @@ export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): n
   const staysByNight = expandStayNights(items);
   days.forEach((d, idx) => {
     const iso = format(d, "yyyy-MM-dd");
-    const dayItems = byDate.get(iso) || [];
     const isLast = idx === days.length - 1;
-    // Stay weight
-    if (!isLast) {
-      possible += 2;
-      if ((staysByNight.get(iso) || []).length > 0) earned += 2;
-    }
-    // Some activity/dining weight
+    if (isLast) return;
     possible += 1;
-    if (dayItems.some((i) => i.category === "activity" || i.category === "dining")) earned += 1;
+    if ((staysByNight.get(iso) || []).length > 0) earned += 1;
   });
 
   return possible === 0 ? 0 : Math.round((earned / possible) * 100);

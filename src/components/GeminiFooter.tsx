@@ -118,7 +118,7 @@ export default function GeminiFooter() {
             total: activeTrip.total_trip_budget,
             spent: totalSpent,
             remaining,
-            currency: (activeTrip as unknown as { currency?: string }).currency || "USD",
+            currency: activeTrip.display_currency || "USD",
           }
         : null,
       anchor: activeAnchor

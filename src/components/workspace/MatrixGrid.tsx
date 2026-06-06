@@ -1132,7 +1132,7 @@ export default function MatrixGrid() {
                 key={cat.key}
                 className="flex items-center border-b border-border px-3"
                 style={{
-                  height: cat.key === "stays" ? `${staysRowHeight}px` : "112px",
+                  height: cat.key === "stays" ? `${staysRowHeight}px` : `${rowH}px`,
                 }}
               >
                 <span className="font-inter text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -1145,6 +1145,16 @@ export default function MatrixGrid() {
                 Daily $
               </span>
             </div>
+            {showPulse && (
+              <div
+                className="flex items-center border-b border-border px-3"
+                style={{ height: `${pulseH}px` }}
+              >
+                <span className="font-inter text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Pulse
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Day columns wrapper (relative — hosts the absolute leg-pill overlay) */}

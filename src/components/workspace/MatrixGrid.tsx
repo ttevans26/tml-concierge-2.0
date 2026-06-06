@@ -385,6 +385,15 @@ export default function MatrixGrid() {
     return totals;
   }, [days, itineraryItems]);
 
+  const maxDailyTotal = useMemo(() => {
+    const vals = Object.values(dailyTotals);
+    return vals.length ? Math.max(1, ...vals) : 1;
+  }, [dailyTotals]);
+
+  const pulseGapsByDate = useMemo(() => {
+    return gapsByDate(detectGaps(activeTrip, itineraryItems));
+  }, [activeTrip, itineraryItems]);
+
   /* ---- Smart Pull handlers ---- */
 
   // Smart Pull logic is encapsulated in <SmartPullInbox /> below.

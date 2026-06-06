@@ -1405,7 +1405,7 @@ export default function MatrixGrid() {
                       key={cat.key}
                       className="flex flex-col gap-1 border-b border-border p-1.5 overflow-y-auto"
                       style={{
-                        height: isStays ? `${staysRowHeight}px` : "112px",
+                        height: isStays ? `${staysRowHeight}px` : `${rowH}px`,
                         ...cellStyleFor(dateStr),
                       }}
                       onDragOver={handleDragOver}

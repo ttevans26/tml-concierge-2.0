@@ -137,20 +137,11 @@ export default function MatrixGrid() {
     };
   }, [updateEdges]);
 
-  // Sticky label column on the left is 96px (w-24). Day columns flex to fill
-  // the remainder, clamped between MIN/MAX so they stay readable on small
-  // screens and don't sprawl on ultra-wide displays.
-  const LABEL_COL = 96;
-  const MIN_COL = 140;
-  const MAX_COL = 280;
-  const dayCount = Math.max(1, days?.length ?? 1);
-  const available = Math.max(0, containerWidth - LABEL_COL);
-  const COL_WIDTH = containerWidth
-    ? Math.min(MAX_COL, Math.max(MIN_COL, Math.floor(available / dayCount)))
-    : 176;
-
+  // COL_WIDTH is computed below after `days` is defined; scrollByCols reads
+  // the latest value via a ref so it can be defined here.
+  const colWidthRef = useRef(176);
   const scrollByCols = (cols: number) => {
-    scrollRef.current?.scrollBy({ left: cols * COL_WIDTH, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: cols * colWidthRef.current, behavior: "smooth" });
   };
   const scrollToStart = () => {
     scrollRef.current?.scrollTo({ left: 0, behavior: "smooth" });

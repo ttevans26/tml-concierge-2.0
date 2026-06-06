@@ -176,7 +176,7 @@ export function gapsByDate(gaps: Gap[]): Map<string, Gap[]> {
   return m;
 }
 
-/** 0–100. Rough heuristic: every day should have a stay (unless last) and at least 1 activity or dining. */
+/** 0–100. Critical-only: percentage of nights (excluding checkout day) with accommodation booked. */
 export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): number {
   if (!trip?.start_date || !trip?.end_date) return 0;
   let days: Date[] = [];
@@ -189,14 +189,6 @@ export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): n
     return 0;
   }
   if (days.length === 0) return 0;
-
-  const byDate = new Map<string, ItineraryItem[]>();
-  for (const it of items) {
-    if (!it.date) continue;
-    const arr = byDate.get(it.date) || [];
-    arr.push(it);
-    byDate.set(it.date, arr);
-  }
 
   let earned = 0;
   let possible = 0;

@@ -1513,7 +1513,7 @@ export default function MatrixGrid() {
               </div>
               <div
                 className="flex h-full flex-col items-center justify-start bg-muted/10"
-                style={{ minHeight: `${36 + staysRowHeight + 112 * (CATEGORIES.length - 1) + 32}px` }}
+                style={{ minHeight: `${36 + staysRowHeight + rowH * (CATEGORIES.length - 1) + 32 + (showPulse ? pulseH : 0)}px` }}
               />
             </div>
           )}

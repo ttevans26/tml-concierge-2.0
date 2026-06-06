@@ -1,4 +1,4 @@
-import { eachDayOfInterval, parseISO, format, differenceInMinutes } from "date-fns";
+import { eachDayOfInterval, parseISO, format, differenceInMinutes, addDays, differenceInCalendarDays } from "date-fns";
 import type { ItineraryItem, Trip } from "@/stores/useTripStore";
 
 export type GapSeverity = "high" | "medium" | "low";
@@ -28,6 +28,40 @@ function toMin(t: string | null): number | null {
   return h * 60 + (m || 0);
 }
 
+/**
+ * Expand multi-night stays so every covered night maps back to its stay item.
+ * Mirrors MatrixGrid pill coverage (inclusive: nights = end - start + 1).
+ */
+function expandStayNights(items: ItineraryItem[]): Map<string, ItineraryItem[]> {
+  const m = new Map<string, ItineraryItem[]>();
+  for (const it of items) {
+    if (it.category !== "stays" || !it.date) continue;
+    const meta = (it.metadata as Record<string, unknown> | null) || {};
+    const metaEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : null;
+    let nights = 1;
+    let start: Date;
+    try {
+      start = parseISO(it.date);
+      if (metaEnd && metaEnd >= it.date) {
+        const end = parseISO(metaEnd);
+        nights = Math.max(1, differenceInCalendarDays(end, start) + 1);
+      }
+    } catch {
+      const arr = m.get(it.date) || [];
+      arr.push(it);
+      m.set(it.date, arr);
+      continue;
+    }
+    for (let n = 0; n < nights; n++) {
+      const iso = format(addDays(start, n), "yyyy-MM-dd");
+      const arr = m.get(iso) || [];
+      arr.push(it);
+      m.set(iso, arr);
+    }
+  }
+  return m;
+}
+
 /** Compute planning gaps across the trip date range. Pure — safe to memoize. */
 export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
   if (!trip?.start_date || !trip?.end_date) return [];
@@ -45,10 +79,12 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
   const byDate = new Map<string, ItineraryItem[]>();
   for (const it of items) {
     if (!it.date) continue;
+    if (it.category === "stays") continue; // stays handled via span expansion
     const arr = byDate.get(it.date) || [];
     arr.push(it);
     byDate.set(it.date, arr);
   }
+  const staysByNight = expandStayNights(items);
 
   let prevStayCity: string | null = null;
 
@@ -57,7 +93,7 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
     const iso = format(d, "yyyy-MM-dd");
     const friendly = format(d, "EEE MMM d");
     const dayItems = byDate.get(iso) || [];
-    const stays = dayItems.filter((i) => i.category === "stays");
+    const stays = staysByNight.get(iso) || [];
     const dining = dayItems.filter((i) => i.category === "dining");
     const logistics = dayItems.filter((i) => i.category === "logistics");
     const isLastDay = idx === days.length - 1;
@@ -77,7 +113,7 @@ export function detectGaps(trip: Trip | null, items: ItineraryItem[]): Gap[] {
     }
 
     // No dinner
-    if (dining.length === 0 && dayItems.length > 0) {
+    if (dining.length === 0 && (dayItems.length > 0 || stays.length > 0)) {
       gaps.push({
         id: `${iso}-no_dining`,
         date: iso,
@@ -177,6 +213,7 @@ export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): n
 
   let earned = 0;
   let possible = 0;
+  const staysByNight = expandStayNights(items);
   days.forEach((d, idx) => {
     const iso = format(d, "yyyy-MM-dd");
     const dayItems = byDate.get(iso) || [];
@@ -184,7 +221,7 @@ export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): n
     // Stay weight
     if (!isLast) {
       possible += 2;
-      if (dayItems.some((i) => i.category === "stays")) earned += 2;
+      if ((staysByNight.get(iso) || []).length > 0) earned += 2;
     }
     // Some activity/dining weight
     possible += 1;

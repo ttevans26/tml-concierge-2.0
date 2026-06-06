@@ -709,7 +709,7 @@ async function toolFindGaps(supabase: SB, tripId: string) {
     supabase.from("trips").select("start_date, end_date").eq("id", tripId).maybeSingle(),
     supabase
       .from("itinerary_items")
-      .select("id, category, date, start_time, end_time, title")
+      .select("id, category, date, start_time, end_time, title, metadata")
       .eq("trip_id", tripId),
   ]);
   if (!trip?.start_date || !trip?.end_date) return { error: "Trip dates not set." };
@@ -720,10 +720,31 @@ async function toolFindGaps(supabase: SB, tripId: string) {
     if (!byDay.has(i.date)) byDay.set(i.date, []);
     byDay.get(i.date)!.push(i);
   }
+  // Expand multi-night stays across every night they cover (mirrors Matrix Grid).
+  const staysByNight = new Set<string>();
+  for (const i of items || []) {
+    if (i.category !== "stays" || !i.date) continue;
+    const meta = (i as { metadata?: Record<string, unknown> }).metadata || {};
+    const metaEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : null;
+    try {
+      const start = new Date(i.date + "T00:00:00Z");
+      let nights = 1;
+      if (metaEnd && metaEnd >= i.date) {
+        const end = new Date(metaEnd + "T00:00:00Z");
+        nights = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+      }
+      for (let n = 0; n < nights; n++) {
+        const d = new Date(start.getTime() + n * 86400000);
+        staysByNight.add(d.toISOString().slice(0, 10));
+      }
+    } catch {
+      staysByNight.add(i.date);
+    }
+  }
   const gaps: { date: string; type: "empty_day" | "missing_dinner" | "no_stay"; note: string }[] = [];
   for (const d of days) {
     const dayItems = byDay.get(d) || [];
-    const hasStay = dayItems.some((i) => i.category === "stays");
+    const hasStay = staysByNight.has(d);
     const hasDinner = dayItems.some(
       (i) => i.category === "dining" && i.start_time && i.start_time >= "17:00" && i.start_time <= "22:30",
     );

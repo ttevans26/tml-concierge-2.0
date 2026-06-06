@@ -12,6 +12,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
 import ConciergeToolCard from "@/components/workspace/ConciergeToolCard";
+import ProposalCard, { getProposal } from "@/components/workspace/concierge/ProposalCard";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
@@ -441,6 +442,14 @@ export default function ConciergePanel() {
               }
               let result: unknown = m.content;
               try { result = JSON.parse(m.content); } catch { /* keep raw */ }
+              const proposal = getProposal(result);
+              if (proposal) {
+                return (
+                  <div key={i} className="pl-2">
+                    <ProposalCard proposal={proposal} />
+                  </div>
+                );
+              }
               return (
                 <div key={i} className="pl-2">
                   <ConciergeToolCard tc={{ name: tc.name || "tool", args: tc.args, result }} />

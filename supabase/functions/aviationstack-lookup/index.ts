@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { jsonResponse } from "../_shared/cors.ts";
 import { createHandler } from "../_shared/handler.ts";
 import { obj, str, optional } from "../_shared/validate.ts";
+import { getAuthUser } from "../_shared/auth.ts";
 
 const InputSchema = obj({
   flight_iata: str({ min: 2, max: 16, pattern: /^[A-Za-z0-9 ]+$/ }),
@@ -17,6 +18,11 @@ serve(
       rateLimit: { capacity: 30, refillPerSec: 0.5 },
     },
     async ({ req, log }) => {
+      const user = await getAuthUser(req);
+      if (!user) {
+        log.warn("unauthorized");
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
       const body = await req.json().catch(() => ({}));
       const { flight_iata, flight_date } = InputSchema.parse(body);
 

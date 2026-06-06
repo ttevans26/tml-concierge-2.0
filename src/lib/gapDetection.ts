@@ -213,6 +213,7 @@ export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): n
 
   let earned = 0;
   let possible = 0;
+  const staysByNight = expandStayNights(items);
   days.forEach((d, idx) => {
     const iso = format(d, "yyyy-MM-dd");
     const dayItems = byDate.get(iso) || [];
@@ -220,7 +221,7 @@ export function computeHealthScore(trip: Trip | null, items: ItineraryItem[]): n
     // Stay weight
     if (!isLast) {
       possible += 2;
-      if (dayItems.some((i) => i.category === "stays")) earned += 2;
+      if ((staysByNight.get(iso) || []).length > 0) earned += 2;
     }
     // Some activity/dining weight
     possible += 1;

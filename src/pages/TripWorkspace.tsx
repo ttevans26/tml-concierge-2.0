@@ -143,7 +143,7 @@ export default function TripWorkspace() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left — Studio Folders (collapsible) */}
         {studioOpen ? (
-          <div className="hidden w-[20%] min-w-[220px] shrink-0 lg:block">
+          <div className="hidden w-[20%] min-w-[220px] max-w-[320px] shrink-0 lg:block">
             <StudioSidebar onCollapse={() => setStudioOpen(false)} />
           </div>
         ) : (
@@ -170,7 +170,7 @@ export default function TripWorkspace() {
 
         {/* Right — Budget Sidebar 20% */}
         {budgetOpen ? (
-          <div className="hidden w-[22%] min-w-[260px] shrink-0 lg:flex flex-col border-l border-border bg-card">
+          <div className="hidden w-[22%] min-w-[260px] max-w-[360px] shrink-0 lg:flex flex-col border-l border-border bg-card">
             {/* Tabs */}
             <div className="flex shrink-0 border-b border-border">
               {([

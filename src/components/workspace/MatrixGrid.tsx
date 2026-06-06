@@ -1443,6 +1443,48 @@ export default function MatrixGrid() {
                     {total > 0 ? `$${total.toLocaleString()}` : "—"}
                   </span>
                 </div>
+                {showPulse && (() => {
+                  const dayGaps = pulseGapsByDate.get(dateStr) || [];
+                  const sev = dayGaps.some((g) => g.severity === "high")
+                    ? "high"
+                    : dayGaps.some((g) => g.severity === "medium")
+                      ? "medium"
+                      : dayGaps.length > 0
+                        ? "low"
+                        : null;
+                  const barH = total > 0
+                    ? Math.max(4, Math.round((total / maxDailyTotal) * (pulseH - 24)))
+                    : 0;
+                  const pipColor =
+                    sev === "high"
+                      ? "bg-destructive"
+                      : sev === "medium"
+                        ? "bg-[hsl(36,75%,55%)]"
+                        : "bg-muted-foreground/40";
+                  return (
+                    <div
+                      className="relative flex items-end justify-center border-b border-border px-2 pb-1.5 pt-2 transition-opacity duration-150"
+                      style={{ height: `${pulseH}px`, ...cellStyleFor(dateStr) }}
+                      title={
+                        (total > 0 ? `$${total.toLocaleString()} planned` : "No spend") +
+                        (dayGaps.length ? `  ·  ${dayGaps.map((g) => g.label).join(", ")}` : "")
+                      }
+                    >
+                      {barH > 0 && (
+                        <div
+                          className="w-1.5 rounded-sm bg-accent/70"
+                          style={{ height: `${barH}px` }}
+                        />
+                      )}
+                      {sev && (
+                        <span
+                          className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${pipColor}`}
+                          aria-label={`${dayGaps.length} gap${dayGaps.length === 1 ? "" : "s"}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}

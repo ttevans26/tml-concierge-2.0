@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getAuthUser, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,16 +19,20 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // Require authentication. Scope is always forced to the caller's user_id
+    // — any caller-supplied user_id in the body is ignored. For cron use,
+    // invoke this function via Supabase scheduled functions (which run with
+    // the service role internally) rather than over the public HTTP edge.
+    const authUser = await getAuthUser(req);
+    if (!authUser) return unauthorizedResponse(corsHeaders);
+
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    // Optional scope: { user_id: string } limits the scan to a single user.
-    let scopeUserId: string | null = null;
-    try {
-      const body = await req.json();
-      if (body?.user_id && typeof body.user_id === "string") scopeUserId = body.user_id;
-    } catch { /* empty body ok */ }
+    // Force scope to the authenticated user — never trust client-supplied IDs.
+    const scopeUserId: string = authUser.id;
+    try { await req.json(); } catch { /* empty body ok */ }
 
     const now = new Date();
     const horizon = new Date(now);

@@ -624,7 +624,29 @@ export default function MatrixGrid() {
   }, [stayLanes]);
   const maxStayLane = stayLanes.reduce((m, x) => Math.max(m, x.lane), -1);
   const STAY_LANE_H = 28;
-  const staysRowHeight = Math.max(112, (maxStayLane + 1) * STAY_LANE_H + 16);
+
+  /* ---- Dynamic row + Pulse strip sizing ----
+   * Continuously scale rows between ROW_MIN and ROW_MAX based on available
+   * scroll-container height. Any remainder above ROW_MAX*4 fades a compact
+   * Trip Pulse strip in below the Daily $ footer.
+   */
+  const ROW_MIN = 96;
+  const ROW_MAX = 160;
+  const PULSE_MAX = 140;
+  const PULSE_MIN_RENDER = 36;
+  const lanesExtra = Math.max(0, (maxStayLane + 1) * STAY_LANE_H + 16 - ROW_MIN);
+  const chrome = 40 /* date header */ + 36 /* location row */ + 32 /* daily $ */;
+  const usableH = Math.max(0, containerHeight - chrome - lanesExtra);
+  const rowH = containerHeight
+    ? Math.min(ROW_MAX, Math.max(ROW_MIN, Math.floor(usableH / 4)))
+    : 112;
+  const staysRowHeight = Math.max(rowH, (maxStayLane + 1) * STAY_LANE_H + 16);
+  const rowsTotalH = rowH * 3 + staysRowHeight;
+  const remainderH = containerHeight - chrome - rowsTotalH;
+  const pulseH = containerHeight
+    ? Math.max(0, Math.min(PULSE_MAX, remainderH))
+    : 0;
+  const showPulse = pulseH >= PULSE_MIN_RENDER;
 
   /* ---- Stay-pill edge resize (drag right/left edge to extend/shrink) ---- */
   const [resizeState, setResizeState] = useState<{

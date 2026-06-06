@@ -1,13 +1,17 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Sparkles, X, Loader2, RotateCcw, Bookmark, CalendarDays } from "lucide-react";
+import { Sparkles, X, Loader2, RotateCcw, Bookmark, CalendarDays, Wrench, CheckCircle2 } from "lucide-react";
 const ReactMarkdown = lazy(() => import("react-markdown"));
 import { cn } from "@/lib/utils";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
-import { useTripStore } from "@/stores/useTripStore";
+import { useTripStore, selectTotalReservedCost, selectRemainingBudget } from "@/stores/useTripStore";
 import { useStudioStore } from "@/stores/useStudioStore";
 import { toast } from "@/hooks/use-toast";
+import { streamConcierge } from "@/lib/conciergeStream";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string }
+  | { role: "tool"; toolId: string; name: string; args: Record<string, unknown>; result?: unknown; pending: boolean };
 
 interface Suggestion {
   title: string;
@@ -62,6 +66,7 @@ export default function GeminiFooter() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -71,6 +76,8 @@ export default function GeminiFooter() {
   const activeAnchor = useTripStore((s) => s.activeAnchor);
   const createItineraryItem = useTripStore((s) => s.createItineraryItem);
   const fetchItineraryItems = useTripStore((s) => s.fetchItineraryItems);
+  const totalSpent = useTripStore(selectTotalReservedCost);
+  const remaining = useTripStore(selectRemainingBudget);
 
   const activeFolder = useStudioStore((s) => s.activeFolder);
   const addStudioItem = useStudioStore((s) => s.addItem);
@@ -93,6 +100,8 @@ export default function GeminiFooter() {
       ];
 
   function buildContext() {
+    const cards = Array.isArray(profile?.active_cards) ? (profile?.active_cards as unknown[]).map(String) : [];
+    const loyalty = Array.isArray(profile?.loyalty_memberships) ? (profile?.loyalty_memberships as unknown[]).map(String) : [];
     return {
       trip: activeTrip
         ? {
@@ -104,6 +113,14 @@ export default function GeminiFooter() {
             target_nightly_budget: activeTrip.target_nightly_budget,
           }
         : null,
+      budget: activeTrip
+        ? {
+            total: activeTrip.total_trip_budget,
+            spent: totalSpent,
+            remaining,
+            currency: activeTrip.currency || "USD",
+          }
+        : null,
       anchor: activeAnchor
         ? { title: activeAnchor.title, location_name: activeAnchor.location_name }
         : null,
@@ -113,6 +130,8 @@ export default function GeminiFooter() {
         date: i.date,
       })),
       preferences: (profile?.preferences as Record<string, unknown>) ?? {},
+      loyalty_cards: cards,
+      loyalty_programs: loyalty,
     };
   }
 
@@ -121,8 +140,7 @@ export default function GeminiFooter() {
     if (!trimmed || streaming) return;
 
     const userMsg: Msg = { role: "user", content: trimmed };
-    const next = [...messages, userMsg];
-    setMessages(next);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setStreaming(true);
 
@@ -130,7 +148,7 @@ export default function GeminiFooter() {
     abortRef.current = controller;
 
     let assistantSoFar = "";
-    const pushAssistant = (chunk: string) => {
+    const upsertAssistant = (chunk: string) => {
       assistantSoFar += chunk;
       setMessages((prev) => {
         const last = prev[prev.length - 1];
@@ -142,55 +160,40 @@ export default function GeminiFooter() {
     };
 
     try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
+      await streamConcierge({
+        message: trimmed,
+        conversation_id: conversationId,
+        trip_id: activeTrip?.id || null,
+        context: buildContext(),
         signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ messages: next, context: buildContext() }),
-      });
-
-      if (!resp.ok || !resp.body) {
-        if (resp.status === 429) toast({ title: "Concierge is warming up", description: "Try again in a moment." });
-        else if (resp.status === 402) toast({ title: "AI credits exhausted", description: "Add funds in Settings → Workspace → Usage.", variant: "destructive" });
-        else toast({ title: "Concierge unavailable", description: "Please try again shortly." });
-        setStreaming(false);
-        return;
-      }
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let done = false;
-      while (!done) {
-        const { done: d, value } = await reader.read();
-        if (d) break;
-        buf += decoder.decode(value, { stream: true });
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          let line = buf.slice(0, nl);
-          buf = buf.slice(nl + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line || line.startsWith(":") || !line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") { done = true; break; }
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content: string | undefined = parsed.choices?.[0]?.delta?.content;
-            if (content) pushAssistant(content);
-          } catch {
-            buf = line + "\n" + buf;
-            break;
+        onEvent: (e) => {
+          if (e.type === "conversation") {
+            setConversationId(e.conversation_id);
+          } else if (e.type === "tool_call_start") {
+            setMessages((prev) => [
+              ...prev,
+              { role: "tool", toolId: e.id, name: e.name, args: e.args, pending: true },
+            ]);
+          } else if (e.type === "tool_call_result") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.role === "tool" && m.toolId === e.id ? { ...m, result: e.result, pending: false } : m,
+              ),
+            );
+            if (e.name === "create_itinerary_item" && (e.result as { ok?: boolean })?.ok) {
+              const item = (e.result as { item?: { title?: string } }).item;
+              toast({ title: "Added to itinerary", description: item?.title || "" });
+              if (activeTrip) fetchItineraryItems(activeTrip.id);
+            }
+          } else if (e.type === "delta") {
+            upsertAssistant(e.content);
+          } else if (e.type === "error") {
+            if (e.status === 429) toast({ title: "Concierge is warming up", description: "Try again in a moment." });
+            else if (e.status === 402) toast({ title: "AI credits exhausted", description: "Add funds in Settings → Workspace → Usage.", variant: "destructive" });
+            else toast({ title: "Concierge unavailable", description: e.error });
           }
-        }
-      }
-    } catch (e: any) {
-      if (e?.name !== "AbortError") {
-        console.error(e);
-        toast({ title: "Concierge error", description: "Connection interrupted.", variant: "destructive" });
-      }
+        },
+      });
     } finally {
       setStreaming(false);
       abortRef.current = null;
@@ -201,6 +204,7 @@ export default function GeminiFooter() {
     abortRef.current?.abort();
     setMessages([]);
     setStreaming(false);
+    setConversationId(null);
   }
 
   /* ---- Actions ---- */

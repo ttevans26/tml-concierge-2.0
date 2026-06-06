@@ -722,10 +722,12 @@ async function toolFindGaps(supabase: SB, tripId: string) {
   }
   // Expand multi-night stays across every night they cover (mirrors Matrix Grid).
   const staysByNight = new Set<string>();
+  const stayCityByNight = new Map<string, string | null>();
   for (const i of items || []) {
     if (i.category !== "stays" || !i.date) continue;
     const meta = (i as { metadata?: Record<string, unknown> }).metadata || {};
     const metaEnd = typeof meta.end_date === "string" ? (meta.end_date as string) : null;
+    const city = (i as { location_name?: string | null }).location_name ?? null;
     try {
       const start = new Date(i.date + "T00:00:00Z");
       let nights = 1;
@@ -735,28 +737,56 @@ async function toolFindGaps(supabase: SB, tripId: string) {
       }
       for (let n = 0; n < nights; n++) {
         const d = new Date(start.getTime() + n * 86400000);
-        staysByNight.add(d.toISOString().slice(0, 10));
+        const iso = d.toISOString().slice(0, 10);
+        staysByNight.add(iso);
+        if (!stayCityByNight.has(iso)) stayCityByNight.set(iso, city);
       }
     } catch {
       staysByNight.add(i.date);
+      if (!stayCityByNight.has(i.date)) stayCityByNight.set(i.date, city);
     }
   }
-  const gaps: { date: string; type: "empty_day" | "missing_dinner" | "no_stay"; note: string }[] = [];
-  for (const d of days) {
+  // Precompute next stay city looking forward (for stay_gap classification).
+  const nextStayCityFrom: (string | null)[] = new Array(days.length).fill(null);
+  {
+    let next: string | null = null;
+    for (let i = days.length - 1; i >= 0; i--) {
+      const here = stayCityByNight.get(days[i]) ?? null;
+      if (here) next = here;
+      nextStayCityFrom[i] = next;
+    }
+  }
+  const gaps: { date: string; type: "no_stay" | "stay_gap" | "missing_transit"; note: string }[] = [];
+  let prevStayCity: string | null = null;
+  for (let idx = 0; idx < days.length; idx++) {
+    const d = days[idx];
+    const isLast = idx === days.length - 1;
     const dayItems = byDay.get(d) || [];
     const hasStay = staysByNight.has(d);
-    const hasDinner = dayItems.some(
-      (i) => i.category === "dining" && i.start_time && i.start_time >= "17:00" && i.start_time <= "22:30",
-    );
-    const nonStay = dayItems.filter((i) => i.category !== "stays" && i.category !== "location");
-    if (nonStay.length === 0) {
-      gaps.push({ date: d, type: "empty_day", note: "No activities, dining, or logistics scheduled." });
-    } else if (!hasDinner && dayItems.some((i) => i.category === "dining" || i.category === "activity")) {
-      gaps.push({ date: d, type: "missing_dinner", note: "No dinner reservation between 17:00 and 22:30." });
+    const todayCity = stayCityByNight.get(d) ?? null;
+    const hasLogistics = dayItems.some((i) => i.category === "logistics");
+
+    if (!isLast && !hasStay) {
+      const nextCity = nextStayCityFrom[idx];
+      if (prevStayCity && nextCity && prevStayCity !== nextCity) {
+        gaps.push({
+          date: d,
+          type: "stay_gap",
+          note: `Gap between ${prevStayCity} and ${nextCity} — no stay on this night.`,
+        });
+      } else {
+        gaps.push({ date: d, type: "no_stay", note: "No accommodation for this night." });
+      }
     }
-    if (!hasStay) {
-      gaps.push({ date: d, type: "no_stay", note: "No accommodation for this night." });
+
+    if (prevStayCity && todayCity && prevStayCity !== todayCity && !hasLogistics) {
+      gaps.push({
+        date: d,
+        type: "missing_transit",
+        note: `Moving ${prevStayCity} → ${todayCity} with no logistics booked.`,
+      });
     }
+    if (todayCity) prevStayCity = todayCity;
   }
   return {
     proposal: {

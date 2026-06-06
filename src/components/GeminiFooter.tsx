@@ -122,7 +122,12 @@ export default function GeminiFooter() {
           }
         : null,
       anchor: activeAnchor
-        ? { title: activeAnchor.title, location_name: activeAnchor.location_name }
+        ? {
+            title: activeAnchor.title,
+            location_name: activeAnchor.location_name,
+            location_lat: activeAnchor.location_lat,
+            location_lng: activeAnchor.location_lng,
+          }
         : null,
       itinerary: itineraryItems.map((i) => ({
         category: i.category,

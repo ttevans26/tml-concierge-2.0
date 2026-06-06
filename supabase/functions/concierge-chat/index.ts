@@ -92,11 +92,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { conversation_id, message, context, trip_id } = body as {
+    const { conversation_id, message, context, trip_id, stream } = body as {
       conversation_id?: string;
       message?: string;
       context?: Record<string, unknown>;
       trip_id?: string | null;
+      stream?: boolean;
     };
     if (!message || typeof message !== "string" || !message.trim()) {
       return new Response(JSON.stringify({ error: "messages array required" }), {
@@ -177,6 +178,158 @@ serve(async (req) => {
       } else {
         aiMessages.push({ role: m.role, content: m.content || "" });
       }
+    }
+
+    /* ---------- Streaming branch ---------- */
+    if (stream) {
+      const encoder = new TextEncoder();
+      const sseHeaders = {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      };
+
+      const streamBody = new ReadableStream({
+        async start(controller) {
+          const send = (obj: unknown) => {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          };
+
+          try {
+            send({ type: "conversation", conversation_id: convId });
+
+            const executedTools: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
+            let finalContent = "";
+
+            for (let iter = 0; iter < 4; iter++) {
+              const isFinalIter = iter === 3;
+              // First pass: non-streaming to detect tool calls; if no tool calls, re-issue as streaming.
+              const probe = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-3-flash-preview",
+                  messages: aiMessages,
+                  tools: TOOLS,
+                }),
+              });
+              if (!probe.ok) {
+                const status = probe.status;
+                send({ type: "error", status, error: status === 429 ? "Rate limit exceeded." : status === 402 ? "AI credits exhausted." : "AI service error" });
+                controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+                controller.close();
+                return;
+              }
+              const data = await probe.json();
+              const choice = data.choices?.[0]?.message;
+              const toolCalls = choice?.tool_calls;
+
+              if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0 && !isFinalIter) {
+                aiMessages.push({ role: "assistant", content: choice.content || "", tool_calls: toolCalls });
+                const dbRows: Record<string, unknown>[] = [
+                  { conversation_id: convId, user_id: user.id, role: "assistant", content: choice.content || "", tool_calls: toolCalls },
+                ];
+                for (const tc of toolCalls) {
+                  const name = tc.function?.name as string;
+                  let args: Record<string, unknown> = {};
+                  try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
+                  send({ type: "tool_call_start", id: tc.id, name, args });
+                  const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null });
+                  executedTools.push({ name, args, result });
+                  send({ type: "tool_call_result", id: tc.id, name, result });
+                  aiMessages.push({
+                    role: "tool",
+                    content: JSON.stringify(result),
+                    tool_call_id: tc.id,
+                    name,
+                  });
+                  dbRows.push({
+                    conversation_id: convId,
+                    user_id: user.id,
+                    role: "tool",
+                    content: JSON.stringify(result),
+                    tool_calls: { tool_call_id: tc.id, name, args },
+                  });
+                }
+                await supabase.from("concierge_messages").insert(dbRows);
+                continue;
+              }
+
+              // No more tool calls — stream the final answer
+              const finalResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-3-flash-preview",
+                  messages: aiMessages,
+                  stream: true,
+                }),
+              });
+              if (!finalResp.ok || !finalResp.body) {
+                // Fallback: use the choice content we already have
+                finalContent = choice?.content || "";
+                if (finalContent) send({ type: "delta", content: finalContent });
+                break;
+              }
+              const reader = finalResp.body.getReader();
+              const decoder = new TextDecoder();
+              let buf = "";
+              let streamDone = false;
+              while (!streamDone) {
+                const { done: d, value } = await reader.read();
+                if (d) break;
+                buf += decoder.decode(value, { stream: true });
+                let nl: number;
+                while ((nl = buf.indexOf("\n")) !== -1) {
+                  let line = buf.slice(0, nl);
+                  buf = buf.slice(nl + 1);
+                  if (line.endsWith("\r")) line = line.slice(0, -1);
+                  if (!line || line.startsWith(":") || !line.startsWith("data: ")) continue;
+                  const payload = line.slice(6).trim();
+                  if (payload === "[DONE]") { streamDone = true; break; }
+                  try {
+                    const parsed = JSON.parse(payload);
+                    const c: string | undefined = parsed.choices?.[0]?.delta?.content;
+                    if (c) {
+                      finalContent += c;
+                      send({ type: "delta", content: c });
+                    }
+                  } catch {
+                    buf = line + "\n" + buf;
+                    break;
+                  }
+                }
+              }
+              break;
+            }
+
+            // Persist final assistant message
+            await supabase.from("concierge_messages").insert({
+              conversation_id: convId,
+              user_id: user.id,
+              role: "assistant",
+              content: finalContent,
+              tool_calls: null,
+            });
+            send({ type: "done", content: finalContent });
+          } catch (e) {
+            console.error("concierge-chat stream error", e);
+            send({ type: "error", error: e instanceof Error ? e.message : "Stream error" });
+          } finally {
+            controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(streamBody, { headers: sseHeaders });
     }
 
     // Tool-call loop (max 4 iterations to avoid runaway)
@@ -355,8 +508,20 @@ function buildContextBlock(context: any): string {
     lines.push(`[ACTIVE TRIP] ${parts}`);
     if (t.total_trip_budget) lines.push(`[BUDGET] Total ${t.total_trip_budget}, nightly target ${t.target_nightly_budget ?? "—"}`);
   }
+  if (context.budget && typeof context.budget === "object") {
+    const b = context.budget as Record<string, unknown>;
+    const bits: string[] = [];
+    if (b.total != null) bits.push(`total ${b.total}`);
+    if (b.spent != null) bits.push(`spent ${b.spent}`);
+    if (b.remaining != null) bits.push(`remaining ${b.remaining}`);
+    if (b.currency) bits.push(String(b.currency));
+    if (bits.length) lines.push(`[BUDGET SNAPSHOT] ${bits.join(" · ")}`);
+  }
   if (context.anchor) {
     lines.push(`[ANCHOR STAY] ${context.anchor.title}${context.anchor.location_name ? ` — ${context.anchor.location_name}` : ""}`);
+  }
+  if (context.focused_date) {
+    lines.push(`[FOCUSED DAY] ${context.focused_date}`);
   }
   if (Array.isArray(context.itinerary) && context.itinerary.length > 0) {
     const summary = context.itinerary.slice(0, 40)
@@ -373,6 +538,12 @@ function buildContextBlock(context: any): string {
     if (Array.isArray(p.creditCards) && p.creditCards.length) prefs.push(`cards: ${p.creditCards.join(", ")}`);
     if (Array.isArray(p.amenities) && p.amenities.length) prefs.push(`amenities: ${p.amenities.join(", ")}`);
     if (prefs.length) lines.push(`[PREFERENCES] ${prefs.join(" · ")}`);
+  }
+  if (Array.isArray(context.loyalty_cards) && context.loyalty_cards.length) {
+    lines.push(`[LOYALTY WALLET] ${context.loyalty_cards.slice(0, 12).join(", ")}`);
+  }
+  if (Array.isArray(context.loyalty_programs) && context.loyalty_programs.length) {
+    lines.push(`[LOYALTY PROGRAMS] ${context.loyalty_programs.slice(0, 12).join(", ")}`);
   }
   return lines.join("\n");
 }

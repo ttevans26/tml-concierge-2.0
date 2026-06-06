@@ -3,19 +3,28 @@ import { Sparkles, Send, Loader2, Plus, Pencil, MessagesSquare, Trash2, PanelLef
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
+import {
+  useTripStore,
+  selectTotalReservedCost,
+  selectRemainingBudget,
+  type ItineraryItem,
+} from "@/stores/useTripStore";
 import { toast } from "@/hooks/use-toast";
 import EditItemDialog from "@/components/workspace/EditItemDialog";
 import ConciergeToolCard from "@/components/workspace/ConciergeToolCard";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import { streamConcierge } from "@/lib/conciergeStream";
 
 type Msg = {
   id?: string;
   role: "user" | "assistant" | "tool";
   content: string;
   tool_calls?: unknown;
+  // For live tool-call lifecycle (in-flight rendering)
+  toolId?: string;
+  pending?: boolean;
 };
 
 interface Conversation {
@@ -67,6 +76,7 @@ export default function ConciergePanel() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const activeTrip = useTripStore((s) => s.activeTrip);
   const itineraryItems = useTripStore((s) => s.itineraryItems);
@@ -76,6 +86,8 @@ export default function ConciergePanel() {
   const fetchItineraryItems = useTripStore((s) => s.fetchItineraryItems);
   const pendingConciergePrompt = useTripStore((s) => s.pendingConciergePrompt);
   const consumeConciergePrompt = useTripStore((s) => s.consumeConciergePrompt);
+  const totalSpent = useTripStore(selectTotalReservedCost);
+  const remaining = useTripStore(selectRemainingBudget);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -141,6 +153,8 @@ export default function ConciergePanel() {
   }, [pendingConciergePrompt]);
 
   function buildContext() {
+    const cards = Array.isArray(profile?.active_cards) ? (profile?.active_cards as unknown[]).map(String) : [];
+    const loyalty = Array.isArray(profile?.loyalty_memberships) ? (profile?.loyalty_memberships as unknown[]).map(String) : [];
     return {
       trip: activeTrip
         ? {
@@ -152,11 +166,21 @@ export default function ConciergePanel() {
             target_nightly_budget: activeTrip.target_nightly_budget,
           }
         : null,
+      budget: activeTrip
+        ? {
+            total: activeTrip.total_trip_budget,
+            spent: totalSpent,
+            remaining,
+            currency: activeTrip.display_currency || "USD",
+          }
+        : null,
       anchor: activeAnchor
         ? { title: activeAnchor.title, location_name: activeAnchor.location_name }
         : null,
       itinerary: itineraryItems.map((i) => ({ category: i.category, title: i.title, date: i.date })),
       preferences: (profile?.preferences as Record<string, unknown>) ?? {},
+      loyalty_cards: cards,
+      loyalty_programs: loyalty,
     };
   }
 
@@ -174,49 +198,70 @@ export default function ConciergePanel() {
     setInput("");
     setSending(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let assistantSoFar = "";
+    let didError = false;
+    const upsertAssistant = (chunk: string) => {
+      assistantSoFar += chunk;
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant" && !last.tool_calls) {
+          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+        }
+        return [...prev, { role: "assistant", content: assistantSoFar }];
+      });
+    };
+
     try {
-      const { data, error } = await supabase.functions.invoke("concierge-chat", {
-        body: {
-          conversation_id: activeConvId,
-          trip_id: activeTrip?.id || null,
-          message: trimmed,
-          context: buildContext(),
+      await streamConcierge({
+        message: trimmed,
+        conversation_id: activeConvId,
+        trip_id: activeTrip?.id || null,
+        context: buildContext(),
+        signal: controller.signal,
+        onEvent: (e) => {
+          if (e.type === "conversation") {
+            if (e.conversation_id !== activeConvId) setActiveConvId(e.conversation_id);
+          } else if (e.type === "tool_call_start") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "tool",
+                content: "",
+                toolId: e.id,
+                pending: true,
+                tool_calls: { name: e.name, args: e.args },
+              },
+            ]);
+          } else if (e.type === "tool_call_result") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.role === "tool" && m.toolId === e.id
+                  ? { ...m, content: JSON.stringify(e.result), pending: false }
+                  : m,
+              ),
+            );
+            if (e.name === "create_itinerary_item" && (e.result as { ok?: boolean })?.ok) {
+              const item = (e.result as { item?: { title?: string } }).item;
+              toast({ title: "Added to itinerary", description: item?.title || "" });
+              if (activeTrip) fetchItineraryItems(activeTrip.id);
+            }
+          } else if (e.type === "delta") {
+            upsertAssistant(e.content);
+          } else if (e.type === "error") {
+            didError = true;
+            if (e.status === 429) toast({ title: "Concierge is warming up", description: "Try again in a moment." });
+            else if (e.status === 402) toast({ title: "AI credits exhausted", description: "Add funds in Settings → Workspace → Usage.", variant: "destructive" });
+            else toast({ title: "Concierge unavailable", description: e.error || "Please try again shortly." });
+          }
         },
       });
-      if (error || data?.error) {
-        const status = (error as { context?: { status?: number } })?.context?.status;
-        if (status === 429)
-          toast({ title: "Concierge is warming up", description: "Try again in a moment." });
-        else if (status === 402)
-          toast({ title: "AI credits exhausted", description: "Add funds in Settings → Workspace → Usage.", variant: "destructive" });
-        else toast({ title: "Concierge unavailable", description: data?.error || "Please try again shortly." });
-        setMessages((prev) => prev.slice(0, -1));
-        return;
-      }
-      const newConvId = data.conversation_id as string;
-      const content = (data.content as string) || "";
-      const toolResults = (data.tool_results as { name: string; args?: Record<string, unknown>; result: any }[]) || [];
-      if (newConvId !== activeConvId) setActiveConvId(newConvId);
-      const toolMsgs: Msg[] = toolResults.map((tr) => ({
-        role: "tool",
-        content: JSON.stringify(tr.result ?? {}),
-        tool_calls: { name: tr.name, args: tr.args },
-      }));
-      setMessages((prev) => [...prev, ...toolMsgs, { role: "assistant", content }]);
-      // Toast on side-effect tools
-      for (const tr of toolResults) {
-        if (tr.name === "create_itinerary_item" && tr.result?.ok) {
-          toast({ title: "Added to itinerary", description: tr.result.item?.title || "" });
-          if (activeTrip) fetchItineraryItems(activeTrip.id);
-        }
-      }
+      if (didError) setMessages((prev) => prev.filter((m) => m.role !== "tool" || !m.pending));
       loadConversations();
-    } catch (e) {
-      console.error(e);
-      toast({ title: "Concierge error", description: "Connection interrupted.", variant: "destructive" });
-      setMessages((prev) => prev.slice(0, -1));
     } finally {
       setSending(false);
+      abortRef.current = null;
     }
   }
 
@@ -378,6 +423,17 @@ export default function ConciergePanel() {
             }
             if (m.role === "tool") {
               const tc = (m.tool_calls as { name?: string; args?: Record<string, unknown> } | null) || {};
+              if (m.pending) {
+                const label = (tc.name || "tool").replace(/_/g, " ");
+                return (
+                  <div key={i} className="pl-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-[2px] border border-border bg-background/60 px-2 py-1 font-inter text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin text-accent" strokeWidth={1.75} />
+                      Calling {label}…
+                    </div>
+                  </div>
+                );
+              }
               let result: unknown = m.content;
               try { result = JSON.parse(m.content); } catch { /* keep raw */ }
               return (

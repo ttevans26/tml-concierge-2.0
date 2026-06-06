@@ -336,7 +336,7 @@ serve(async (req) => {
                   let args: Record<string, unknown> = {};
                   try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
                   send({ type: "tool_call_start", id: tc.id, name, args });
-                  const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null });
+                  const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null, context, lovableKey: LOVABLE_API_KEY });
                   executedTools.push({ name, args, result });
                   send({ type: "tool_call_result", id: tc.id, name, result });
                   aiMessages.push({
@@ -471,7 +471,7 @@ serve(async (req) => {
           const name = tc.function?.name as string;
           let args: Record<string, unknown> = {};
           try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
-          const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null });
+          const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null, context, lovableKey: LOVABLE_API_KEY });
           executedTools.push({ name, args, result });
           aiMessages.push({
             role: "tool",

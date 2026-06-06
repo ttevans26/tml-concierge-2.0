@@ -313,6 +313,20 @@ export default function MatrixGrid() {
     }
   }, [activeTrip?.start_date, activeTrip?.end_date]);
 
+  // Fluid day-column width: fills the available scroll-container width and
+  // clamps to a readable range. Sticky label column on the left is 96px.
+  const LABEL_COL = 96;
+  const MIN_COL = 140;
+  const MAX_COL = 280;
+  const COL_WIDTH = useMemo(() => {
+    if (!containerWidth || days.length === 0) return 176;
+    const available = Math.max(0, containerWidth - LABEL_COL);
+    return Math.min(MAX_COL, Math.max(MIN_COL, Math.floor(available / days.length)));
+  }, [containerWidth, days.length]);
+  useEffect(() => {
+    colWidthRef.current = COL_WIDTH;
+  }, [COL_WIDTH]);
+
   const conflictIds = useMemo(() => detectConflicts(itineraryItems), [itineraryItems]);
 
   const conflictFixes = useMemo(() => {

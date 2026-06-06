@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAuthUser, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +28,9 @@ serve(async (req) => {
   }
 
   try {
+    const authUser = await getAuthUser(req);
+    if (!authUser) return unauthorizedResponse(corsHeaders);
+
     const body = await req.json();
     const urls: string[] = Array.isArray(body?.urls)
       ? body.urls.filter((u: unknown): u is string => typeof u === "string" && u.trim().length > 0)

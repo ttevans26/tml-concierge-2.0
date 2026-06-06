@@ -641,7 +641,7 @@ export default function MatrixGrid() {
 
       const onMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startX;
-        const delta = Math.round(dx / 176);
+        const delta = Math.round(dx / colWidthRef.current);
         if (delta !== lastDelta) {
           lastDelta = delta;
           setResizeState({ pillId: pill.id, side, deltaDays: delta });
@@ -1118,13 +1118,13 @@ export default function MatrixGrid() {
             {/* Absolute leg-pill overlay: top is below the 40px date header, height matches the location row */}
             <div
               className="pointer-events-none absolute left-0 top-10 z-10 h-9"
-              style={{ width: `${days.length * 176}px` }}
+              style={{ width: `${days.length * COL_WIDTH}px` }}
             >
               {displayedLegs.map((leg) => {
                 if (!activeTrip?.start_date) return null;
                 const { startIdx, span } = legColumnSpan(activeTrip.start_date, leg);
                 if (startIdx < 0 || startIdx >= days.length) return null;
-                const width = Math.min(span, days.length - startIdx) * 176;
+                const width = Math.min(span, days.length - startIdx) * COL_WIDTH;
                 const token = legTokenById.get(leg.id);
                 const isDragging = draggingLegId === leg.id;
                 return (
@@ -1167,7 +1167,7 @@ export default function MatrixGrid() {
                         : "border cursor-grab active:cursor-grabbing"
                     } ${isDragging ? "opacity-40 ring-2 ring-accent" : ""}`}
                     style={{
-                      left: `${startIdx * 176 + 4}px`,
+                      left: `${startIdx * COL_WIDTH + 4}px`,
                       width: `${width - 8}px`,
                       backgroundColor: token
                         ? `hsl(var(${token}) / ${leg.isGhost ? 0.12 : 0.28})`

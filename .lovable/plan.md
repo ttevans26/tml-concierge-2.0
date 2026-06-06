@@ -1,28 +1,40 @@
-## Problem
+## Goal
 
-The Matrix Grid renders a stay as a single pill spanning every night it covers (using `metadata.end_date`, e.g. "Bonsoir Madame · 3n" covering Aug 14–16). The gap detector, however, only inspects each item's `date` field (the check-in night), so every subsequent night is incorrectly flagged as "No accommodation." Same bug exists in the concierge `find_gaps` tool and the `prevStayCity` travel-day check.
+Trim gap analysis to **only trip-disrupting** issues. Visible-in-grid noise (dining, free blocks) goes away.
 
-## Fix
+## Kept gap kinds (3)
 
-Expand each stay across the nights it actually covers before evaluating per-day gaps — mirroring the Matrix Grid's existing logic (`nights = end - start + 1`, inclusive).
+1. **`no_stay`** (high) — a night with no accommodation. Already span-aware after the last fix.
+2. **`missing_transit`** (medium) — stay city changes day-over-day with no `logistics` item on the travel day.
+3. **`stay_gap`** (high, new) — a checkout-night with no follow-on stay before the next booked stay starts (orphan night between two different stays). Reported on each uncovered night between them.
 
-### 1. `src/lib/gapDetection.ts`
-- Before building `byDate`, pre-process stays: for each `category === "stays"` item, read `metadata.end_date`; for each ISO date in `[date … end_date]` insert a "virtual stay" reference into `byDate`. Non-stay items unchanged.
-- `stays.length === 0` check then correctly reports nights with no coverage.
-- Update the travel-day logic: derive `todayCity` from any stay covering that night (already handled once stays are expanded). Suppress the "missing transit" gap when the previous night's stay still covers today (no actual move).
-- Apply the same span expansion in `computeHealthScore` so the trip health % stops being dragged down by phantom missing-stay nights.
+## Removed
 
-### 2. `supabase/functions/concierge-chat/index.ts` (`toolFindGaps`)
-- Also select `metadata` from `itinerary_items`.
-- Build a `staysByNight` Set by expanding each stay across `date … metadata.end_date` (defensive `try/catch`, default to single night when `end_date` missing or malformed).
-- Replace the `hasStay = dayItems.some(...)` check with `staysByNight.has(d)`.
+- **`no_dining`** — visible in the empty Dining row.
+- **`free_block`** — visible in the empty Agenda row; not trip-breaking.
 
-### 3. Verification
-- Re-open the trip in the screenshot (Bonsoir Madame 3n from Aug 14, Airbnb St Remy 5n from Aug 17). After the fix:
-  - Aug 14, 15, 16 → covered by Bonsoir Madame, no "No accommodation".
-  - Aug 17–21 → covered by Airbnb St Remy.
-  - Only truly uncovered nights (and the no-dining/free-block gaps) remain.
-- Confirm trip health % rises accordingly and the concierge "Find gaps in my itinerary" tool returns the same corrected list.
+## Changes
+
+### `src/lib/gapDetection.ts`
+- Update `GapKind` union: drop `"no_dining" | "free_block"`, add `"stay_gap"`.
+- Delete the no-dining and free-block branches inside the day loop.
+- Refine the stay-coverage logic: walk days; when a night has no stay coverage, classify as either:
+  - `no_stay` when no stay exists on adjacent nights, OR
+  - `stay_gap` when the previous and/or next planned stay are in *different* cities (i.e. an orphan between two segments). Detail copy: "Gap between {prevCity} and {nextCity} — no stay on {date}." Seed prefills `location_name` with the nearest upcoming stay city to bias the AI prompt.
+- `missing_transit` branch stays as is (already span-aware via expanded stays).
+- `computeHealthScore`: keep stay weight; drop the activity/dining weight contribution so the score reflects only critical coverage. Renormalize possible/earned accordingly.
+
+### `supabase/functions/concierge-chat/index.ts` (`toolFindGaps`)
+- Remove `missing_dinner` and `empty_day` branches from the gaps array.
+- Mirror the same `no_stay` / `stay_gap` distinction using the already-built `staysByNight` set plus a parallel `stayCityByNight` map.
+- Keep the response `proposal.type = "find_gaps"` shape; the `gaps[].type` union shrinks to `"no_stay" | "stay_gap" | "missing_transit"`. Add `missing_transit` detection here too (currently absent) so the concierge tool matches the client-side analyzer.
+
+### Downstream
+- `TripHealthBar.tsx` and any consumer of `Gap`/`GapKind`: scan for switch/match on the removed kinds and clean up. (Quick rg pass during build.)
+- `ProposalCard` rendering for `find_gaps`: no schema change; the same "Add draft" affordance works for the new `stay_gap`.
 
 ## Out of scope
-No schema or UI changes — purely a logic fix in the two gap-evaluation paths.
+
+- No UI redesign of the gaps panel itself — it just gets quieter.
+- No new severity levels or filters/toggles (per answer #2).
+- No changes to budget, route, or other Phase 2 tools.

@@ -527,9 +527,9 @@ serve(async (req) => {
 async function executeTool(
   name: string,
   args: Record<string, unknown>,
-  ctx: { supabase: ReturnType<typeof createClient>; userId: string; tripId: string | null },
+  ctx: { supabase: ReturnType<typeof createClient>; userId: string; tripId: string | null; context?: Record<string, unknown>; lovableKey?: string },
 ): Promise<unknown> {
-  const { supabase, userId, tripId } = ctx;
+  const { supabase, userId, tripId, context, lovableKey } = ctx;
   try {
     if (name === "create_itinerary_item") {
       if (!tripId) return { error: "No active trip. Ask the traveler to open a trip workspace first." };
@@ -589,6 +589,33 @@ async function executeTool(
       const byCat: Record<string, number> = {};
       for (const i of items || []) byCat[i.category] = (byCat[i.category] || 0) + 1;
       return { trip, total_spend: totalSpend, item_counts: byCat };
+    }
+    if (name === "find_gaps") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolFindGaps(supabase, tripId);
+    }
+    if (name === "optimize_loyalty") {
+      return await toolOptimizeLoyalty(supabase, tripId, userId, args, context);
+    }
+    if (name === "optimize_route") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolOptimizeRoute(supabase, tripId, args, context);
+    }
+    if (name === "rebalance_budget") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolRebalanceBudget(supabase, tripId);
+    }
+    if (name === "find_dining_near_anchor") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolFindDiningNearAnchor(supabase, tripId, userId, args, context);
+    }
+    if (name === "summarize_day") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolSummarizeDay(supabase, tripId, args, context, lovableKey);
+    }
+    if (name === "suggest_logistics") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolSuggestLogistics(supabase, tripId);
     }
     return { error: `Unknown tool: ${name}` };
   } catch (e) {

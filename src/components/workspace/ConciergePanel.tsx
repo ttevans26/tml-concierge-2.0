@@ -423,6 +423,17 @@ export default function ConciergePanel() {
             }
             if (m.role === "tool") {
               const tc = (m.tool_calls as { name?: string; args?: Record<string, unknown> } | null) || {};
+              if (m.pending) {
+                const label = (tc.name || "tool").replace(/_/g, " ");
+                return (
+                  <div key={i} className="pl-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-[2px] border border-border bg-background/60 px-2 py-1 font-inter text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin text-accent" strokeWidth={1.75} />
+                      Calling {label}…
+                    </div>
+                  </div>
+                );
+              }
               let result: unknown = m.content;
               try { result = JSON.parse(m.content); } catch { /* keep raw */ }
               return (

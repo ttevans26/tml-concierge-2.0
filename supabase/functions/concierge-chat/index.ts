@@ -13,11 +13,25 @@ Always cite *why* you recommend something: proximity to the traveler's anchor st
 When the traveler has an active trip, ground every answer in their itinerary, budget, and anchor stay. Never invent confirmation codes, prices, or availability.
 Format responses in concise markdown. Use short paragraphs and tight bullet lists. Avoid headings unless the answer is long.
 
-You have access to tools. Prefer tools over freeform answers when the user asks you to add/schedule something, search their saved research, suggest an anchor, or recap the trip.
-- create_itinerary_item: schedule a concrete booking on the active trip. Use only when the user clearly asks to add/schedule something.
-- search_studio_items: search the traveler's saved research vault.
-- suggest_anchor: propose a stay from the itinerary to set as geographic anchor.
-- get_trip_summary: fetch live trip metrics (spend, gaps, anchor) to ground your reply.
+You have access to tools. **Prefer tools** over freeform answers when the question maps to a tool.
+Tools never mutate the itinerary directly — they return proposals the traveler can apply with one tap. Your job is to call the right tool, then frame the result in 1–2 sentences.
+
+Action tools:
+- create_itinerary_item — schedule a concrete booking on the active trip. Use only when the user explicitly asks to add/schedule something.
+
+Research tools:
+- search_studio_items — search the traveler's saved Studio research vault.
+- suggest_anchor — propose stays from the itinerary that could anchor the trip geographically.
+- get_trip_summary — fetch live trip metrics (spend, item counts, dates).
+
+Proposal tools (return a structured proposal; user clicks Apply):
+- find_gaps — surface empty days, missing dining, or unfilled accommodation nights.
+- optimize_loyalty — recommend the best card/program to earn on a given item or category + cost.
+- optimize_route — re-order a specific day's items by proximity; returns proposed order.
+- rebalance_budget — flag categories over/under target nightly budget.
+- find_dining_near_anchor — surface dining options near the anchor stay (Studio + Places).
+- summarize_day — narrate a focused day (morning/afternoon/evening) for the traveler.
+- suggest_logistics — propose flights/trains/transfers between location legs that lack a transport item.
 
 When you recommend specific venues, hotels, restaurants, or activities (without calling create_itinerary_item), append a structured suggestions block at the end. Wrap JSON in triple backticks with the language tag "suggestions". Example:
 \`\`\`suggestions
@@ -82,6 +96,90 @@ const TOOLS = [
     function: {
       name: "get_trip_summary",
       description: "Live snapshot of active trip: dates, totals, anchor, item counts by category.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_gaps",
+      description: "Detect empty days, missing dinners, and unfilled accommodation nights on the active trip. Returns a proposal the traveler can act on.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "optimize_loyalty",
+      description: "Recommend the best card/loyalty program to earn on a given category + cost (or a specific itinerary item).",
+      parameters: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: ["stays", "dining", "activity", "logistics", "sites_of_interest"] },
+          cost: { type: "number" },
+          currency: { type: "string" },
+          item_id: { type: "string", description: "Optional: itinerary item id to optimize for." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "optimize_route",
+      description: "Re-order items on a focused day by haversine proximity. Returns a proposed order without mutating the itinerary.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD. Defaults to the focused day or first day." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rebalance_budget",
+      description: "Compare per-category spend vs. nightly target. Returns a proposal listing categories over/under and items to consider downgrading.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_dining_near_anchor",
+      description: "Surface dining candidates near the active anchor stay from Studio research. Returns proposal cards.",
+      parameters: {
+        type: "object",
+        properties: {
+          radius_km: { type: "number", description: "Search radius in km. Default 5." },
+          limit: { type: "number", description: "Max candidates. Default 5." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "summarize_day",
+      description: "Narrate a single day of the trip in morning/afternoon/evening structure based on its scheduled items.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD. Defaults to the focused day." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_logistics",
+      description: "Detect transitions between location legs without a transport item and propose flight/train/drive options.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -238,7 +336,7 @@ serve(async (req) => {
                   let args: Record<string, unknown> = {};
                   try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
                   send({ type: "tool_call_start", id: tc.id, name, args });
-                  const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null });
+                  const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null, context, lovableKey: LOVABLE_API_KEY });
                   executedTools.push({ name, args, result });
                   send({ type: "tool_call_result", id: tc.id, name, result });
                   aiMessages.push({
@@ -373,7 +471,7 @@ serve(async (req) => {
           const name = tc.function?.name as string;
           let args: Record<string, unknown> = {};
           try { args = JSON.parse(tc.function?.arguments || "{}"); } catch { /* ignore */ }
-          const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null });
+          const result = await executeTool(name, args, { supabase, userId: user.id, tripId: trip_id || null, context, lovableKey: LOVABLE_API_KEY });
           executedTools.push({ name, args, result });
           aiMessages.push({
             role: "tool",
@@ -429,9 +527,9 @@ serve(async (req) => {
 async function executeTool(
   name: string,
   args: Record<string, unknown>,
-  ctx: { supabase: ReturnType<typeof createClient>; userId: string; tripId: string | null },
+  ctx: { supabase: ReturnType<typeof createClient>; userId: string; tripId: string | null; context?: Record<string, unknown>; lovableKey?: string },
 ): Promise<unknown> {
-  const { supabase, userId, tripId } = ctx;
+  const { supabase, userId, tripId, context, lovableKey } = ctx;
   try {
     if (name === "create_itinerary_item") {
       if (!tripId) return { error: "No active trip. Ask the traveler to open a trip workspace first." };
@@ -492,6 +590,33 @@ async function executeTool(
       for (const i of items || []) byCat[i.category] = (byCat[i.category] || 0) + 1;
       return { trip, total_spend: totalSpend, item_counts: byCat };
     }
+    if (name === "find_gaps") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolFindGaps(supabase, tripId);
+    }
+    if (name === "optimize_loyalty") {
+      return await toolOptimizeLoyalty(supabase, tripId, userId, args, context);
+    }
+    if (name === "optimize_route") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolOptimizeRoute(supabase, tripId, args, context);
+    }
+    if (name === "rebalance_budget") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolRebalanceBudget(supabase, tripId);
+    }
+    if (name === "find_dining_near_anchor") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolFindDiningNearAnchor(supabase, tripId, userId, args, context);
+    }
+    if (name === "summarize_day") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolSummarizeDay(supabase, tripId, args, context, lovableKey);
+    }
+    if (name === "suggest_logistics") {
+      if (!tripId) return { error: "No active trip." };
+      return await toolSuggestLogistics(supabase, tripId);
+    }
     return { error: `Unknown tool: ${name}` };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Tool execution failed" };
@@ -546,4 +671,540 @@ function buildContextBlock(context: any): string {
     lines.push(`[LOYALTY PROGRAMS] ${context.loyalty_programs.slice(0, 12).join(", ")}`);
   }
   return lines.join("\n");
+}
+
+/* ============================================================
+ *  Tool implementations (Phase 2)
+ *  Every tool returns a payload with a `proposal` field so the
+ *  client can render a structured ProposalCard. None of these
+ *  mutate the database — they propose only.
+ * ============================================================ */
+
+type SB = ReturnType<typeof createClient>;
+
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+function eachDay(start: string, end: string): string[] {
+  const out: string[] = [];
+  const s = new Date(start + "T00:00:00Z");
+  const e = new Date(end + "T00:00:00Z");
+  for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/* ---- find_gaps ---- */
+async function toolFindGaps(supabase: SB, tripId: string) {
+  const [{ data: trip }, { data: items }] = await Promise.all([
+    supabase.from("trips").select("start_date, end_date").eq("id", tripId).maybeSingle(),
+    supabase
+      .from("itinerary_items")
+      .select("id, category, date, start_time, end_time, title")
+      .eq("trip_id", tripId),
+  ]);
+  if (!trip?.start_date || !trip?.end_date) return { error: "Trip dates not set." };
+  const days = eachDay(trip.start_date, trip.end_date);
+  const byDay = new Map<string, typeof items>();
+  for (const i of items || []) {
+    if (!i.date) continue;
+    if (!byDay.has(i.date)) byDay.set(i.date, []);
+    byDay.get(i.date)!.push(i);
+  }
+  const gaps: { date: string; type: "empty_day" | "missing_dinner" | "no_stay"; note: string }[] = [];
+  for (const d of days) {
+    const dayItems = byDay.get(d) || [];
+    const hasStay = dayItems.some((i) => i.category === "stays");
+    const hasDinner = dayItems.some(
+      (i) => i.category === "dining" && i.start_time && i.start_time >= "17:00" && i.start_time <= "22:30",
+    );
+    const nonStay = dayItems.filter((i) => i.category !== "stays" && i.category !== "location");
+    if (nonStay.length === 0) {
+      gaps.push({ date: d, type: "empty_day", note: "No activities, dining, or logistics scheduled." });
+    } else if (!hasDinner && dayItems.some((i) => i.category === "dining" || i.category === "activity")) {
+      gaps.push({ date: d, type: "missing_dinner", note: "No dinner reservation between 17:00 and 22:30." });
+    }
+    if (!hasStay) {
+      gaps.push({ date: d, type: "no_stay", note: "No accommodation for this night." });
+    }
+  }
+  return {
+    proposal: {
+      type: "find_gaps",
+      trip_id: tripId,
+      total_days: days.length,
+      gaps,
+    },
+  };
+}
+
+/* ---- optimize_loyalty ---- */
+const CARD_MULTIPLIERS: { match: RegExp; rules: { category: string; mult: number; label: string }[] }[] = [
+  {
+    match: /amex.*platinum/i,
+    rules: [
+      { category: "stays", mult: 5, label: "5x on prepaid hotels via Amex Travel" },
+      { category: "logistics", mult: 5, label: "5x on flights booked direct or via Amex Travel" },
+      { category: "dining", mult: 1, label: "1x base" },
+      { category: "activity", mult: 1, label: "1x base" },
+    ],
+  },
+  {
+    match: /amex.*gold/i,
+    rules: [
+      { category: "dining", mult: 4, label: "4x at restaurants worldwide" },
+      { category: "stays", mult: 3, label: "3x on flights & 2x on prepaid hotels" },
+      { category: "logistics", mult: 3, label: "3x on flights direct" },
+      { category: "activity", mult: 1, label: "1x base" },
+    ],
+  },
+  {
+    match: /chase.*sapphire.*reserve/i,
+    rules: [
+      { category: "logistics", mult: 5, label: "5x on flights via Chase Travel" },
+      { category: "stays", mult: 10, label: "10x on hotels via Chase Travel" },
+      { category: "dining", mult: 3, label: "3x on dining worldwide" },
+      { category: "activity", mult: 3, label: "3x on travel & tours" },
+    ],
+  },
+  {
+    match: /chase.*sapphire.*preferred/i,
+    rules: [
+      { category: "stays", mult: 5, label: "5x on hotels via Chase Travel" },
+      { category: "dining", mult: 3, label: "3x on dining" },
+      { category: "logistics", mult: 2, label: "2x on travel" },
+      { category: "activity", mult: 2, label: "2x on travel" },
+    ],
+  },
+  {
+    match: /capital one.*venture x/i,
+    rules: [
+      { category: "stays", mult: 10, label: "10x on hotels via Capital One Travel" },
+      { category: "logistics", mult: 5, label: "5x on flights via Capital One Travel" },
+      { category: "dining", mult: 2, label: "2x base" },
+      { category: "activity", mult: 2, label: "2x base" },
+    ],
+  },
+];
+
+async function toolOptimizeLoyalty(
+  supabase: SB,
+  tripId: string | null,
+  _userId: string,
+  args: Record<string, unknown>,
+  context?: Record<string, unknown>,
+) {
+  let category = String(args.category || "");
+  let cost = Number(args.cost || 0);
+  const itemId = args.item_id ? String(args.item_id) : null;
+  if (itemId) {
+    const { data: item } = await supabase
+      .from("itinerary_items")
+      .select("category, cost, currency, title")
+      .eq("id", itemId)
+      .maybeSingle();
+    if (item) {
+      category = category || item.category;
+      cost = cost || Number(item.cost || 0);
+    }
+  }
+  if (!category) return { error: "Need a category to optimize for." };
+
+  const ctxCards = Array.isArray((context as any)?.loyalty_cards) ? ((context as any).loyalty_cards as string[]) : [];
+  const ctxPrograms = Array.isArray((context as any)?.loyalty_programs) ? ((context as any).loyalty_programs as string[]) : [];
+
+  const ranked: { card: string; multiplier: number; rationale: string; est_points: number }[] = [];
+  for (const card of ctxCards) {
+    const profile = CARD_MULTIPLIERS.find((p) => p.match.test(card));
+    if (!profile) {
+      ranked.push({ card, multiplier: 1, rationale: "No known category bonus (base 1x)", est_points: Math.round(cost) });
+      continue;
+    }
+    const rule = profile.rules.find((r) => r.category === category) || { mult: 1, label: "1x base" };
+    ranked.push({
+      card,
+      multiplier: rule.mult,
+      rationale: rule.label,
+      est_points: Math.round(cost * rule.mult),
+    });
+  }
+  ranked.sort((a, b) => b.est_points - a.est_points);
+
+  return {
+    proposal: {
+      type: "optimize_loyalty",
+      category,
+      cost,
+      currency: String(args.currency || "USD"),
+      recommended: ranked[0] || null,
+      alternatives: ranked.slice(1, 4),
+      loyalty_programs: ctxPrograms,
+      item_id: itemId,
+    },
+  };
+}
+
+/* ---- optimize_route ---- */
+async function toolOptimizeRoute(
+  supabase: SB,
+  tripId: string,
+  args: Record<string, unknown>,
+  context?: Record<string, unknown>,
+) {
+  const date =
+    (args.date as string) ||
+    ((context as any)?.focused_date as string) ||
+    null;
+  if (!date) return { error: "Need a date. Ask the traveler which day to optimize." };
+
+  const { data: items } = await supabase
+    .from("itinerary_items")
+    .select("id, title, category, start_time, end_time, location_lat, location_lng, location_name")
+    .eq("trip_id", tripId)
+    .eq("date", date)
+    .order("start_time", { ascending: true });
+
+  const routable = (items || []).filter(
+    (i) => i.category !== "stays" && i.category !== "location" && i.location_lat != null && i.location_lng != null,
+  );
+  if (routable.length < 2) {
+    return { error: "Need at least 2 items with coordinates on this day to optimize." };
+  }
+
+  // Anchor stay if available
+  const anchorLat = (context as any)?.anchor?.location_lat as number | undefined;
+  const anchorLng = (context as any)?.anchor?.location_lng as number | undefined;
+  let start = { lat: routable[0].location_lat!, lng: routable[0].location_lng! };
+  if (typeof anchorLat === "number" && typeof anchorLng === "number") {
+    start = { lat: anchorLat, lng: anchorLng };
+  }
+
+  // Nearest-neighbor TSP
+  const remaining = [...routable];
+  const ordered: typeof routable = [];
+  let cur = start;
+  while (remaining.length) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const r = remaining[i];
+      const d = haversineKm(cur, { lat: r.location_lat!, lng: r.location_lng! });
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    const next = remaining.splice(bestIdx, 1)[0];
+    ordered.push(next);
+    cur = { lat: next.location_lat!, lng: next.location_lng! };
+  }
+
+  let prev = start;
+  const sequence = ordered.map((item) => {
+    const distKm = haversineKm(prev, { lat: item.location_lat!, lng: item.location_lng! });
+    prev = { lat: item.location_lat!, lng: item.location_lng! };
+    return {
+      item_id: item.id,
+      title: item.title,
+      category: item.category,
+      location_name: item.location_name,
+      distance_km: Math.round(distKm * 10) / 10,
+      // very rough transit estimate: 30 km/h average urban + 5 min buffer
+      transit_minutes: Math.round((distKm / 30) * 60) + 5,
+    };
+  });
+
+  return {
+    proposal: {
+      type: "optimize_route",
+      date,
+      sequence,
+      anchored_to_stay: typeof anchorLat === "number",
+      skipped_items: (items || [])
+        .filter((i) => i.category !== "stays" && i.category !== "location" && (i.location_lat == null || i.location_lng == null))
+        .map((i) => ({ id: i.id, title: i.title })),
+    },
+  };
+}
+
+/* ---- rebalance_budget ---- */
+async function toolRebalanceBudget(supabase: SB, tripId: string) {
+  const [{ data: trip }, { data: items }] = await Promise.all([
+    supabase
+      .from("trips")
+      .select("start_date, end_date, total_trip_budget, target_nightly_budget, display_currency")
+      .eq("id", tripId)
+      .maybeSingle(),
+    supabase
+      .from("itinerary_items")
+      .select("id, title, category, cost, date")
+      .eq("trip_id", tripId),
+  ]);
+  if (!trip) return { error: "Trip not found." };
+
+  const nights =
+    trip.start_date && trip.end_date
+      ? Math.max(1, eachDay(trip.start_date, trip.end_date).length)
+      : 1;
+  const target = Number(trip.target_nightly_budget || 0);
+  const totalTarget = target * nights;
+
+  const byCat: Record<string, { total: number; items: { id: string; title: string; cost: number }[] }> = {};
+  let grandTotal = 0;
+  for (const i of items || []) {
+    const c = Number(i.cost || 0);
+    grandTotal += c;
+    if (!byCat[i.category]) byCat[i.category] = { total: 0, items: [] };
+    byCat[i.category].total += c;
+    if (c > 0) byCat[i.category].items.push({ id: i.id, title: i.title, cost: c });
+  }
+
+  // Rough fair-share allocation across known categories
+  const SHARES: Record<string, number> = { stays: 0.45, dining: 0.2, activity: 0.15, logistics: 0.15, sites_of_interest: 0.05 };
+  const breakdown = Object.entries(SHARES).map(([cat, share]) => {
+    const spent = byCat[cat]?.total || 0;
+    const allocation = totalTarget * share;
+    const over = spent - allocation;
+    const topItems = (byCat[cat]?.items || []).sort((a, b) => b.cost - a.cost).slice(0, 3);
+    return {
+      category: cat,
+      spent: Math.round(spent),
+      allocation: Math.round(allocation),
+      over_by: Math.round(over),
+      status: over > allocation * 0.1 ? "over" : over < -allocation * 0.1 ? "under" : "on_track",
+      top_items: topItems,
+    };
+  });
+
+  return {
+    proposal: {
+      type: "rebalance_budget",
+      currency: trip.display_currency || "USD",
+      nights,
+      total_budget: totalTarget || trip.total_trip_budget || 0,
+      total_spent: Math.round(grandTotal),
+      remaining: Math.round((totalTarget || Number(trip.total_trip_budget || 0)) - grandTotal),
+      breakdown,
+    },
+  };
+}
+
+/* ---- find_dining_near_anchor ---- */
+async function toolFindDiningNearAnchor(
+  supabase: SB,
+  _tripId: string,
+  _userId: string,
+  args: Record<string, unknown>,
+  context?: Record<string, unknown>,
+) {
+  const anchor = (context as any)?.anchor;
+  const lat = anchor?.location_lat as number | undefined;
+  const lng = anchor?.location_lng as number | undefined;
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return { error: "No active anchor with coordinates. Ask the traveler to set an Anchor stay first." };
+  }
+  const radiusKm = Math.max(0.5, Math.min(Number(args.radius_km || 5), 25));
+  const limit = Math.max(1, Math.min(Number(args.limit || 5), 10));
+
+  const { data: studio } = await supabase
+    .from("studio_items")
+    .select("id, title, address, description, lat, lng, google_place_id, api_metadata")
+    .eq("category", "dining")
+    .not("lat", "is", null)
+    .not("lng", "is", null);
+
+  const ranked = (studio || [])
+    .map((s) => ({
+      ...s,
+      distance_km: haversineKm({ lat, lng }, { lat: s.lat as number, lng: s.lng as number }),
+    }))
+    .filter((s) => s.distance_km <= radiusKm)
+    .sort((a, b) => a.distance_km - b.distance_km)
+    .slice(0, limit);
+
+  const candidates = ranked.map((s) => ({
+    studio_item_id: s.id,
+    title: s.title,
+    address: s.address,
+    description: s.description,
+    google_place_id: s.google_place_id,
+    distance_km: Math.round(s.distance_km * 10) / 10,
+    rating: (s.api_metadata as any)?.rating ?? null,
+  }));
+
+  return {
+    proposal: {
+      type: "find_dining_near_anchor",
+      anchor: { title: anchor.title, location_name: anchor.location_name },
+      radius_km: radiusKm,
+      candidates,
+    },
+  };
+}
+
+/* ---- summarize_day ---- */
+async function toolSummarizeDay(
+  supabase: SB,
+  tripId: string,
+  args: Record<string, unknown>,
+  context?: Record<string, unknown>,
+  lovableKey?: string,
+) {
+  const date = (args.date as string) || ((context as any)?.focused_date as string);
+  if (!date) return { error: "Need a date to summarize. Ask the traveler which day." };
+  const { data: items } = await supabase
+    .from("itinerary_items")
+    .select("title, category, start_time, end_time, location_name, description, cost, currency")
+    .eq("trip_id", tripId)
+    .eq("date", date)
+    .order("start_time", { ascending: true });
+
+  if (!items || items.length === 0) {
+    return {
+      proposal: {
+        type: "summarize_day",
+        date,
+        narrative: "_No items scheduled for this day yet._",
+      },
+    };
+  }
+
+  // Optionally call the model for narrative; fall back to deterministic if no key
+  let narrative = "";
+  if (lovableKey) {
+    try {
+      const prompt = `Narrate this day for a luxury traveler in 3 short paragraphs (Morning / Afternoon / Evening). Quiet Monocle voice, no exclamation points.\n\nDate: ${date}\nItems:\n${items
+        .map(
+          (i) =>
+            `- ${i.start_time || "—"} ${i.category} · ${i.title}${i.location_name ? ` (${i.location_name})` : ""}`,
+        )
+        .join("\n")}`;
+      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-3.1-pro-preview",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        narrative = json.choices?.[0]?.message?.content || "";
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  if (!narrative) {
+    narrative = items
+      .map((i) => `- **${i.start_time || "—"}** ${i.title}${i.location_name ? ` · ${i.location_name}` : ""}`)
+      .join("\n");
+  }
+
+  return {
+    proposal: {
+      type: "summarize_day",
+      date,
+      narrative,
+    },
+  };
+}
+
+/* ---- suggest_logistics ---- */
+async function toolSuggestLogistics(supabase: SB, tripId: string) {
+  const { data: items } = await supabase
+    .from("itinerary_items")
+    .select("id, category, date, location_name, location_lat, location_lng, title")
+    .eq("trip_id", tripId)
+    .order("date", { ascending: true });
+
+  // Build leg sequence: pick a representative location per date (first stay or first location item)
+  const byDate = new Map<string, typeof items>();
+  for (const i of items || []) {
+    if (!i.date) continue;
+    if (!byDate.has(i.date)) byDate.set(i.date, []);
+    byDate.get(i.date)!.push(i);
+  }
+  const dates = [...byDate.keys()].sort();
+
+  const locFor = (d: string) => {
+    const arr = byDate.get(d) || [];
+    const stay = arr.find((i) => i.category === "stays" && i.location_name);
+    const loc = arr.find((i) => i.category === "location" && i.location_name);
+    return stay || loc || arr.find((i) => i.location_name);
+  };
+
+  const gaps: {
+    from_date: string;
+    to_date: string;
+    from_location: string | null;
+    to_location: string | null;
+    distance_km: number | null;
+    options: { mode: "flight" | "train" | "drive"; label: string; rough_duration: string; cost_band: string }[];
+  }[] = [];
+
+  for (let idx = 1; idx < dates.length; idx++) {
+    const prev = dates[idx - 1];
+    const curr = dates[idx];
+    const a = locFor(prev);
+    const b = locFor(curr);
+    if (!a || !b) continue;
+    if (!a.location_name || !b.location_name) continue;
+    if (a.location_name === b.location_name) continue;
+
+    // Already a transport item between prev and curr?
+    const hasTransport =
+      (byDate.get(prev) || []).some((i) => i.category === "logistics") ||
+      (byDate.get(curr) || []).some((i) => i.category === "logistics");
+    if (hasTransport) continue;
+
+    let distance: number | null = null;
+    if (a.location_lat && a.location_lng && b.location_lat && b.location_lng) {
+      distance = Math.round(
+        haversineKm(
+          { lat: a.location_lat, lng: a.location_lng },
+          { lat: b.location_lat, lng: b.location_lng },
+        ),
+      );
+    }
+
+    const options: { mode: "flight" | "train" | "drive"; label: string; rough_duration: string; cost_band: string }[] = [];
+    if (distance == null || distance > 400) {
+      options.push({ mode: "flight", label: `Flight ${a.location_name} → ${b.location_name}`, rough_duration: distance ? `${Math.max(1, Math.round(distance / 700))}h flight + airport time` : "Varies", cost_band: "$$–$$$" });
+    }
+    if (distance != null && distance <= 600) {
+      options.push({ mode: "train", label: `Train ${a.location_name} → ${b.location_name}`, rough_duration: `${Math.max(1, Math.round(distance / 200))}h rail`, cost_band: "$–$$" });
+    }
+    if (distance != null && distance <= 350) {
+      options.push({ mode: "drive", label: `Private transfer ${a.location_name} → ${b.location_name}`, rough_duration: `${Math.max(1, Math.round(distance / 80))}h drive`, cost_band: "$$" });
+    }
+    if (options.length === 0) {
+      options.push({ mode: "flight", label: `Flight ${a.location_name} → ${b.location_name}`, rough_duration: "Varies", cost_band: "$$" });
+    }
+
+    gaps.push({
+      from_date: prev,
+      to_date: curr,
+      from_location: a.location_name,
+      to_location: b.location_name,
+      distance_km: distance,
+      options,
+    });
+  }
+
+  return {
+    proposal: {
+      type: "suggest_logistics",
+      gaps,
+    },
+  };
 }

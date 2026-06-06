@@ -7,6 +7,7 @@ import { useTripStore, selectTotalReservedCost, selectRemainingBudget } from "@/
 import { useStudioStore } from "@/stores/useStudioStore";
 import { toast } from "@/hooks/use-toast";
 import { streamConcierge } from "@/lib/conciergeStream";
+import ProposalCard, { getProposal } from "@/components/workspace/concierge/ProposalCard";
 
 type Msg =
   | { role: "user"; content: string }
@@ -122,7 +123,12 @@ export default function GeminiFooter() {
           }
         : null,
       anchor: activeAnchor
-        ? { title: activeAnchor.title, location_name: activeAnchor.location_name }
+        ? {
+            title: activeAnchor.title,
+            location_name: activeAnchor.location_name,
+            location_lat: activeAnchor.location_lat,
+            location_lng: activeAnchor.location_lng,
+          }
         : null,
       itinerary: itineraryItems.map((i) => ({
         category: i.category,
@@ -439,6 +445,16 @@ export default function GeminiFooter() {
               if (m.role === "tool") {
                 const ok = !m.pending && !(m.result as { error?: string })?.error;
                 const label = m.name.replace(/_/g, " ");
+                const proposal = !m.pending ? getProposal(m.result) : null;
+                if (proposal) {
+                  return (
+                    <div key={i} className="flex justify-start">
+                      <div className="w-full max-w-[92%]">
+                        <ProposalCard proposal={proposal} />
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div key={i} className="flex justify-start">
                     <div className="inline-flex items-center gap-1.5 rounded-editorial border border-foil bg-foil-soft/40 px-2.5 py-1 font-inter text-[10px] text-muted-foreground">

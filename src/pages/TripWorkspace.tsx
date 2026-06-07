@@ -1,14 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin, ListChecks, FileText, Pencil } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronLeft, Wallet, Sparkles, MapPin, ListChecks, FileText, Pencil, Menu, PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useTripStore } from "@/stores/useTripStore";
 import StudioSidebar from "@/components/workspace/StudioSidebar";
 import MatrixGrid from "@/components/workspace/MatrixGrid";
 import BudgetSidebar from "@/components/workspace/BudgetSidebar";
 import TripHealthBar from "@/components/workspace/TripHealthBar";
 import TripSwitcher from "@/components/workspace/TripSwitcher";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 const ConciergePanel = lazy(() => import("@/components/workspace/ConciergePanel"));
@@ -61,13 +63,17 @@ export default function TripWorkspace() {
     useState<"budget" | "concierge" | "map" | "packing" | "documents">("budget");
   const [editTripOpen, setEditTripOpen] = useState(false);
   const [editTripMounted, setEditTripMounted] = useState(false);
+  const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const isMobile = useIsMobile();
   const askConcierge = useTripStore((s) => s.askConcierge);
 
   const handleAskConcierge = useCallback((prompt: string) => {
-    setBudgetOpen(true);
     setRightTab("concierge");
+    if (isMobile) setMobilePanelOpen(true);
+    else setBudgetOpen(true);
     askConcierge(prompt);
-  }, [askConcierge]);
+  }, [askConcierge, isMobile]);
 
   /* Hydrate trip + itinerary */
   useEffect(() => {
@@ -107,10 +113,20 @@ export default function TripWorkspace() {
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Top bar */}
       <header className="flex shrink-0 items-center gap-3 border-b border-foil bg-surface-1 px-5 py-3">
+        {/* Mobile: hamburger opens Studio drawer. Desktop: back button. */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground"
+          className="h-11 w-11 text-muted-foreground lg:hidden"
+          onClick={() => setMobileStudioOpen(true)}
+          aria-label="Open Studio folders"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden h-8 w-8 text-muted-foreground lg:inline-flex"
           onClick={() => navigate("/")}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -121,14 +137,78 @@ export default function TripWorkspace() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="h-11 w-11 text-muted-foreground hover:text-foreground lg:h-8 lg:w-8"
           onClick={() => { setEditTripMounted(true); setEditTripOpen(true); }}
           title="Edit trip dates & segments"
           aria-label="Edit trip"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil className="h-4 w-4 lg:h-3.5 lg:w-3.5" />
+        </Button>
+        {/* Mobile: right panel trigger */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 text-muted-foreground hover:text-foreground lg:hidden"
+          onClick={() => setMobilePanelOpen(true)}
+          aria-label="Open Budget & Concierge"
+        >
+          <PanelRight className="h-5 w-5" />
         </Button>
       </header>
+
+      {/* Mobile Studio drawer */}
+      <Sheet open={mobileStudioOpen} onOpenChange={setMobileStudioOpen}>
+        <SheetContent side="left" className="w-[88%] max-w-[360px] p-0 lg:hidden">
+          <div className="h-full">
+            <StudioSidebar onCollapse={() => setMobileStudioOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Mobile right panel drawer with 5 tabs */}
+      <Sheet open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
+        <SheetContent side="right" className="flex w-[92%] max-w-[400px] flex-col p-0 lg:hidden">
+          <div className="flex shrink-0 border-b border-border">
+            {([
+              { id: "budget", label: "Budget", Icon: Wallet },
+              { id: "concierge", label: "AI", Icon: Sparkles },
+              { id: "map", label: "Map", Icon: MapPin },
+              { id: "packing", label: "Pack", Icon: ListChecks },
+              { id: "documents", label: "Docs", Icon: FileText },
+            ] as const).map(({ id, label, Icon }) => (
+              <Button
+                key={id}
+                variant="ghost"
+                onClick={() => setRightTab(id)}
+                className={cn(
+                  "flex-1 min-h-[48px] rounded-none px-1 font-inter text-[11px] uppercase tracking-wider gap-1",
+                  rightTab === id
+                    ? "border-b-2 border-accent text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {rightTab === "budget" && <BudgetSidebar embedded />}
+            {rightTab === "concierge" && (
+              <Suspense fallback={<PanelFallback />}><ConciergePanel /></Suspense>
+            )}
+            {rightTab === "map" && (
+              <Suspense fallback={<PanelFallback />}><ProximityMap /></Suspense>
+            )}
+            {rightTab === "packing" && (
+              <Suspense fallback={<PanelFallback />}><PackingList /></Suspense>
+            )}
+            {rightTab === "documents" && (
+              <Suspense fallback={<PanelFallback />}><TripDocuments /></Suspense>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {editTripMounted && (
         <Suspense fallback={null}>

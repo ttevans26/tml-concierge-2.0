@@ -8,4 +8,5 @@ export * as itineraryItems from "./itineraryItems";
 export * as notifications from "./notifications";
 export * as profile from "./profile";
 export * as flights from "./flights";
+export * as tripAccessRequests from "./tripAccessRequests";
 export { ServiceError } from "./errors";

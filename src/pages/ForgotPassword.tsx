@@ -58,6 +58,12 @@ export default function ForgotPassword() {
                   id="email"
                   type="email"
                   required
+                  autoComplete="email"
+                  inputMode="email"
+                  enterKeyHint="go"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="border-thin rounded-[2px] font-inter"

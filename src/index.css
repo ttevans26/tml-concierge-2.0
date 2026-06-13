@@ -283,6 +283,21 @@
   .pb-safe-nav {
     padding-bottom: calc(env(safe-area-inset-bottom) + 64px);
   }
+  /* iOS: disable 300ms double-tap zoom + native callouts on interactive UI */
+  .tap-target {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  /* Mobile-safe full-height: dvh accounts for the iOS keyboard / URL bar */
+  .h-dscreen {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .min-h-dscreen {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
 
   /* Magnetic hover lift used on premium CTAs and cards */
   .lift-on-hover { transition: transform var(--dur-quick) var(--ease-editorial), box-shadow var(--dur-quick) var(--ease-editorial); }

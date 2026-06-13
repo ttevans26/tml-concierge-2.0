@@ -7,6 +7,9 @@ import {
   AlertTriangle,
   CalendarClock,
   X,
+  KeyRound,
+  Check,
+  Loader2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -17,7 +20,13 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { notifications as notificationsService, ServiceError } from "@/services";
+import {
+  notifications as notificationsService,
+  tripAccessRequests as accessRequestsService,
+  ServiceError,
+} from "@/services";
+import type { PendingAccessRequest } from "@/services/tripAccessRequests";
+import { toast } from "sonner";
 
 type NotificationKind =
   | "follow"
@@ -59,8 +68,13 @@ export default function NotificationsPopover() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const [accessRequests, setAccessRequests] = useState<PendingAccessRequest[]>([]);
+  const [accessActioning, setAccessActioning] = useState<string | null>(null);
 
-  const unread = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
+  const unread = useMemo(
+    () => items.filter((n) => !n.is_read).length + accessRequests.length,
+    [items, accessRequests.length],
+  );
 
   // Pre-compute relative timestamps once per items change so we don't
   // recompute formatDistanceToNow for every item on every render.
@@ -84,6 +98,12 @@ export default function NotificationsPopover() {
       );
     } catch (err) {
       console.warn("notifications load failed", err instanceof ServiceError ? err.message : err);
+    }
+    try {
+      const reqs = await accessRequestsService.listPendingForOwner();
+      setAccessRequests(reqs);
+    } catch (err) {
+      console.warn("access requests load failed", err instanceof ServiceError ? err.message : err);
     }
   }, []);
 
@@ -145,6 +165,21 @@ export default function NotificationsPopover() {
     }
   };
 
+  const respondAccess = async (id: string, action: "approve" | "deny") => {
+    setAccessActioning(id);
+    try {
+      if (action === "approve") await accessRequestsService.approveRequest(id);
+      else await accessRequestsService.denyRequest(id);
+      setAccessRequests((prev) => prev.filter((r) => r.id !== id));
+      toast.success(action === "approve" ? "Access approved" : "Request denied");
+    } catch (err) {
+      toast.error("Could not update request");
+      console.warn("respondAccess", err);
+    } finally {
+      setAccessActioning(null);
+    }
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -195,13 +230,73 @@ export default function NotificationsPopover() {
           )}
         </div>
 
-        {items.length === 0 ? (
+        {accessRequests.length > 0 && (
+          <div className="border-b border-foreground/10 bg-accent/[0.04]">
+            <p className="px-4 pt-3 font-inter text-[10px] font-semibold uppercase tracking-widest text-accent">
+              Pending access requests
+            </p>
+            <ul>
+              {accessRequests.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-start gap-3 px-4 py-3 border-b border-foreground/5 last:border-b-0"
+                >
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-thin border-accent/40 bg-accent/10 text-accent">
+                    <KeyRound className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-playfair text-[13px] font-semibold text-foreground truncate">
+                      Access requested
+                    </p>
+                    {r.trip_name && (
+                      <p className="font-inter text-[11px] text-foreground truncate">
+                        {r.trip_name}
+                      </p>
+                    )}
+                    {r.message && (
+                      <p className="mt-0.5 font-inter text-[11px] text-muted-foreground line-clamp-2 italic">
+                        “{r.message}”
+                      </p>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={accessActioning === r.id}
+                        onClick={() => respondAccess(r.id, "approve")}
+                        className="h-7 gap-1 rounded-[2px] font-inter text-[10px] tap-target"
+                      >
+                        {accessActioning === r.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={accessActioning === r.id}
+                        onClick={() => respondAccess(r.id, "deny")}
+                        className="h-7 rounded-[2px] font-inter text-[10px] text-muted-foreground hover:text-destructive tap-target"
+                      >
+                        Deny
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {items.length === 0 && accessRequests.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <p className="font-inter text-xs text-muted-foreground">
               No notifications yet.
             </p>
           </div>
-        ) : (
+        ) : items.length === 0 ? null : (
           <ul className="max-h-[420px] overflow-y-auto">
             {itemsView.map((n) => {
               const Icon = ICONS[n.kind] ?? Bell;

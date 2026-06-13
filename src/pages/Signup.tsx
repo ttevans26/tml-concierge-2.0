@@ -144,6 +144,12 @@ export default function Signup() {
               id="email"
               type="email"
               required
+              autoComplete="email"
+              inputMode="email"
+              enterKeyHint="next"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="border-thin rounded-[2px] font-inter"
@@ -159,6 +165,8 @@ export default function Signup() {
               id="password"
               type="password"
               required
+              autoComplete="new-password"
+              enterKeyHint="next"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="border-thin rounded-[2px] font-inter"
@@ -174,6 +182,8 @@ export default function Signup() {
               id="confirm"
               type="password"
               required
+              autoComplete="new-password"
+              enterKeyHint="go"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               className="border-thin rounded-[2px] font-inter"

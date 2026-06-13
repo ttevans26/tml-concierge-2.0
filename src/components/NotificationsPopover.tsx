@@ -7,6 +7,9 @@ import {
   AlertTriangle,
   CalendarClock,
   X,
+  KeyRound,
+  Check,
+  Loader2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -17,7 +20,13 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { notifications as notificationsService, ServiceError } from "@/services";
+import {
+  notifications as notificationsService,
+  tripAccessRequests as accessRequestsService,
+  ServiceError,
+} from "@/services";
+import type { PendingAccessRequest } from "@/services/tripAccessRequests";
+import { toast } from "sonner";
 
 type NotificationKind =
   | "follow"
@@ -59,8 +68,13 @@ export default function NotificationsPopover() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const [accessRequests, setAccessRequests] = useState<PendingAccessRequest[]>([]);
+  const [accessActioning, setAccessActioning] = useState<string | null>(null);
 
-  const unread = useMemo(() => items.filter((n) => !n.is_read).length, [items]);
+  const unread = useMemo(
+    () => items.filter((n) => !n.is_read).length + accessRequests.length,
+    [items, accessRequests.length],
+  );
 
   // Pre-compute relative timestamps once per items change so we don't
   // recompute formatDistanceToNow for every item on every render.
@@ -84,6 +98,12 @@ export default function NotificationsPopover() {
       );
     } catch (err) {
       console.warn("notifications load failed", err instanceof ServiceError ? err.message : err);
+    }
+    try {
+      const reqs = await accessRequestsService.listPendingForOwner();
+      setAccessRequests(reqs);
+    } catch (err) {
+      console.warn("access requests load failed", err instanceof ServiceError ? err.message : err);
     }
   }, []);
 
@@ -142,6 +162,21 @@ export default function NotificationsPopover() {
     if (n.href) {
       setOpen(false);
       navigate(n.href);
+    }
+  };
+
+  const respondAccess = async (id: string, action: "approve" | "deny") => {
+    setAccessActioning(id);
+    try {
+      if (action === "approve") await accessRequestsService.approveRequest(id);
+      else await accessRequestsService.denyRequest(id);
+      setAccessRequests((prev) => prev.filter((r) => r.id !== id));
+      toast.success(action === "approve" ? "Access approved" : "Request denied");
+    } catch (err) {
+      toast.error("Could not update request");
+      console.warn("respondAccess", err);
+    } finally {
+      setAccessActioning(null);
     }
   };
 

@@ -59,7 +59,7 @@ export default function MobileBottomNav() {
               }
             }}
             className={cn(
-              "flex h-14 min-h-[44px] flex-col items-center justify-center gap-0.5 font-inter text-[10px] tracking-wide transition-colors",
+              "tap-target flex h-14 min-h-[44px] flex-col items-center justify-center gap-0.5 font-inter text-[10px] tracking-wide transition-colors",
               active ? "text-accent" : "text-muted-foreground hover:text-foreground",
             )}
           >

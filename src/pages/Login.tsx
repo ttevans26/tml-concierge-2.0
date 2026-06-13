@@ -130,6 +130,12 @@ export default function Login() {
               id="email"
               type="email"
               required
+              autoComplete="email"
+              inputMode="email"
+              enterKeyHint="next"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="border-thin rounded-[2px] font-inter"
@@ -145,6 +151,8 @@ export default function Login() {
               id="password"
               type="password"
               required
+              autoComplete="current-password"
+              enterKeyHint="go"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="border-thin rounded-[2px] font-inter"

@@ -2,6 +2,17 @@
 
 Executed in two focused passes so you can test iOS on device between them.
 
+### Progress log
+- ✅ PWA polish: status-bar style, viewport-fit, manifest id, splash CSS utilities
+- ✅ Input hardening: Login/Signup/ForgotPassword/CreateTripDialog
+- ✅ Capacitor config verified; README updated with Xcode steps
+- ✅ Splurge engine: FX normalisation across currencies
+- ✅ Trip access requests: owner-side approve/deny in NotificationsPopover
+- ✅ Public view tightened: `itinerary_items_public` no longer exposes `points_used` or `metadata`
+- ✅ Buttons app-wide: `touch-manipulation` to kill 300 ms iOS double-tap zoom
+- ✅ Shared `invokeWithRetry` helper at `src/lib/invokeWithRetry.ts` (toast + retry, exponential backoff)
+- ⏭️ Remaining (out of credit budget): MatrixGrid scroll-snap refactor, full edge-function migration to `invokeWithRetry`, onboarding empty states
+
 ---
 
 ### Pass A — iOS / mobile (ship first)

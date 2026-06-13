@@ -740,8 +740,6 @@ export type Database = {
           location_lat: number | null
           location_lng: number | null
           location_name: string | null
-          metadata: Json | null
-          points_used: number | null
           sort_order: number | null
           source_reference: string | null
           start_time: string | null
@@ -763,8 +761,6 @@ export type Database = {
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string | null
-          metadata?: Json | null
-          points_used?: number | null
           sort_order?: number | null
           source_reference?: string | null
           start_time?: string | null
@@ -786,8 +782,6 @@ export type Database = {
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string | null
-          metadata?: Json | null
-          points_used?: number | null
           sort_order?: number | null
           source_reference?: string | null
           start_time?: string | null

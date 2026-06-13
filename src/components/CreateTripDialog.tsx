@@ -230,6 +230,9 @@ export default function CreateTripDialog({ open, onOpenChange }: CreateTripDialo
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Tokyo in Autumn"
               required
+              autoComplete="off"
+              autoCapitalize="words"
+              enterKeyHint="next"
               className="border-thin border-border bg-background font-inter"
             />
           </div>

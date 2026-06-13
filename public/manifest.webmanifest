@@ -2,6 +2,7 @@
   "name": "TML Concierge",
   "short_name": "TML",
   "description": "Digital travel studio for points-native planning.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

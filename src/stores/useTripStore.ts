@@ -264,8 +264,36 @@ interface TripStore {
 /*  Derived selectors (use outside store)                             */
 /* ------------------------------------------------------------------ */
 
-export const selectTotalReservedCost = (state: TripStore) =>
-  state.itineraryItems.reduce((sum, i) => sum + (i.cost ? Number(i.cost) : 0), 0);
+/**
+ * Trip costs are stored per-item in the item's local currency.
+ * `fx_rates` on the trip is keyed as USD→<currency>, so an EUR item with
+ * cost=100 and fx_rates.EUR=0.92 normalises to ≈ 108.70 USD.
+ * Trip budget is assumed to be denominated in USD (the canonical base).
+ * When a rate is missing we fall back to the raw value rather than dropping
+ * the line — the BudgetSidebar surfaces the missing-FX warning separately.
+ */
+function normaliseCostToUSD(
+  cost: number,
+  currency: string | null | undefined,
+  fxRates: Record<string, number> | null | undefined,
+): number {
+  const ccy = (currency || "USD").toUpperCase();
+  if (ccy === "USD") return cost;
+  const rate = fxRates?.[ccy];
+  if (typeof rate === "number" && rate > 0) return cost / rate;
+  return cost; // best-effort: count the raw value when FX missing
+}
+
+export const selectTotalReservedCost = (state: TripStore) => {
+  const fx = (state.activeTrip?.fx_rates as Record<string, number> | null) || null;
+  return state.itineraryItems.reduce((sum, i) => {
+    if (!i.cost) return sum;
+    return sum + normaliseCostToUSD(Number(i.cost), i.currency, fx);
+  }, 0);
+};
+
+export const selectTotalPointsUsed = (state: TripStore) =>
+  state.itineraryItems.reduce((sum, i) => sum + (i.points_used ? Number(i.points_used) : 0), 0);
 
 export const selectRemainingBudget = (state: TripStore) => {
   const budget = state.activeTrip?.total_trip_budget ?? 0;

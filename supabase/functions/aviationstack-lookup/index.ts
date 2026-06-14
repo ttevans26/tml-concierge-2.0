@@ -44,7 +44,7 @@ serve(
       params.set("flight_date", flight_date);
     }
 
-    const url = `http://api.aviationstack.com/v1/flights?${params.toString()}`;
+    const url = `https://api.aviationstack.com/v1/flights?${params.toString()}`;
     log.info("aviationstack_request", { iata: sanitizedIata, hasDate: !!flight_date });
 
     let resp: Response;
@@ -64,7 +64,7 @@ serve(
       if (resp.status === 403 && flight_date) {
         log.info("aviationstack_retry_without_date");
         params.delete("flight_date");
-        const retryUrl = `http://api.aviationstack.com/v1/flights?${params.toString()}`;
+        const retryUrl = `https://api.aviationstack.com/v1/flights?${params.toString()}`;
         try {
           const retryResp = await fetch(retryUrl);
           const retryBody = await retryResp.text();

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark,
   GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard, MapPin, Search,
-  Anchor, ArrowUpDown, Navigation,
+  Anchor, ArrowUpDown, Navigation, Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import BulkImportDialog, { type ImportedPendingItem } from "./BulkImportDialog";
 import { Layers } from "lucide-react";
 import PasteSocialDialog from "./PasteSocialDialog";
 import SocialImportsTray from "./SocialImportsTray";
-import { Share2 } from "lucide-react";
+import FolderSwitcherDrawer from "./FolderSwitcherDrawer";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;

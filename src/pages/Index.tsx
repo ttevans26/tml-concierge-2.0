@@ -26,7 +26,12 @@ import CreateTripDialog from "@/components/CreateTripDialog";
 import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { buildRouteWithGeocoding, type Waypoint } from "@/lib/tripRoute";
-import TripRouteMap from "@/components/trips/TripRouteMap";
+import TripRouteStaticMap from "@/components/trips/TripRouteStaticMap";
+import {
+  computeRouteSignature,
+  getCachedRoute,
+  setCachedRoute,
+} from "@/lib/routeCache";
 import SeoHead from "@/components/SeoHead";
 
 /* ------------------------------------------------------------------ */

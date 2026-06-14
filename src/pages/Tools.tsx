@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import SeoHead from "@/components/SeoHead";
 
 export default function Tools() {
   const { user } = useAuth();
@@ -49,6 +50,12 @@ export default function Tools() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 md:py-6">
+      <SeoHead
+        title="Concierge Tools — TML Concierge"
+        description="Preparedness checklist, travel advisories, and upcoming appointments — filtered against your active trip."
+        path="/tools"
+        noindex
+      />
       <header className="mb-6 md:mb-8">
         <p className="font-inter text-[10px] tracking-[0.24em] text-muted-foreground uppercase mb-2">
           Concierge Tools

@@ -325,6 +325,12 @@ export default function Index() {
 
   return (
     <div className="px-6 py-12 md:px-12 lg:px-20">
+      <SeoHead
+        title="Your Journeys — TML Concierge"
+        description="Your travel studio dashboard. Continue planning trips, manage itineraries, and track points across every journey."
+        path="/"
+        noindex
+      />
       {/* Header */}
       <header className="mb-14 flex flex-wrap items-end justify-between gap-6 border-b border-foil pb-8">
         <div>

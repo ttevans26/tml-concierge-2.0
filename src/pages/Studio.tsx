@@ -2,11 +2,14 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import StudioWorkbench from "@/components/studio/StudioWorkbench";
 import StudioMap from "@/components/studio/StudioMap";
 import StudioDesignLab from "@/components/studio/StudioDesignLab";
+import StudioMobileView from "@/components/studio/StudioMobileView";
 import { useStudioStore } from "@/stores/useStudioStore";
+import { useIsMobile } from "@/hooks/use-mobile";
 import SeoHead from "@/components/SeoHead";
 
 export default function Studio() {
   const activeFolder = useStudioStore((s) => s.activeFolder);
+  const isMobile = useIsMobile();
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col">
@@ -16,7 +19,9 @@ export default function Studio() {
         path="/studio"
         noindex
       />
-      {!activeFolder ? (
+      {isMobile ? (
+        <StudioMobileView />
+      ) : !activeFolder ? (
         <StudioDesignLab />
       ) : (
         <>

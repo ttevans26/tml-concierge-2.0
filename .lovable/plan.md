@@ -1,35 +1,63 @@
-## Problem
 
-The Static Maps swap broke the dashboard map: the referrer-restricted browser key isn't authorized for the Static Maps API, so the `<img>` fails and the card falls back to the "Add stays with locations..." empty state — even when waypoints exist. The user only wanted the static optimization for iOS, where the interactive map was slow.
+## Goal
 
-## Plan
+On iOS / mobile, replace the current single-panel Studio view (workbench list only, no map) with a Google-Maps-style stack:
 
-**1. Platform detection helper** — `src/lib/platform.ts`
-- `export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)`
-- SSR-safe guard on `navigator`.
+1. Full-bleed `StudioMap` filling most of the screen
+2. A floating **"Find a Place"** search bar pinned over the top of the map
+3. A draggable **bottom sheet** with the saved places, grouped by category, horizontally scrollable photo cards (like the screenshot — name, rating, address chips, image strip)
+4. Works in both the "no folder" Design Lab state and the "active folder" state
 
-**2. `TripCard` in `src/pages/Index.tsx`**
-- Restore the original dynamic `TripRouteMap` import + render as the default.
-- Branch once on mount: `const useStatic = isIOS()`.
-  - **Desktop / Android / everything else:** render `<TripRouteMap waypoints={...} isLoading={...} />` exactly like before the swap. No cache reads, no signature work.
-  - **iOS only:** render `<TripRouteStaticMap waypoints={...} />` with the existing `routeCache` flow (instant paint from cache, background `buildRouteWithGeocoding` + signature compare on change).
-- Keep `TripRouteStaticMap` and `src/lib/routeCache.ts` as-is — they remain used on iOS.
+Desktop layout is unchanged.
 
-**3. Static Maps key fix (iOS path only)**
-- The managed browser key is referrer-restricted to Maps JS + Places New and returns `REQUEST_DENIED` for `maps/api/staticmap`. Two options:
-  - **a. Route Static Maps through the connector gateway** (`/maps/api/staticmap?...`) so it uses the server-side key. Implement by changing `buildStaticUrl` in `TripRouteStaticMap.tsx` to return a gateway URL and load the image via a tiny `useEffect` that fetches with `Authorization` + `X-Connection-Api-Key` headers, converts the response to a blob URL, and sets `<img src>`. This keeps iOS fast and actually renders.
-  - **b. Fallback:** if the gateway image fetch fails, render the dynamic `TripRouteMap` on iOS too (slower but correct).
-- I'll implement (a) with (b) as a graceful fallback inside `TripRouteStaticMap`.
+## Changes
 
-**4. No DB / schema / other UI changes.** Studio redesign from the previous turn stays intact.
+### 1. New component: `src/components/studio/StudioMobileView.tsx`
 
-## Files
+A mobile-only surface that composes three layers:
 
-- New: `src/lib/platform.ts`
-- Edit: `src/pages/Index.tsx` (TripCard branch)
-- Edit: `src/components/trips/TripRouteStaticMap.tsx` (gateway-fetched blob URL + dynamic fallback)
+- **Map layer** — re-uses `<StudioMap />` as a full-height background. Its existing header (`Proximity Map` title) gets hidden when rendered inside this view (add an optional `bare?: boolean` prop to `StudioMap` that drops the header chrome and the bottom "Missing Coordinates" panel so the map fills the area).
+- **Search overlay (top)** — a floating pill at the top with:
+  - hamburger button → opens `FolderSwitcherDrawer` (re-used)
+  - "Find a place" input → re-uses the same `useGooglePlaces` hook + selection / add flow already in `StudioWorkbench` (factored into a small shared helper `addPlaceFromPrediction` in a new `src/components/studio/lib/addPlace.ts` so both Workbench and the mobile view can call it)
+  - paste social link icon button → opens `PasteSocialDialog`
+- **Bottom sheet** — uses existing `@/components/ui/drawer` (vaul) in a controlled, always-mounted, snap-pointed mode:
+  - Two snap points: peek (~28% of viewport, shows handle + first category row) and expanded (~80%)
+  - Content: the saved-places list grouped by category (Stays / Dining / Activities / Sites), each item rendered as a Google-Maps-style row:
+    - Title (Playfair), rating + reviews count, address chip, category icon
+    - Below the row, a horizontal-scroll strip of photos (`api_metadata.photo_url` + any additional photo URLs already stored)
+    - Tap row → pans the map to the item and opens its info window (expose a small imperative API from `StudioMap` via `forwardRef`: `panTo(itemId)` — or simpler: lift selection state into a Zustand slot `selectedItemId` and have `StudioMap` react to it)
+  - Empty state (no active folder): sheet shows "Open a collection" CTA + the `StudioVault` list inline so the user can pick a folder without leaving the map.
+
+### 2. `src/components/studio/StudioMap.tsx`
+
+- Add `bare?: boolean` prop. When true: skip the header, skip the bottom Missing-Coordinates strip, and let the map div fill 100%.
+- Add `onSelectItem?: (item) => void` callback fired from marker click (in addition to opening the info window) so the bottom sheet can sync.
+- Keep all current desktop behavior unchanged.
+
+### 3. `src/pages/Studio.tsx`
+
+- Import `useIsMobile` from `@/hooks/use-mobile`.
+- If mobile: render `<StudioMobileView />` (covers both no-folder and active-folder cases — the bottom sheet adapts).
+- If desktop: keep the existing branching exactly as today.
+
+### 4. `src/components/studio/StudioWorkbench.tsx` (minor)
+
+- Extract the "Find a Place" add logic (`handleAddPlace` + `handleSelectPrediction`) into a small shared util used by both Workbench and the new mobile view. No behavior change for desktop.
+
+### 5. No backend, schema, or RLS changes.
 
 ## Out of scope
 
-- Service worker / offline caching of the static PNG.
-- Changing the in-trip workspace `ProximityMap`.
+- Desktop Studio layout
+- Trip workspace `ProximityMap` (different component)
+- Replacing existing `StudioMap` styling/markers
+- Re-introducing the static iOS trip map work (already shipped)
+
+## Files touched
+
+- New: `src/components/studio/StudioMobileView.tsx`
+- New: `src/components/studio/lib/addPlace.ts`
+- Edit: `src/components/studio/StudioMap.tsx` (add `bare` + `onSelectItem` props)
+- Edit: `src/pages/Studio.tsx` (mobile branch)
+- Edit: `src/components/studio/StudioWorkbench.tsx` (use shared helper)

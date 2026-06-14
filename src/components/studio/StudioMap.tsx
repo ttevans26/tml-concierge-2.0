@@ -29,7 +29,16 @@ function getCoords(item: StudioItem): { lat: number; lng: number } | null {
   return null;
 }
 
-export default function StudioMap() {
+interface StudioMapProps {
+  /** When true: omit the header chrome and the missing-coords footer so the map fills its container. */
+  bare?: boolean;
+  /** Optional callback fired when a marker is clicked. */
+  onSelectItem?: (item: StudioItem) => void;
+  /** When set, the map will pan/zoom to this item's coordinates. */
+  focusItemId?: string | null;
+}
+
+export default function StudioMap({ bare = false, onSelectItem, focusItemId }: StudioMapProps = {}) {
   const { activeFolder, fetchFolders } = useStudioStore();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -120,6 +129,9 @@ export default function StudioMap() {
         </div>`,
       });
       marker.addListener("click", () => infoWindow.open(mapInstanceRef.current, marker));
+      if (onSelectItem) {
+        marker.addListener("click", () => onSelectItem(item));
+      }
 
       markersRef.current.push(marker);
       bounds.extend(coords);
@@ -133,6 +145,17 @@ export default function StudioMap() {
       mapInstanceRef.current.fitBounds(bounds, 40);
     }
   }, [mapReady, pinnedItems.length, activeFolder?.id, allItems]);
+
+  // External focus: pan to a specific item.
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !focusItemId) return;
+    const item = allItems.find((i) => i.id === focusItemId);
+    if (!item) return;
+    const coords = getCoords(item);
+    if (!coords) return;
+    mapInstanceRef.current.panTo(coords);
+    mapInstanceRef.current.setZoom(16);
+  }, [focusItemId, mapReady, allItems]);
 
   // Background auto-heal: silently look up coords for any items missing them
   useEffect(() => {
@@ -173,6 +196,7 @@ export default function StudioMap() {
   return (
     <div className="flex h-full flex-col bg-card">
       {/* Header */}
+      {!bare && (
       <div className="flex items-center gap-2 border-b border-border px-4 py-4">
         <MapPin className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
         <h2 className="font-playfair text-sm font-semibold text-foreground">
@@ -184,6 +208,7 @@ export default function StudioMap() {
           </span>
         )}
       </div>
+      )}
 
       {/* Map area */}
       <div className="relative flex flex-1 flex-col">
@@ -240,7 +265,7 @@ export default function StudioMap() {
             )}
 
             {/* Unpinned items list */}
-            {allItems.filter((i) => !getCoords(i)).length > 0 && (
+            {!bare && allItems.filter((i) => !getCoords(i)).length > 0 && (
               <div className="border-t border-border bg-background px-3 py-2 max-h-28 overflow-y-auto">
                 <p className="font-inter text-[9px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                   Missing Coordinates

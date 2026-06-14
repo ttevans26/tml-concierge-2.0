@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Plus, ExternalLink, Trash2, Hotel, UtensilsCrossed, Compass, Landmark,
   GripVertical, Sparkles, Link, Check, X, Loader2, CreditCard, MapPin, Search,
-  Anchor, ArrowUpDown, Navigation,
+  Anchor, ArrowUpDown, Navigation, Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import BulkImportDialog, { type ImportedPendingItem } from "./BulkImportDialog";
 import { Layers } from "lucide-react";
 import PasteSocialDialog from "./PasteSocialDialog";
 import SocialImportsTray from "./SocialImportsTray";
-import { Share2 } from "lucide-react";
+import FolderSwitcherDrawer from "./FolderSwitcherDrawer";
 
 const CATEGORIES: {
   key: StudioCategory; label: string; icon: React.ElementType;
@@ -63,6 +63,7 @@ export default function StudioWorkbench() {
   const [addOpen, setAddOpen] = useState(false);
   const [addCategory, setAddCategory] = useState<StudioCategory>("stays");
   const [sortByProximity, setSortByProximity] = useState(false);
+  const [folderDrawerOpen, setFolderDrawerOpen] = useState(false);
 
   /* URL Ingestor state */
   const [scrapeUrl, setScrapeUrl] = useState("");
@@ -426,39 +427,8 @@ export default function StudioWorkbench() {
     setPendingItems((prev) => prev.filter((p) => p.id !== id));
   };
 
-  if (!activeFolder) {
-    return (
-      <div className="flex h-full flex-col gap-5 overflow-y-auto bg-surface-1 p-6 sm:p-8">
-        <div>
-          <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
-            Design Lab
-          </p>
-          <h2 className="mt-1 font-display-md text-ink">
-            The <span className="italic-accent text-accent">atlas</span> of your ideas
-          </h2>
-          <p className="mt-2 max-w-md font-inter text-[12px] leading-relaxed text-muted-foreground">
-            Open a collection from the vault to start curating — the atlas on the right will focus once a destination is in view. Or seed a fresh idea from a social link.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="foilOutline"
-            className="font-inter text-xs h-8 gap-1"
-            onClick={() => setPasteSocialOpen(true)}
-          >
-            <Share2 className="h-3 w-3" /> Paste Social Link
-          </Button>
-          <SocialImportsTray refreshKey={socialRefreshKey} />
-        </div>
-        <PasteSocialDialog
-          open={pasteSocialOpen}
-          onOpenChange={setPasteSocialOpen}
-          onImported={() => setSocialRefreshKey((k) => k + 1)}
-        />
-      </div>
-    );
-  }
+  // Empty state is now handled by `StudioDesignLab` at the page level.
+  if (!activeFolder) return null;
 
   // Find the anchor item
   const anchorItem = anchorItemId
@@ -473,17 +443,27 @@ export default function StudioWorkbench() {
   return (
     <div className="flex h-full flex-col bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <div>
-          <h2 className="font-playfair text-sm font-semibold text-foreground">
-            {activeFolder.name}
-          </h2>
-          <p className="font-inter text-[10px] text-muted-foreground">
-            {activeFolder.location} · {activeFolder.items.length} items
-            {anchorItem && (
-              <span className="ml-1 text-accent">· ⚓ {anchorItem.title}</span>
-            )}
-          </p>
+      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setFolderDrawerOpen(true)}
+            aria-label="Open collections"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <Menu className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+          <div className="min-w-0">
+            <h2 className="truncate font-playfair text-sm font-semibold text-foreground">
+              {activeFolder.name}
+            </h2>
+            <p className="truncate font-inter text-[10px] text-muted-foreground">
+              {activeFolder.location} · {activeFolder.items.length} items
+              {anchorItem && (
+                <span className="ml-1 text-accent">· ⚓ {anchorItem.title}</span>
+              )}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {anchorItem && (
@@ -500,6 +480,11 @@ export default function StudioWorkbench() {
           <SocialImportsTray refreshKey={socialRefreshKey} />
         </div>
       </div>
+
+      <FolderSwitcherDrawer
+        open={folderDrawerOpen}
+        onOpenChange={setFolderDrawerOpen}
+      />
 
       {/* Find a Place — Google Places autocomplete */}
       <div className="border-b border-border px-5 py-3">
@@ -637,17 +622,6 @@ export default function StudioWorkbench() {
           >
             <Layers className="h-3 w-3" />
             Bulk
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-thin font-inter text-xs h-8 gap-1"
-            onClick={() => setPasteSocialOpen(true)}
-            disabled={scraping}
-            title="Paste an Instagram or TikTok link"
-          >
-            <Share2 className="h-3 w-3" />
-            Social
           </Button>
         </div>
       </div>

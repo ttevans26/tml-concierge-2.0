@@ -1,11 +1,13 @@
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import StudioVault from "@/components/studio/StudioVault";
 import StudioWorkbench from "@/components/studio/StudioWorkbench";
 import StudioMap from "@/components/studio/StudioMap";
+import StudioDesignLab from "@/components/studio/StudioDesignLab";
 import { useStudioStore } from "@/stores/useStudioStore";
 import SeoHead from "@/components/SeoHead";
 
 export default function Studio() {
+  const activeFolder = useStudioStore((s) => s.activeFolder);
+
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col">
       <SeoHead
@@ -14,26 +16,28 @@ export default function Studio() {
         path="/studio"
         noindex
       />
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        {/* Left — Ideas Vault */}
-        <ResizablePanel defaultSize={22} minSize={16} maxSize={30}>
-          <StudioVault />
-        </ResizablePanel>
-
-        <ResizableHandle className="bg-border" />
-
-        {/* Center — Workbench */}
-        <ResizablePanel defaultSize={48} minSize={30}>
-          <StudioWorkbench />
-        </ResizablePanel>
-
-        <ResizableHandle className="bg-border" />
-
-        {/* Right — Proximity Map */}
-        <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
-          <StudioMap />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+      {!activeFolder ? (
+        <StudioDesignLab />
+      ) : (
+        <>
+          {/* Desktop: 2-column resizable Workbench | Proximity Map */}
+          <div className="hidden h-full sm:block">
+            <ResizablePanelGroup direction="horizontal" className="h-full">
+              <ResizablePanel defaultSize={60} minSize={40}>
+                <StudioWorkbench />
+              </ResizablePanel>
+              <ResizableHandle className="bg-border" />
+              <ResizablePanel defaultSize={40} minSize={25} maxSize={55}>
+                <StudioMap />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+          {/* Mobile: workbench only; map opens contextually */}
+          <div className="flex h-full flex-col sm:hidden">
+            <StudioWorkbench />
+          </div>
+        </>
+      )}
     </div>
   );
 }

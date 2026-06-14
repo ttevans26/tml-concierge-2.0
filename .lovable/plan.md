@@ -1,63 +1,72 @@
+# Plan
 
-## Goal
+Two unrelated fixes bundled together.
 
-On iOS / mobile, replace the current single-panel Studio view (workbench list only, no map) with a Google-Maps-style stack:
+---
 
-1. Full-bleed `StudioMap` filling most of the screen
-2. A floating **"Find a Place"** search bar pinned over the top of the map
-3. A draggable **bottom sheet** with the saved places, grouped by category, horizontally scrollable photo cards (like the screenshot — name, rating, address chips, image strip)
-4. Works in both the "no folder" Design Lab state and the "active folder" state
+## Part A — Studio map broken on `tmlconcierge.com` (mobile)
 
-Desktop layout is unchanged.
+### What's happening
+Your screenshot is from `tmlconcierge.com`, your custom domain. The Studio mobile view shows **"Oops! Something went wrong. This page didn't load Google Maps correctly."**
 
-## Changes
+This is **not a bug in our code**. The Google Maps key Lovable provides by default is **referrer-restricted to `*.lovable.app` and `*.lovableproject.com`**. On any other domain (including `tmlconcierge.com`) Google rejects the request and the map renders the gray "Oops" screen. The same Studio map works fine on the `.lovable.app` preview.
 
-### 1. New component: `src/components/studio/StudioMobileView.tsx`
+### Fix (requires action from you in Google Cloud Console)
+There's no code change that can solve this — the managed key's referrer list is not user-configurable. You need to provide your own Google Maps key for the custom domain. Steps:
 
-A mobile-only surface that composes three layers:
+1. **Google Cloud project** with billing enabled (required even for free tier).
+2. **Enable APIs**: Maps JavaScript API, Places API (New), Geocoding, Routes — anything the app uses today.
+3. **Create an API key** in that project.
+4. **Set HTTP referrer restrictions** on the key, adding BOTH patterns (root and subdomain are separate):
+   - `https://tmlconcierge.com/*`
+   - `https://*.tmlconcierge.com/*`
+   - (optionally also `https://www.tmlconcierge.com/*`)
+5. Once you have the key + referrers configured, I'll open the Google Maps connector and you can paste it in as a **custom** (non-managed) connection. The managed connection stays — they coexist.
 
-- **Map layer** — re-uses `<StudioMap />` as a full-height background. Its existing header (`Proximity Map` title) gets hidden when rendered inside this view (add an optional `bare?: boolean` prop to `StudioMap` that drops the header chrome and the bottom "Missing Coordinates" panel so the map fills the area).
-- **Search overlay (top)** — a floating pill at the top with:
-  - hamburger button → opens `FolderSwitcherDrawer` (re-used)
-  - "Find a place" input → re-uses the same `useGooglePlaces` hook + selection / add flow already in `StudioWorkbench` (factored into a small shared helper `addPlaceFromPrediction` in a new `src/components/studio/lib/addPlace.ts` so both Workbench and the mobile view can call it)
-  - paste social link icon button → opens `PasteSocialDialog`
-- **Bottom sheet** — uses existing `@/components/ui/drawer` (vaul) in a controlled, always-mounted, snap-pointed mode:
-  - Two snap points: peek (~28% of viewport, shows handle + first category row) and expanded (~80%)
-  - Content: the saved-places list grouped by category (Stays / Dining / Activities / Sites), each item rendered as a Google-Maps-style row:
-    - Title (Playfair), rating + reviews count, address chip, category icon
-    - Below the row, a horizontal-scroll strip of photos (`api_metadata.photo_url` + any additional photo URLs already stored)
-    - Tap row → pans the map to the item and opens its info window (expose a small imperative API from `StudioMap` via `forwardRef`: `panTo(itemId)` — or simpler: lift selection state into a Zustand slot `selectedItemId` and have `StudioMap` react to it)
-  - Empty state (no active folder): sheet shows "Open a collection" CTA + the `StudioVault` list inline so the user can pick a folder without leaving the map.
+Until that's done, the map on the custom domain will keep showing "Oops". The `.lovable.app` preview is unaffected.
 
-### 2. `src/components/studio/StudioMap.tsx`
+I'll wait for you to confirm you have the key in hand before opening the connector dialog.
 
-- Add `bare?: boolean` prop. When true: skip the header, skip the bottom Missing-Coordinates strip, and let the map div fill 100%.
-- Add `onSelectItem?: (item) => void` callback fired from marker click (in addition to opening the info window) so the bottom sheet can sync.
-- Keep all current desktop behavior unchanged.
+---
 
-### 3. `src/pages/Studio.tsx`
+## Part B — Lock to single account (Options #1 + #3)
 
-- Import `useIsMobile` from `@/hooks/use-mobile`.
-- If mobile: render `<StudioMobileView />` (covers both no-folder and active-folder cases — the bottom sheet adapts).
-- If desktop: keep the existing branching exactly as today.
+Goal: never silently land in `dev@tml.local` again, and always see which account is signed in.
 
-### 4. `src/components/studio/StudioWorkbench.tsx` (minor)
+### B1. Disable the dev auto-auth shortcut (#1)
 
-- Extract the "Find a Place" add logic (`handleAddPlace` + `handleSelectPrediction`) into a small shared util used by both Workbench and the new mobile view. No behavior change for desktop.
+**File: `src/lib/devAutoAuth.ts`**
+- Make `ensureDevSession()` a no-op that returns `false` immediately.
+- Keep `suppressDevAutoAuth`, `clearDevAutoAuthSuppression`, `isDevAutoAuthSuppressed`, `DEV_EMAIL`, `DEV_PASSWORD`, `isDevPreviewHost` exports intact so the existing imports in `Login.tsx`, `Signup.tsx`, `useAuth.tsx`, `ProfileDrawer.tsx`, `ProtectedRoute.tsx` keep compiling. They become harmless.
+- Add a top-of-file comment explaining that the shortcut is intentionally disabled to prevent silent account swaps and to avoid writing data to the wrong account.
 
-### 5. No backend, schema, or RLS changes.
+**File: `src/components/ProtectedRoute.tsx`**
+- Remove the `ensureDevSession()` call path so an unauthenticated visit on preview now redirects to `/login` (same behavior as production), instead of silently signing into `dev@tml.local`.
 
-## Out of scope
+**Result:** On any fresh session — preview, incognito, post-logout, new device — you'll land on `/login` and must explicitly sign in as `thomas26evans@gmail.com`. No more accidental writes to the dev account.
 
-- Desktop Studio layout
-- Trip workspace `ProximityMap` (different component)
-- Replacing existing `StudioMap` styling/markers
-- Re-introducing the static iOS trip map work (already shipped)
+### B2. Always-visible account indicator in the header (#3)
 
-## Files touched
+**File: `src/components/AppHeader.tsx`** (or wherever the top bar with the people/bell/profile icons lives — I'll confirm during implementation)
+- Add a small **email chip** next to the profile icon showing the current signed-in email (e.g. `thomas26evans@gmail.com`). On mobile, truncate to the username portion (`thomas26evans`) to save space; show full email in a tooltip / on tap.
+- Use existing tokens: `text-xs`, `text-muted-foreground`, 0.5px border, 2px radius, Inter — consistent with Quiet Luxury aesthetic.
+- Source the email from `useAuth()` (already wired). When no session, render nothing.
+- Tapping the chip opens the existing `ProfileDrawer` (same as the profile icon), where "Sign out" already lives.
 
-- New: `src/components/studio/StudioMobileView.tsx`
-- New: `src/components/studio/lib/addPlace.ts`
-- Edit: `src/components/studio/StudioMap.tsx` (add `bare` + `onSelectItem` props)
-- Edit: `src/pages/Studio.tsx` (mobile branch)
-- Edit: `src/components/studio/StudioWorkbench.tsx` (use shared helper)
+**Result:** You can glance at the header from any screen and immediately verify which account is active. If it ever says `dev@tml.local`, you know to sign out before doing anything.
+
+### Files touched (Part B)
+- `src/lib/devAutoAuth.ts` (gut the auto-auth, keep exports)
+- `src/components/ProtectedRoute.tsx` (drop the auto-auth call)
+- `src/components/AppHeader.tsx` (add email chip)
+
+### Out of scope
+- No database migrations.
+- No changes to login/signup flow itself.
+- No account merge or data migration — your `thomas26evans@gmail.com` data is already intact.
+- No production-vs-preview branching: the shortcut is killed everywhere, which is the safest posture.
+
+### What you'll experience after Part B ships
+1. Open the preview → land on `/login` → sign in as `thomas26evans@gmail.com` once.
+2. Header always shows your email.
+3. If you ever see a different email up there, sign out and back in — no risk of silent data loss.

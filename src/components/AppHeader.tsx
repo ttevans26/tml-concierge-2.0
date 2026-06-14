@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import NotificationsPopover from "@/components/NotificationsPopover";
 import OfflineIndicator from "@/components/OfflineIndicator";
+import { useAuth } from "@/hooks/useAuth";
 
 // Heavy: react-day-picker (≈106KB) + many shadcn primitives.
 // Lazy-loaded + only mounted after first open so the header click
@@ -41,6 +42,7 @@ const navItems = [
 export default function AppHeader() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   // Track whether each lazy bundle has ever been requested so we keep it
@@ -56,6 +58,9 @@ export default function AppHeader() {
     setProfileMounted(true);
     setProfileOpen(true);
   };
+
+  const email = user?.email ?? "";
+  const emailShort = email ? email.split("@")[0] : "";
 
   return (
     <>
@@ -134,11 +139,24 @@ export default function AppHeader() {
 
           <NotificationsPopover />
 
+          {email && (
+            <button
+              type="button"
+              onClick={openProfile}
+              title={email}
+              aria-label={`Signed in as ${email}`}
+              className="hidden h-9 items-center rounded-[2px] border border-foil/60 px-2.5 font-inter text-[11px] tracking-wide text-muted-foreground transition-colors duration-quick ease-editorial hover:border-accent/60 hover:text-foreground sm:inline-flex"
+            >
+              <span className="max-w-[160px] truncate">{email}</span>
+            </button>
+          )}
+
           <Button
             variant="ghost"
             size="icon"
             className="h-9 w-9 text-muted-foreground hover:text-foreground"
             onClick={openProfile}
+            aria-label={email ? `Account · ${emailShort}` : "Account"}
           >
             <User className="h-3.5 w-3.5" strokeWidth={1.5} />
           </Button>

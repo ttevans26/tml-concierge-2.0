@@ -63,6 +63,7 @@ export default function StudioWorkbench() {
   const [addOpen, setAddOpen] = useState(false);
   const [addCategory, setAddCategory] = useState<StudioCategory>("stays");
   const [sortByProximity, setSortByProximity] = useState(false);
+  const [folderDrawerOpen, setFolderDrawerOpen] = useState(false);
 
   /* URL Ingestor state */
   const [scrapeUrl, setScrapeUrl] = useState("");

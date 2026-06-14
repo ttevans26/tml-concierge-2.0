@@ -15,6 +15,7 @@ import {
   clearDevAutoAuthSuppression,
 } from "@/lib/devAutoAuth";
 import { toast } from "sonner";
+import SeoHead from "@/components/SeoHead";
 
 export default function Signup() {
   const { signUp, session } = useAuth();
@@ -122,6 +123,11 @@ export default function Signup() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <SeoHead
+        title="Create account — TML Concierge"
+        description="Create your TML Concierge account — a points-native digital travel studio for planning, budgeting, and optimizing trips."
+        path="/signup"
+      />
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-1">
           <h1 className="font-playfair text-3xl font-bold text-foreground tracking-tight">

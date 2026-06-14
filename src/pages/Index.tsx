@@ -27,6 +27,7 @@ import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { buildRouteWithGeocoding, type Waypoint } from "@/lib/tripRoute";
 import TripRouteMap from "@/components/trips/TripRouteMap";
+import SeoHead from "@/components/SeoHead";
 
 /* ------------------------------------------------------------------ */
 /*  Countdown Widget                                                   */

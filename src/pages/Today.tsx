@@ -6,6 +6,7 @@ import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus, openInMaps } from "@/lib/native";
 import { cn } from "@/lib/utils";
+import SeoHead from "@/components/SeoHead";
 
 const CATEGORY_ICON: Record<string, typeof Hotel> = {
   stays: Hotel,

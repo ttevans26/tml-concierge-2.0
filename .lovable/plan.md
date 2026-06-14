@@ -1,72 +1,58 @@
-## Scope: Tier 1 (iOS) + Tier 2 (desktop gaps)
+## 1. Trip route map — cached static image (auto-updates on itinerary edits)
 
-Executed in two focused passes so you can test iOS on device between them.
+**Problem:** Trip cards on `/` render `TripRouteMap` which loads the Google Maps JS SDK, geocodes stays, and streams tiles. On iOS it stalls at "Drawing route…".
 
-### Progress log
-- ✅ PWA polish: status-bar style, viewport-fit, manifest id, splash CSS utilities
-- ✅ Input hardening: Login/Signup/ForgotPassword/CreateTripDialog
-- ✅ Capacitor config verified; README updated with Xcode steps
-- ✅ Splurge engine: FX normalisation across currencies
-- ✅ Trip access requests: owner-side approve/deny in NotificationsPopover
-- ✅ Public view tightened: `itinerary_items_public` no longer exposes `points_used` or `metadata`
-- ✅ Buttons app-wide: `touch-manipulation` to kill 300 ms iOS double-tap zoom
-- ✅ Shared `invokeWithRetry` helper at `src/lib/invokeWithRetry.ts` (toast + retry, exponential backoff)
-- ⏭️ Remaining (out of credit budget): MatrixGrid scroll-snap refactor, full edge-function migration to `invokeWithRetry`, onboarding empty states
+**Fix:** Render the route as a **Google Static Maps image** (`<img src=…>`). One PNG, no SDK load.
 
----
+### Implementation
+- New `src/components/trips/TripRouteStaticMap.tsx`:
+  - Builds a Static Maps URL with numbered markers + dashed polyline from resolved waypoints, using `VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY` (referrer-restricted, safe in-browser).
+  - Quiet-luxury `style=` params (muted POIs, soft landscape, bronze admin borders).
+  - Falls back to `center=<destination>&zoom=5` while waypoints are still resolving.
+- New `src/lib/routeCache.ts`:
+  - LocalStorage cache `tml-route-cache-v1` keyed by `trip.id`.
+  - Value: `{ waypoints, signature, updatedAt }`. `signature` = hash of `trip.updated_at` + hash of each item's `(id, date, location_lat, location_lng, category, sort_order)`.
+- Rewire `src/pages/Index.tsx` `TripCard`:
+  1. Read cache → if hit, paint static image instantly.
+  2. In parallel, fetch items + recompute signature → if changed, run `buildRouteWithGeocoding`, update cache, swap `<img src>`.
+  3. Subscribe to `useTripStore` mutations for that trip → invalidate that entry so add/remove/reorder/date-shift updates the image immediately.
+  4. Brand-new trip with no cache + no waypoints → lightweight placeholder (destination text + MapPin) for ~1s, then static image. No more "Drawing route…" spinner.
+- Keep `TripRouteMap.tsx` in repo for any other caller; dashboard no longer uses it.
 
-### Pass A — iOS / mobile (ship first)
+## 2. Studio shell — Design Lab redesign
 
-1. **iOS PWA polish**
-   - Add `apple-mobile-web-app-status-bar-style=black-translucent`, `viewport-fit=cover`, lock manifest `id` + `scope`.
-   - Generate Apple splash screens (common iPhone sizes) from the existing globe master via ImageMagick; wire `<link rel="apple-touch-startup-image">` tags in `index.html`.
-   - Audit safe-area insets (`env(safe-area-inset-*)`) in `AppHeader`, `MobileBottomNav`, `TripWorkspace` Sheets, Concierge/Budget drawers.
+Two distinct states, both two-column. Never three columns again.
 
-2. **Mobile workspace UX**
-   - `MatrixGrid`: sticky day-header row on mobile, horizontal scroll-snap on day columns, larger tap targets in cells.
-   - Bottom Sheets (`TripWorkspace` left/right drawers): swipe-down dismiss, prevent body scroll lock issues.
-   - 44px min tap-target sweep across Smart Cards, Studio rows, header icon buttons.
+### State A — No folder selected (Design Lab landing)
+- **Full-width header band** at top spanning both columns. Contains everything from today's center column:
+  - "DESIGN LAB" eyebrow
+  - Playfair title *"The atlas of your ideas"*
+  - Subtitle paragraph
+  - `Paste Social Link` primary button + `SocialImportsTray` inbox chip (the redundant `Social` button is removed)
+- **Body below**, two columns:
+  - Left ~40%: Ideas Vault (folder list)
+  - Right ~60%: Proximity Map (the bronze globe gets room to breathe)
+- Mobile: header band stacks on top, then Ideas Vault below. Proximity Map collapses into the folder-open flow per today's mobile pattern.
 
-3. **iOS input hardening**
-   - Add `inputMode`, `autoComplete`, `enterKeyHint` on Login/Signup/ForgotPassword forms, `CreateTripDialog`, `AddItemDialog`, `EditItemDialog`.
-   - Fix iOS Safari keyboard-overlay clipping on `ConciergePanel` and Add Item sheets (`100dvh` + keyboard-aware padding).
-   - Disable iOS double-tap zoom on icon buttons (`touch-action: manipulation`).
+### State B — Folder selected (Working view)
+- **Two columns only**: Workbench (folder contents + saved places) | Proximity Map.
+- The Ideas Vault (left toolbar of other folders) is **collapsed by default** behind a hamburger button in the Workbench header.
+  - Hamburger toggles a slide-in overlay panel (Sheet on mobile, animated left panel on desktop) listing all folders so the user can switch.
+  - Clicking a folder closes the overlay and swaps the active folder.
+  - State persists in `useStudioStore` so the user's last open/closed preference is remembered across navigation.
+- Workbench itself is unchanged internally (Find-a-Place, Scrape, categorized item lists, anchor logic).
 
-4. **Capacitor sanity check (config only, no native build)**
-   - Verify `capacitor.config.ts`, add `@capacitor/status-bar` + `@capacitor/splash-screen` config if missing, confirm `apple-app-site-association` matches Universal Links.
-   - Update README with the exact `npm i → npx cap add ios → npx cap sync → open ios/App` steps you'll run on your Mac.
+### Files touched
+- `src/pages/Studio.tsx` — branch on `activeFolder`:
+  - No folder → render `StudioDesignLab` (header band + 2-col Vault/Map ResizablePanelGroup).
+  - Folder selected → render 2-col `Workbench | ProximityMap` ResizablePanelGroup, with `<FolderSwitcherDrawer />` mounted (hamburger button lives inside `StudioWorkbench` header).
+- New `src/components/studio/StudioDesignLab.tsx` — header band + 2-col body. Reuses `StudioVault`, `StudioMap`, `PasteSocialDialog`, `SocialImportsTray`.
+- New `src/components/studio/FolderSwitcherDrawer.tsx` — Sheet/overlay containing the folder list (extracted from `StudioVault` or reused via the same component inside a Sheet).
+- `src/components/studio/StudioWorkbench.tsx`:
+  - Add hamburger `Menu` icon button (44px tap target) at the left of its header that opens `FolderSwitcherDrawer`.
+  - Drop the now-unreachable "no activeFolder" empty-state block.
 
----
-
-### Pass B — Desktop functional gaps
-
-5. **Public view + share redaction (DB-enforced)**
-   - Confirm/create `itinerary_items_public` view (strips `cost`, `confirmation_code`, `points_used` if treated as financial).
-   - Re-point `PublicTripView` + `ReadOnlyMatrixGrid` to read from the view, not the base table.
-   - Add RLS policy review for `trips.is_published`.
-
-6. **Trip access requests — close the loop**
-   - Verify `RequestAccessModal` → `trip_access_requests` insert → owner sees in `NotificationsPopover` → approve/deny grants/denies read access.
-   - Patch any missing piece (most likely owner-side approve action + access-grant policy).
-
-7. **Splurge Engine / Budget Reserve audit**
-   - `useTripStore` selectors: separate cash vs points totals, FX-normalize via `fetch-fx-rates`, reconcile per-day totals against Matrix daily sums.
-   - Surface a small "Math check" debug line in dev to validate reconciliation.
-
-8. **Concierge proposal → Matrix commit**
-   - Wire `ProposalCard` accept → creates `itinerary_items` with date/category/loyalty metadata, optimistic insert into `useTripStore`.
-
-9. **Edge function error UX**
-   - Standard toast + retry on `aviationstack-lookup`, `scrape-and-parse`, `ingest-social-post`, `smart-pull` failures via a shared `invokeWithRetry` helper in `src/services/`.
-
----
-
-### Out of scope for this run
-
-- Building the actual iOS IPA (requires your Mac + Xcode).
-- New features beyond gap-closing.
-- Tier 3 stretch items (onboarding empty states, loyalty multiplier audit) — pick up only if credits remain.
-
-### Order of operations
-
-Pass A first → tell you to test on iPhone → Pass B. If anything in Pass A reveals a deeper issue, I'll stop and surface it before spending more credits.
+## Out of scope
+- No changes to in-trip workspace `ProximityMap`.
+- No DB / schema changes.
+- Workbench internals (item creation, scrape, anchor, proximity sort) unchanged.

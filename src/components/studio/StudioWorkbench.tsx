@@ -427,39 +427,8 @@ export default function StudioWorkbench() {
     setPendingItems((prev) => prev.filter((p) => p.id !== id));
   };
 
-  if (!activeFolder) {
-    return (
-      <div className="flex h-full flex-col gap-5 overflow-y-auto bg-surface-1 p-6 sm:p-8">
-        <div>
-          <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
-            Design Lab
-          </p>
-          <h2 className="mt-1 font-display-md text-ink">
-            The <span className="italic-accent text-accent">atlas</span> of your ideas
-          </h2>
-          <p className="mt-2 max-w-md font-inter text-[12px] leading-relaxed text-muted-foreground">
-            Open a collection from the vault to start curating — the atlas on the right will focus once a destination is in view. Or seed a fresh idea from a social link.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="foilOutline"
-            className="font-inter text-xs h-8 gap-1"
-            onClick={() => setPasteSocialOpen(true)}
-          >
-            <Share2 className="h-3 w-3" /> Paste Social Link
-          </Button>
-          <SocialImportsTray refreshKey={socialRefreshKey} />
-        </div>
-        <PasteSocialDialog
-          open={pasteSocialOpen}
-          onOpenChange={setPasteSocialOpen}
-          onImported={() => setSocialRefreshKey((k) => k + 1)}
-        />
-      </div>
-    );
-  }
+  // Empty state is now handled by `StudioDesignLab` at the page level.
+  if (!activeFolder) return null;
 
   // Find the anchor item
   const anchorItem = anchorItemId

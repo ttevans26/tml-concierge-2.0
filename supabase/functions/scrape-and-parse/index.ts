@@ -110,6 +110,23 @@ async function processSingleUrl(url: string, apiKey: string): Promise<{
   error?: string;
   status?: number;
 }> {
+  // SSRF guard: only allow https:// and block private/loopback/link-local hosts.
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") {
+      return { url, error: "Only https:// URLs are allowed", status: 400 };
+    }
+    const host = u.hostname.toLowerCase();
+    const blocked =
+      /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|::1?$|fc00:|fd00:|fe80:)/i.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (blocked) {
+      return { url, error: "Private or loopback URLs are not allowed", status: 400 };
+    }
+  } catch {
+    return { url, error: "Invalid URL", status: 400 };
+  }
+
   // Fetch page text
   let pageText = "";
   try {

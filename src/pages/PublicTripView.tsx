@@ -308,6 +308,7 @@ export default function PublicTripView() {
       </header>
 
       {/* Read-only Matrix — no cost row, no add/edit/delete */}
+      <h2 className="sr-only">Itinerary by day</h2>
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
           {/* Category labels */}

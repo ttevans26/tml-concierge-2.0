@@ -215,9 +215,9 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
           className="flex min-w-0 flex-1 cursor-pointer flex-col justify-between p-5 sm:p-6"
         >
         <div className="min-w-0">
-          <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
+          <h2 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
             {trip.name}
-          </h3>
+          </h2>
 
           {trip.destination && (
             <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">

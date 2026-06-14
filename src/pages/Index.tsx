@@ -140,6 +140,11 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
+    // 1) Instant paint from cache, if any.
+    const cached = getCachedRoute(trip.id);
+    if (cached) setWaypoints(cached.waypoints);
+
+    // 2) Background recompute — only re-geocode if the signature has changed.
     (async () => {
       try {
         const { data, error } = await supabase
@@ -149,20 +154,31 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
           .order("sort_order");
         if (cancelled) return;
         if (error || !data) {
-          setWaypoints([]);
+          if (!cached) setWaypoints([]);
+          return;
+        }
+        const signature = computeRouteSignature(trip.updated_at, data as any);
+        if (cached && cached.signature === signature) {
+          // Cache is current — no recompute needed.
           return;
         }
         const wps = await buildRouteWithGeocoding(data as any, trip.destination);
-        if (!cancelled) setWaypoints(wps);
+        if (cancelled) return;
+        setWaypoints(wps);
+        setCachedRoute(trip.id, {
+          waypoints: wps,
+          signature,
+          updatedAt: Date.now(),
+        });
       } catch (err) {
         console.error("Route build failed", err);
-        if (!cancelled) setWaypoints([]);
+        if (!cancelled && !cached) setWaypoints([]);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [trip.id, trip.destination]);
+  }, [trip.id, trip.destination, trip.updated_at]);
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-editorial border border-foil bg-surface-2 shadow-paper transition-all duration-soft ease-editorial hover:-translate-y-0.5 hover:shadow-raised">
@@ -271,7 +287,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
       </button>
 
       {mapOpen && (
-        <TripRouteMap
+        <TripRouteStaticMap
           waypoints={waypoints ?? []}
           fallbackQuery={
             waypoints && waypoints.length === 0 ? trip.destination ?? null : null

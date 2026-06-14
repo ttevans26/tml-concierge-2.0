@@ -608,17 +608,6 @@ export default function StudioWorkbench() {
             <Layers className="h-3 w-3" />
             Bulk
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-thin font-inter text-xs h-8 gap-1"
-            onClick={() => setPasteSocialOpen(true)}
-            disabled={scraping}
-            title="Paste an Instagram or TikTok link"
-          >
-            <Share2 className="h-3 w-3" />
-            Social
-          </Button>
         </div>
       </div>
 

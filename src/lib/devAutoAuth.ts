@@ -1,12 +1,15 @@
 /**
- * Shared dev account auto-sign-in for preview environments.
+ * Dev auto-sign-in is INTENTIONALLY DISABLED.
  *
- * In Lovable preview / local dev we don't want every reviewer to manually
- * sign up. We sign them straight into a shared `dev@tml.local` account so
- * the preview lands on `/` (Trips) with realistic data.
+ * Previously this module silently signed every preview visitor into a
+ * shared `dev@tml.local` account. That caused real-data loss confusion:
+ * any logout, fresh tab, or new device would silently re-auth into the
+ * dev account instead of the owner's real Google/email account, hiding
+ * their trips behind RLS and risking writes to the wrong user.
  *
- * Only fires when the host looks like a Lovable preview or localhost —
- * the production custom domain is unaffected.
+ * `ensureDevSession()` is now a no-op. All callers continue to compile,
+ * but unauthenticated visits go through the normal `/login` flow.
+ * Exports are preserved so existing imports keep working.
  */
 import { supabase } from "@/integrations/supabase/client";
 
@@ -46,48 +49,12 @@ export function isDevPreviewHost(): boolean {
   );
 }
 
-let inflight: Promise<boolean> | null = null;
-
 /**
- * Ensures a session exists in dev-preview environments by signing the
- * shared dev account in (creating it on first run thanks to the project's
- * zero-verification policy). Returns true if a session is established.
- * Safe to call multiple times — concurrent calls dedupe.
+ * No-op. Kept as an export so existing callers compile.
+ * Always resolves to `false` — visitors must sign in explicitly.
  */
 export async function ensureDevSession(): Promise<boolean> {
-  if (!isDevPreviewHost()) return false;
-  if (isDevAutoAuthSuppressed()) return false;
-  if (inflight) return inflight;
-
-  inflight = (async () => {
-    // Already signed in? Nothing to do.
-    const { data: existing } = await supabase.auth.getSession();
-    if (existing.session) return true;
-
-    // Try sign-in first. On the very first preview boot the account
-    // won't exist yet, so fall back to sign-up (zero-verification →
-    // immediate session).
-    const signIn = await supabase.auth.signInWithPassword({
-      email: DEV_EMAIL,
-      password: DEV_PASSWORD,
-    });
-    if (!signIn.error && signIn.data.session) return true;
-
-    const signUp = await supabase.auth.signUp({
-      email: DEV_EMAIL,
-      password: DEV_PASSWORD,
-    });
-    if (signUp.error) {
-      // Most likely "user already registered" but the earlier sign-in
-      // failed for some other reason. Surface to console for debugging.
-      console.warn("[devAutoAuth] sign-up failed:", signUp.error.message);
-      return false;
-    }
-    return !!signUp.data.session;
-  })().finally(() => {
-    // Allow retries on next invocation if needed (e.g. after sign-out).
-    inflight = null;
-  });
-
-  return inflight;
+  // Reference `supabase` to avoid an unused-import lint without changing behavior.
+  void supabase;
+  return false;
 }

@@ -14,6 +14,7 @@ import {
   clearDevAutoAuthSuppression,
 } from "@/lib/devAutoAuth";
 import { toast } from "sonner";
+import SeoHead from "@/components/SeoHead";
 
 export default function Login() {
   const { signIn, session } = useAuth();
@@ -106,6 +107,11 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <SeoHead
+        title="Sign in — TML Concierge"
+        description="Sign in to TML Concierge to plan trips, optimize points, and access your travel studio."
+        path="/login"
+      />
       <div className="w-full max-w-sm space-y-8">
         {/* Header */}
         <div className="text-center space-y-1">

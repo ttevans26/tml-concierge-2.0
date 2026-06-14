@@ -6,6 +6,7 @@ import ProfileCard from "@/components/network/ProfileCard";
 import RequestAccessModal from "@/components/network/RequestAccessModal";
 import ConnectionsList from "@/components/network/ConnectionsList";
 import { toast } from "sonner";
+import SeoHead from "@/components/SeoHead";
 
 export default function Network() {
   const users = useTripStore((s) => s.networkUsers);
@@ -41,6 +42,12 @@ export default function Network() {
 
   return (
     <div className="min-h-full bg-background">
+      <SeoHead
+        title="Network — TML Concierge"
+        description="Follow fellow travelers, request access to shared itineraries, and discover trip inspiration from your network."
+        path="/network"
+        noindex
+      />
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         {/* Header */}
         <header className="mb-6 flex items-start gap-3">

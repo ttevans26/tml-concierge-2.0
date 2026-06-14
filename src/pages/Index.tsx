@@ -27,6 +27,7 @@ import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { buildRouteWithGeocoding, type Waypoint } from "@/lib/tripRoute";
 import TripRouteMap from "@/components/trips/TripRouteMap";
+import SeoHead from "@/components/SeoHead";
 
 /* ------------------------------------------------------------------ */
 /*  Countdown Widget                                                   */
@@ -215,9 +216,9 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
           className="flex min-w-0 flex-1 cursor-pointer flex-col justify-between p-5 sm:p-6"
         >
         <div className="min-w-0">
-          <h3 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
+          <h2 className="truncate font-playfair text-lg font-semibold leading-snug text-foreground">
             {trip.name}
-          </h3>
+          </h2>
 
           {trip.destination && (
             <p className="mt-2 flex items-center gap-1.5 font-inter text-xs text-muted-foreground">
@@ -325,6 +326,12 @@ export default function Index() {
 
   return (
     <div className="px-6 py-12 md:px-12 lg:px-20">
+      <SeoHead
+        title="Your Journeys — TML Concierge"
+        description="Your travel studio dashboard. Continue planning trips, manage itineraries, and track points across every journey."
+        path="/"
+        noindex
+      />
       {/* Header */}
       <header className="mb-14 flex flex-wrap items-end justify-between gap-6 border-b border-foil pb-8">
         <div>

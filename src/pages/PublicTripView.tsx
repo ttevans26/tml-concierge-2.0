@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import { Wifi, KeyRound, Loader2, Check } from "lucide-react";
 import { MapArc, type ArcPoint } from "@/components/ui/map-arc";
+import SeoHead from "@/components/SeoHead";
 
 interface PublicItem {
   id: string;
@@ -186,6 +187,24 @@ export default function PublicTripView() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <SeoHead
+        title={`${trip.name} — Shared itinerary`}
+        description={
+          trip.destination
+            ? `${trip.name} in ${trip.destination} — a shared TML Concierge itinerary. View-only with costs and confirmation codes redacted.`
+            : `${trip.name} — a shared TML Concierge itinerary. View-only with costs and confirmation codes redacted.`
+        }
+        path={`/itinerary/${token ?? ""}`}
+        ogType="article"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "TouristTrip",
+          name: trip.name,
+          ...(trip.destination ? { touristType: trip.destination } : {}),
+          ...(trip.start_date ? { startDate: trip.start_date } : {}),
+          ...(trip.end_date ? { endDate: trip.end_date } : {}),
+        }}
+      />
       {/* Hero — Editorial Arc Atlas */}
       <section className="relative px-4 pt-6 sm:px-8 sm:pt-10">
         <MapArc
@@ -204,9 +223,9 @@ export default function PublicTripView() {
       <header className="border-b border-foil px-6 py-5 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
+            <h2 className="font-inter text-[10px] font-semibold uppercase tracking-[0.3em] text-accent">
               Shared itinerary
-            </p>
+            </h2>
             {trip.destination && (
               <p className="mt-1 italic-accent text-base text-foreground">{trip.destination}</p>
             )}
@@ -289,6 +308,7 @@ export default function PublicTripView() {
       </header>
 
       {/* Read-only Matrix — no cost row, no add/edit/delete */}
+      <h2 className="sr-only">Itinerary by day</h2>
       <ScrollArea className="flex-1">
         <div className="flex min-w-max">
           {/* Category labels */}

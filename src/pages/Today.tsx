@@ -6,6 +6,7 @@ import { useTripStore, type ItineraryItem } from "@/stores/useTripStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus, openInMaps } from "@/lib/native";
 import { cn } from "@/lib/utils";
+import SeoHead from "@/components/SeoHead";
 
 const CATEGORY_ICON: Record<string, typeof Hotel> = {
   stays: Hotel,
@@ -191,6 +192,12 @@ export default function Today() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-10">
+      <SeoHead
+        title="Today — TML Concierge"
+        description="Today’s itinerary, upcoming reservations, and live travel intelligence for your active trip."
+        path="/today"
+        noindex
+      />
       <header className="mb-6">
         <p className="font-inter text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
           {format(new Date(), "EEEE, MMM d")}

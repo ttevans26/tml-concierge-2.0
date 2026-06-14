@@ -1,0 +1,15 @@
+# TML Concierge
+
+> A premium digital travel studio for points-native planning — maximize points, spend, and travel experiences with a spreadsheet-inspired Matrix Grid and AI concierge.
+
+TML Concierge helps tech-savvy travelers plan, budget, and optimize trips with strong, durable frameworks: a horizontal day-by-day Matrix Grid, a Splurge Engine that tracks remaining budget in real time, and a Points Optimizer that pairs itinerary items with the best loyalty / credit-card earning multipliers.
+
+## Pages
+
+- [Home](/): Product overview and sign-in entry point.
+- [Sign up](/signup): Create a TML Concierge account.
+- [Sign in](/login): Sign in to your travel studio.
+
+## Optional
+
+- [Shared itinerary example](/itinerary/): Public, view-only itinerary pages (costs and confirmation codes redacted) shared via per-trip tokens.

@@ -128,6 +128,7 @@ export default function TripWorkspace() {
           size="icon"
           className="hidden h-8 w-8 text-muted-foreground lg:inline-flex"
           onClick={() => navigate("/")}
+          aria-label="Back to dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>

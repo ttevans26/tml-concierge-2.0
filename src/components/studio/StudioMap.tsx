@@ -196,6 +196,7 @@ export default function StudioMap({ bare = false, onSelectItem, focusItemId }: S
   return (
     <div className="flex h-full flex-col bg-card">
       {/* Header */}
+      {!bare && (
       <div className="flex items-center gap-2 border-b border-border px-4 py-4">
         <MapPin className="h-3.5 w-3.5 text-accent" strokeWidth={1.5} />
         <h2 className="font-playfair text-sm font-semibold text-foreground">
@@ -207,6 +208,7 @@ export default function StudioMap({ bare = false, onSelectItem, focusItemId }: S
           </span>
         )}
       </div>
+      )}
 
       {/* Map area */}
       <div className="relative flex flex-1 flex-col">
@@ -263,7 +265,7 @@ export default function StudioMap({ bare = false, onSelectItem, focusItemId }: S
             )}
 
             {/* Unpinned items list */}
-            {allItems.filter((i) => !getCoords(i)).length > 0 && (
+            {!bare && allItems.filter((i) => !getCoords(i)).length > 0 && (
               <div className="border-t border-border bg-background px-3 py-2 max-h-28 overflow-y-auto">
                 <p className="font-inter text-[9px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">
                   Missing Coordinates

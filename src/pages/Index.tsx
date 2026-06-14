@@ -27,6 +27,8 @@ import { format, differenceInCalendarDays, startOfDay } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { buildRouteWithGeocoding, type Waypoint } from "@/lib/tripRoute";
 import TripRouteStaticMap from "@/components/trips/TripRouteStaticMap";
+import TripRouteMap from "@/components/trips/TripRouteMap";
+import { isIOS } from "@/lib/platform";
 import {
   computeRouteSignature,
   getCachedRoute,
@@ -137,6 +139,9 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
 
   const [waypoints, setWaypoints] = useState<Waypoint[] | null>(null);
   const [mapOpen, setMapOpen] = useState<boolean>(true);
+  // Static map only on iOS (fast PNG). Desktop/Android render the interactive map.
+  // If the iOS static proxy fails for any reason, fall back to the dynamic map.
+  const [useStatic, setUseStatic] = useState<boolean>(() => isIOS());
 
   useEffect(() => {
     let cancelled = false;
@@ -287,14 +292,26 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
       </button>
 
       {mapOpen && (
-        <TripRouteStaticMap
-          waypoints={waypoints ?? []}
-          fallbackQuery={
-            waypoints && waypoints.length === 0 ? trip.destination ?? null : null
-          }
-          isLoading={waypoints === null}
-          height={420}
-        />
+        useStatic ? (
+          <TripRouteStaticMap
+            waypoints={waypoints ?? []}
+            fallbackQuery={
+              waypoints && waypoints.length === 0 ? trip.destination ?? null : null
+            }
+            isLoading={waypoints === null}
+            height={420}
+            onError={() => setUseStatic(false)}
+          />
+        ) : (
+          <TripRouteMap
+            waypoints={waypoints ?? []}
+            fallbackQuery={
+              waypoints && waypoints.length === 0 ? trip.destination ?? null : null
+            }
+            isLoading={waypoints === null}
+            height={420}
+          />
+        )
       )}
     </div>
   );

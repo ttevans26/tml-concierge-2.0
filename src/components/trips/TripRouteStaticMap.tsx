@@ -7,11 +7,12 @@ interface Props {
   fallbackQuery?: string | null;
   height?: number;
   isLoading?: boolean;
+  /** Called when the static image fails to load — lets parent swap to dynamic map. */
+  onError?: () => void;
 }
 
-const API_KEY = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY as
-  | string
-  | undefined;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const PROXY_BASE = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/static-map` : null;
 
 /** Quiet-luxury Static Maps styling. URL-encoded `style=` clauses. */
 const STYLE_CLAUSES: string[] = [
@@ -34,12 +35,11 @@ function buildStaticUrl(opts: {
   height: number;
   scale: 1 | 2;
 }): string | null {
-  if (!API_KEY) return null;
+  if (!PROXY_BASE) return null;
   const params = new URLSearchParams();
   params.set("size", `${opts.width}x${opts.height}`);
   params.set("scale", String(opts.scale));
   params.set("maptype", "roadmap");
-  params.set("key", API_KEY);
   for (const s of STYLE_CLAUSES) params.append("style", s);
 
   const wps = opts.waypoints.filter(
@@ -66,13 +66,13 @@ function buildStaticUrl(opts: {
       params.set("zoom", "7");
       params.set("center", `${wps[0].lat},${wps[0].lng}`);
     }
-    return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+    return `${PROXY_BASE}?${params.toString()}`;
   }
 
   if (opts.fallbackQuery) {
     params.set("center", opts.fallbackQuery);
     params.set("zoom", "5");
-    return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+    return `${PROXY_BASE}?${params.toString()}`;
   }
 
   return null;
@@ -88,6 +88,7 @@ export default function TripRouteStaticMap({
   fallbackQuery,
   height = 320,
   isLoading = false,
+  onError,
 }: Props) {
   const [imgError, setImgError] = useState(false);
 
@@ -124,7 +125,10 @@ export default function TripRouteStaticMap({
           }
           loading="lazy"
           decoding="async"
-          onError={() => setImgError(true)}
+          onError={() => {
+            setImgError(true);
+            onError?.();
+          }}
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : isLoading ? (

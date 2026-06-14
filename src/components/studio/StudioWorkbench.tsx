@@ -443,17 +443,27 @@ export default function StudioWorkbench() {
   return (
     <div className="flex h-full flex-col bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <div>
-          <h2 className="font-playfair text-sm font-semibold text-foreground">
-            {activeFolder.name}
-          </h2>
-          <p className="font-inter text-[10px] text-muted-foreground">
-            {activeFolder.location} · {activeFolder.items.length} items
-            {anchorItem && (
-              <span className="ml-1 text-accent">· ⚓ {anchorItem.title}</span>
-            )}
-          </p>
+      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setFolderDrawerOpen(true)}
+            aria-label="Open collections"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <Menu className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+          <div className="min-w-0">
+            <h2 className="truncate font-playfair text-sm font-semibold text-foreground">
+              {activeFolder.name}
+            </h2>
+            <p className="truncate font-inter text-[10px] text-muted-foreground">
+              {activeFolder.location} · {activeFolder.items.length} items
+              {anchorItem && (
+                <span className="ml-1 text-accent">· ⚓ {anchorItem.title}</span>
+              )}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {anchorItem && (
@@ -470,6 +480,11 @@ export default function StudioWorkbench() {
           <SocialImportsTray refreshKey={socialRefreshKey} />
         </div>
       </div>
+
+      <FolderSwitcherDrawer
+        open={folderDrawerOpen}
+        onOpenChange={setFolderDrawerOpen}
+      />
 
       {/* Find a Place — Google Places autocomplete */}
       <div className="border-b border-border px-5 py-3">

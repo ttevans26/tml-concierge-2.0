@@ -46,7 +46,7 @@ jobs:
           echo "dist=${SIZE}kb (cap ${MAX_KB}kb gz target; raw shown for context)"
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-${{ github.sha }}
           path: dist
